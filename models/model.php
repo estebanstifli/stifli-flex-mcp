@@ -90,33 +90,25 @@ class EasyVisualMcpModel {
 						'required' => array('ID'),
 					),
 				),
-				// ... (continúa con el resto del array de herramientas del modelo original, igual que en WaicMcpModel) ...
-				'wp_get_posts' => array(
-					'name' => 'wp_get_posts',
-					'description' => 'List posts (supports post_type, post_status, search, limit, offset, paged, after, before).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_type' => array('type' => 'string'), 'post_status' => array('type' => 'string'), 'search' => array('type' => 'string'), 'limit' => array('type' => 'integer'), 'offset' => array('type' => 'integer'), 'paged' => array('type' => 'integer'), 'after' => array('type' => 'string'), 'before' => array('type' => 'string')), 'required' => array()),
-				),
-				'wp_get_post' => array(
-					'name' => 'wp_get_post',
-					'description' => 'Get a single post by ID.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('ID' => array('type' => 'integer')), 'required' => array('ID')),
-				),
-				'wp_create_post' => array(
-					'name' => 'wp_create_post',
-					'description' => 'Create a post. Requires post_title. Optional post_content, post_excerpt, post_status, post_type, post_name, meta_input.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_title' => array('type' => 'string'), 'post_content' => array('type' => 'string'), 'post_excerpt' => array('type' => 'string'), 'post_status' => array('type' => 'string'), 'post_type' => array('type' => 'string'), 'post_name' => array('type' => 'string'), 'meta_input' => array('type' => 'object')), 'required' => array('post_title')),
-				),
-				'wp_update_post' => array(
-					'name' => 'wp_update_post',
-					'description' => 'Update a post by ID. Provide ID and fields object to change. Optional meta_input to update post meta.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('ID' => array('type' => 'integer'), 'fields' => array('type' => 'object'), 'meta_input' => array('type' => 'object')), 'required' => array('ID')),
-				),
-				'wp_delete_post' => array(
-					'name' => 'wp_delete_post',
-					'description' => 'Delete a post by ID. Optional force flag to bypass trash.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('ID' => array('type' => 'integer'), 'force' => array('type' => 'boolean')), 'required' => array('ID')),
-				),
-				'wp_get_comments' => array(
+				
+				   'wp_create_post' => array(
+					   'name' => 'wp_create_post',
+					   'description' => 'Crea un post. Requiere post_title. Opcionales: post_content, post_status, post_type, post_excerpt, post_author, meta_input.',
+					   'inputSchema' => array(
+						   'type' => 'object',
+						   'properties' => array(
+							   'post_title' => array('type' => 'string'),
+							   'post_content' => array('type' => 'string'),
+							   'post_status' => array('type' => 'string'),
+							   'post_type' => array('type' => 'string'),
+							   'post_excerpt' => array('type' => 'string'),
+							   'post_author' => array('type' => 'integer'),
+							   'meta_input' => array('type' => 'object'),
+						   ),
+						   'required' => array('post_title'),
+					   ),
+				   ),
+				   'wp_get_comments' => array(
 					'name' => 'wp_get_comments',
 					'description' => 'List comments. Supports post_id, status, search, limit, offset, paged.',
 					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'status' => array('type' => 'string'), 'search' => array('type' => 'string'), 'limit' => array('type' => 'integer'), 'offset' => array('type' => 'integer'), 'paged' => array('type' => 'integer')), 'required' => array()),
@@ -126,16 +118,30 @@ class EasyVisualMcpModel {
 					'description' => 'Create a comment. Requires post_id and comment_content.',
 					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'comment_content' => array('type' => 'string'), 'comment_author' => array('type' => 'string'), 'comment_author_email' => array('type' => 'string'), 'comment_author_url' => array('type' => 'string'), 'comment_approved' => array('type' => 'integer')), 'required' => array('post_id', 'comment_content')),
 				),
-				'wp_update_comment' => array(
-					'name' => 'wp_update_comment',
-					'description' => 'Update a comment by comment_ID with fields object.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('comment_ID' => array('type' => 'integer'), 'fields' => array('type' => 'object')), 'required' => array('comment_ID')),
-				),
-				'wp_delete_comment' => array(
-					'name' => 'wp_delete_comment',
-					'description' => 'Delete a comment by comment_ID. Optional force flag.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('comment_ID' => array('type' => 'integer'), 'force' => array('type' => 'boolean')), 'required' => array('comment_ID')),
-				),
+				   'wp_update_comment' => array(
+					   'name' => 'wp_update_comment',
+					   'description' => 'Update a comment by comment_ID with fields object.',
+					   'inputSchema' => array(
+						   'type' => 'object',
+						   'properties' => array(
+							   'comment_ID' => array('type' => 'integer'),
+							   'fields' => array('type' => 'object'),
+						   ),
+						   'required' => array('comment_ID')
+					   ),
+				   ),
+				   'wp_delete_comment' => array(
+					   'name' => 'wp_delete_comment',
+					   'description' => 'Delete a comment by comment_ID. Optional force flag.',
+					   'inputSchema' => array(
+						   'type' => 'object',
+						   'properties' => array(
+							   'comment_ID' => array('type' => 'integer'),
+							   'force' => array('type' => 'boolean'),
+						   ),
+						   'required' => array('comment_ID')
+					   ),
+				   ),
 				'wp_get_users' => array(
 					'name' => 'wp_get_users',
 					'description' => 'Retrieve users (fields: ID, user_login, display_name, roles).',
@@ -156,26 +162,26 @@ class EasyVisualMcpModel {
 					'description' => 'Get post meta (post_id, meta_key, single).',
 					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'single' => array('type' => 'boolean')), 'required' => array('post_id', 'meta_key')),
 				),
-				'wp_update_post_meta' => array(
-					'name' => 'wp_update_post_meta',
-					'description' => 'Update post meta (post_id, meta_key, meta_value).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'meta_value' => array()), 'required' => array('post_id', 'meta_key', 'meta_value')),
-				),
-				'wp_delete_post_meta' => array(
-					'name' => 'wp_delete_post_meta',
-					'description' => 'Delete post meta (post_id, meta_key, meta_value optional).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'meta_value' => array()), 'required' => array('post_id', 'meta_key')),
-				),
+				   'wp_update_post_meta' => array(
+					   'name' => 'wp_update_post_meta',
+					   'description' => 'Update post meta (post_id, meta_key, meta_value).',
+					   'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'meta_value' => array('type' => 'string')), 'required' => array('post_id', 'meta_key', 'meta_value')),
+				   ),
+				   'wp_delete_post_meta' => array(
+					   'name' => 'wp_delete_post_meta',
+					   'description' => 'Delete post meta (post_id, meta_key, meta_value optional).',
+					   'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'meta_value' => array('type' => 'string')), 'required' => array('post_id', 'meta_key')),
+				   ),
 				'wp_get_option' => array(
 					'name' => 'wp_get_option',
 					'description' => 'Get a WordPress option value by name.',
 					'inputSchema' => array('type' => 'object', 'properties' => array('option' => array('type' => 'string')), 'required' => array('option')),
 				),
-				'wp_update_option' => array(
-					'name' => 'wp_update_option',
-					'description' => 'Update a WordPress option.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('option' => array('type' => 'string'), 'value' => array()), 'required' => array('option', 'value')),
-				),
+				   'wp_update_option' => array(
+					   'name' => 'wp_update_option',
+					   'description' => 'Update a WordPress option.',
+					   'inputSchema' => array('type' => 'object', 'properties' => array('option' => array('type' => 'string'), 'value' => array('type' => 'string')), 'required' => array('option', 'value')),
+				   ),
 				'wp_delete_option' => array(
 					'name' => 'wp_delete_option',
 					'description' => 'Delete a WordPress option.',
@@ -194,7 +200,7 @@ class EasyVisualMcpModel {
 				'wp_get_themes' => array(
 					'name' => 'wp_get_themes',
 					'description' => 'List installed themes.',
-					'inputSchema' => array('type' => 'object', 'properties' => array(), 'required' => array()),
+					'inputSchema' => array('type' => 'object', 'properties' => (object) array(), 'required' => array()),
 				),
 				'wp_get_media' => array(
 					'name' => 'wp_get_media',
@@ -214,7 +220,7 @@ class EasyVisualMcpModel {
 				'wp_get_taxonomies' => array(
 					'name' => 'wp_get_taxonomies',
 					'description' => 'List registered taxonomies.',
-					'inputSchema' => array('type' => 'object', 'properties' => array(), 'required' => array()),
+					'inputSchema' => array('type' => 'object', 'properties' => (object) array(), 'required' => array()),
 				),
 				'wp_get_terms' => array(
 					'name' => 'wp_get_terms',
@@ -236,11 +242,11 @@ class EasyVisualMcpModel {
 					'description' => 'Simple search across posts (q or query param).',
 					'inputSchema' => array('type' => 'object', 'properties' => array('q' => array('type' => 'string'), 'limit' => array('type' => 'integer')), 'required' => array()),
 				),
-				'fetch' => array(
-					'name' => 'fetch',
-					'description' => 'Fetch a URL using WordPress HTTP API (url required, method optional).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('url' => array('type' => 'string'), 'method' => array('type' => 'string'), 'headers' => array('type' => 'object'), 'body' => array()), 'required' => array('url')),
-				),
+				   'fetch' => array(
+					   'name' => 'fetch',
+					   'description' => 'Fetch a URL using WordPress HTTP API (url required, method optional).',
+					   'inputSchema' => array('type' => 'object', 'properties' => array('url' => array('type' => 'string'), 'method' => array('type' => 'string'), 'headers' => array('type' => 'object'), 'body' => array('type' => 'string')), 'required' => array('url')),
+				   ),
 			);
 			$this->tools = $tools;
 		}
@@ -753,9 +759,9 @@ class EasyVisualMcpModel {
 					$file['tmp_name'] = $tmp;
 					$att_id = media_handle_sideload($file, 0);
 					if (is_wp_error($att_id)) { @unlink($file['tmp_name']); $r['error'] = array('code' => 'sideload_error', 'message' => $att_id->get_error_message()); break; }
-					$att_url = wp_get_attachment_url($att_id);
-					$r['result'] = array('attachment_id' => $att_id, 'url' => $att_url);
-					return $r;
+					   $att_url = wp_get_attachment_url($att_id);
+					   $addResultText($r, 'Imagen subida correctamente. ID: ' . $att_id . ', URL: ' . $att_url);
+					   return $r;
 
 				case 'wp_get_taxonomies':
 					$tax = get_taxonomies(array(), 'objects');
@@ -808,86 +814,120 @@ class EasyVisualMcpModel {
 					if (!empty($args['body'])) { $opts['body'] = $args['body']; }
 					if ('GET' === $method) { $resp = wp_remote_get($url, $opts); } else { $resp = wp_remote_request($url, array_merge($opts, array('method' => $method))); }
 					if (is_wp_error($resp)) { $r['error'] = array('code' => 'fetch_error', 'message' => $resp->get_error_message()); break; }
-					$code = wp_remote_retrieve_response_code($resp);
-					$body = wp_remote_retrieve_body($resp);
-					$r['result'] = array('status' => $code, 'body' => $body);
-					return $r;
+					   $code = wp_remote_retrieve_response_code($resp);
+					   $body = wp_remote_retrieve_body($resp);
+					   $maxlen = 2000;
+					   $body_short = (strlen($body) > $maxlen) ? substr($body, 0, $maxlen) . "... [truncated]" : $body;
+					   $addResultText($r, "Fetch status: $code\n" . $body_short);
+					   return $r;
 
-			default:
-				$r['error'] = array('code' => -42609, 'message' => 'Unknown tool');
-		}
-		// --- BLOQUE META Y OPCIONES ---
-		// Si el tool no fue reconocido en el switch, comprobamos si es de meta/opciones
-		if (in_array($tool, ['wp_get_post_meta', 'wp_update_post_meta', 'wp_delete_post_meta'])) {
-			if (!current_user_can('manage_options')) {
-				$r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
-				return $r;
-			}
-			$post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
-			$meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
-			$meta_value = isset($args['meta_value']) ? $args['meta_value'] : null;
-			switch ($tool) {
-				case 'wp_get_post_meta':
-					if (!$post_id || !$meta_key) {
-						$r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
-						return $r;
-					}
-					$single = isset($args['single']) ? (bool)$args['single'] : true;
-					$value = get_post_meta($post_id, $meta_key, $single);
-					$r['result'] = array('value' => $value);
-					return $r;
-				case 'wp_update_post_meta':
-					if (!$post_id || !$meta_key) {
-						$r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
-						return $r;
-					}
-					$updated = update_post_meta($post_id, $meta_key, $meta_value);
-					$r['result'] = array('updated' => $updated);
-					return $r;
-				case 'wp_delete_post_meta':
-					if (!$post_id || !$meta_key) {
-						$r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
-						return $r;
-					}
-					$deleted = delete_post_meta($post_id, $meta_key, $meta_value);
-					$r['result'] = array('deleted' => $deleted);
-					return $r;
-			}
-		}
-		if (in_array($tool, ['wp_get_option', 'wp_update_option', 'wp_delete_option'])) {
-			if (!current_user_can('manage_options')) {
-				$r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular opciones.');
-				return $r;
-			}
-			$option = isset($args['option']) ? sanitize_text_field($args['option']) : '';
-			$value = isset($args['value']) ? $args['value'] : null;
-			switch ($tool) {
-				case 'wp_get_option':
-					if (!$option) {
-						$r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
-						return $r;
-					}
-					$val = get_option($option);
-					$r['result'] = array('value' => $val);
-					return $r;
-				case 'wp_update_option':
-					if (!$option) {
-						$r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
-						return $r;
-					}
-					$updated = update_option($option, $value);
-					$r['result'] = array('updated' => $updated);
-					return $r;
-				case 'wp_delete_option':
-					if (!$option) {
-						$r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
-						return $r;
-					}
-					$deleted = delete_option($option);
-					$r['result'] = array('deleted' => $deleted);
-					return $r;
-			}
-		}
+			   case 'wp_get_post_meta':
+				   if (!current_user_can('manage_options')) {
+					   $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
+					   return $r;
+				   }
+				   $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
+				   $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
+				   if (!$post_id || !$meta_key) {
+					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
+					   return $r;
+				   }
+				   $single = isset($args['single']) ? (bool)$args['single'] : true;
+				   $value = get_post_meta($post_id, $meta_key, $single);
+				   $addResultText($r, 'Valor de meta (' . $meta_key . ') para post ' . $post_id . ': ' . var_export($value, true));
+				   return $r;
+			   case 'wp_update_post_meta':
+				   if (!current_user_can('manage_options')) {
+					   $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
+					   return $r;
+				   }
+				   $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
+				   $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
+				   $meta_value = isset($args['meta_value']) ? $args['meta_value'] : null;
+				   if (!$post_id || !$meta_key) {
+					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
+					   return $r;
+				   }
+				   $updated = update_post_meta($post_id, $meta_key, $meta_value);
+				   if ($updated) {
+					   $addResultText($r, 'Meta creado/actualizado para post ' . $post_id . ' (' . $meta_key . ')');
+				   } else {
+					   $addResultText($r, 'No se pudo crear/actualizar el metadato para post ' . $post_id . ' (' . $meta_key . ')');
+				   }
+				   return $r;
+			   case 'wp_delete_post_meta':
+				   if (!current_user_can('manage_options')) {
+					   $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
+					   return $r;
+				   }
+				   $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
+				   $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
+				   $meta_value = isset($args['meta_value']) ? $args['meta_value'] : null;
+				   if (!$post_id || !$meta_key) {
+					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
+					   return $r;
+				   }
+				   $deleted = delete_post_meta($post_id, $meta_key, $meta_value);
+				   if ($deleted) {
+					   $addResultText($r, 'Metadato (' . $meta_key . ') eliminado para post ' . $post_id);
+				   } else {
+					   $addResultText($r, 'No se eliminó el metadato (' . $meta_key . ') para post ' . $post_id);
+				   }
+				   return $r;
+			   case 'wp_get_option':
+				   if (!current_user_can('manage_options')) {
+					   $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular opciones.');
+					   return $r;
+				   }
+				   $option = isset($args['option']) ? sanitize_text_field($args['option']) : '';
+				   if (!$option) {
+					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
+					   return $r;
+				   }
+				   $val = get_option($option);
+				   $addResultText($r, 'Valor de opción (' . $option . '): ' . var_export($val, true));
+				   return $r;
+			   case 'wp_update_option':
+				   if (!current_user_can('manage_options')) {
+					   $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular opciones.');
+					   return $r;
+				   }
+				   $option = isset($args['option']) ? sanitize_text_field($args['option']) : '';
+				   $value = isset($args['value']) ? $args['value'] : null;
+				   if (!$option) {
+					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
+					   return $r;
+				   }
+				   $old_val = get_option($option, null);
+				   $updated = update_option($option, $value);
+				   if ($updated) {
+					   $addResultText($r, 'Opción (' . $option . ') actualizada correctamente.');
+				   } else if ($old_val === $value) {
+					   $addResultText($r, 'La opción (' . $option . ') ya tenía ese valor, no se modificó.');
+				   } else {
+					   $addResultText($r, 'No se pudo actualizar la opción (' . $option . ').');
+				   }
+				   return $r;
+			   case 'wp_delete_option':
+				   if (!current_user_can('manage_options')) {
+					   $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular opciones.');
+					   return $r;
+				   }
+				   $option = isset($args['option']) ? sanitize_text_field($args['option']) : '';
+				   if (!$option) {
+					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
+					   return $r;
+				   }
+				   $deleted = delete_option($option);
+				   if ($deleted) {
+					   $addResultText($r, 'Opción (' . $option . ') eliminada');
+				   } else {
+					   $addResultText($r, 'No se eliminó la opción (' . $option . ')');
+				   }
+				   return $r;
+			   default:
+				   $r['error'] = array('code' => -42609, 'message' => 'Unknown tool');
+	   }
 		return $r;
 	}
 }

@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "tool": "wp_get_terms",
+    "args": { "taxonomy": "category" }
+  }
+}

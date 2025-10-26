@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "tool": "wp_create_post",
+    "args": {
+      "post_title": "Post de prueba MCP",
+      "post_content": "Este es un post de prueba para test de metadatos.",
+      "post_status": "publish"
+    }
+  }
+}

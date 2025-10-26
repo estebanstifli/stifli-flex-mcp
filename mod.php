@@ -334,12 +334,20 @@ class EasyVisualMcp {
 						'result' => array('tools' => $tools),
 					);
 					break;
-				case 'tools/call':
-					$params = EasyVisualMcpUtils::getArrayValue($data, 'params', array(), 2);
-					$tool = EasyVisualMcpUtils::getArrayValue($params, 'name');
-					$arguments = EasyVisualMcpUtils::getArrayValue($params, 'arguments', array(), 2);
-					$reply = $this->executeTool($tool, $arguments, $id);
-					break;
+				   case 'tools/call':
+					   $params = EasyVisualMcpUtils::getArrayValue($data, 'params', array(), 2);
+					   // Compatibilidad: acepta tanto 'name'/'arguments' como 'tool'/'args'
+					   $tool = null;
+					   $arguments = array();
+					   if (isset($params['name'])) {
+						   $tool = $params['name'];
+						   $arguments = isset($params['arguments']) ? $params['arguments'] : array();
+					   } elseif (isset($params['tool'])) {
+						   $tool = $params['tool'];
+						   $arguments = isset($params['args']) ? $params['args'] : array();
+					   }
+					   $reply = $this->executeTool($tool, $arguments, $id);
+					   break;
 				case 'notifications/initialized':
 					$reply = array(
 						'jsonrpc' => '2.0',
@@ -387,17 +395,21 @@ class EasyVisualMcp {
 	}
 
 	public function handleMessage( $request ) {
-		$sess = sanitize_text_field($request->get_param('session_id'));
-		$body = $request->get_body();
-		if (defined('WP_DEBUG') && WP_DEBUG) {
-			$hdr = $request->get_header('Authorization') ? 'present' : 'none';
-			$qp = $request->get_param('token') ? 'present' : 'none';
-			$remote = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'n/a';
-			error_log(sprintf('[EVMCP] handleMessage: session=%s remote=%s header=%s query=%s body_len=%d', $sess, $remote, $hdr, $qp, strlen($body)));
-		}
-		$data = json_decode($body, true);
-		$id = isset($data['id']) ? $data['id'] : null;
-		$method = EasyVisualMcpUtils::getArrayValue($data, 'method', null);
+		   $sess = sanitize_text_field($request->get_param('session_id'));
+		   $body = $request->get_body();
+		   if (defined('WP_DEBUG') && WP_DEBUG) {
+			   $hdr = $request->get_header('Authorization') ? 'present' : 'none';
+			   $qp = $request->get_param('token') ? 'present' : 'none';
+			   $remote = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'n/a';
+			   error_log(sprintf('[EVMCP] handleMessage: session=%s remote=%s header=%s query=%s body_len=%d', $sess, $remote, $hdr, $qp, strlen($body)));
+			   error_log('[EVMCP] handleMessage: RAW BODY: ' . $body);
+		   }
+		   $data = json_decode($body, true);
+		   if (defined('WP_DEBUG') && WP_DEBUG) {
+			   error_log('[EVMCP] handleMessage: JSON decoded: ' . print_r($data, true));
+		   }
+		   $id = isset($data['id']) ? $data['id'] : null;
+		   $method = EasyVisualMcpUtils::getArrayValue($data, 'method', null);
 		if ('initialized' === $method) {
 			return new WP_REST_Response(null, 204);
 		}
@@ -460,11 +472,22 @@ class EasyVisualMcp {
 					);
 					break;
 				case 'tools/call':
-					$params = EasyVisualMcpUtils::getArrayValue($data, 'params', array(), 2);
-					$tool = EasyVisualMcpUtils::getArrayValue($params, 'name');
-					$arguments = EasyVisualMcpUtils::getArrayValue($params, 'arguments', array(), 2);
-					$reply = $this->executeTool($tool, $arguments, $id);
-					break;
+					   $params = EasyVisualMcpUtils::getArrayValue($data, 'params', array(), 2);
+					   // Compatibilidad: acepta tanto 'name'/'arguments' como 'tool'/'args'
+					   $tool = null;
+					   $arguments = array();
+					   if (isset($params['name'])) {
+						   $tool = $params['name'];
+						   $arguments = isset($params['arguments']) ? $params['arguments'] : array();
+					   } elseif (isset($params['tool'])) {
+						   $tool = $params['tool'];
+						   $arguments = isset($params['args']) ? $params['args'] : array();
+					   }
+					   if (defined('WP_DEBUG') && WP_DEBUG) {
+						   error_log('[EVMCP] tools/call: tool=' . print_r($tool, true) . ' arguments=' . print_r($arguments, true));
+					   }
+					   $reply = $this->executeTool($tool, $arguments, $id);
+					   break;
 				default:
 					$reply = $this->rpcError($id, -45601, "Method not found: {$method}");
 			}
@@ -493,23 +516,29 @@ class EasyVisualMcp {
 	}
 
 	private function executeTool( $tool, $args, $id ) {
-		try {
-			$filtered = EasyVisualMcpDispatcher::applyFilters('evmcp_callback', null, $tool, $args, $id, $this);
-			if (!is_null($filtered)) {
-				if (is_array($filtered) && isset($filtered['jsonrpc']) && isset($filtered['id'])) {
-					return $filtered;
-				}
-				return array(
-					'jsonrpc' => '2.0',
-					'id' => $id,
-					'result' => $filtered,
-				);
-			}
-			throw new Exception("Unknown tool: {$tool}");
-		}
-		catch ( Exception $e ) {
-			return $this->rpcError( $id, -44003, $e->getMessage() );
-		}
+		   try {
+			   if (defined('WP_DEBUG') && WP_DEBUG) {
+				   error_log('[EVMCP] executeTool: tool=' . print_r($tool, true) . ' args=' . print_r($args, true) . ' id=' . print_r($id, true));
+			   }
+			   $filtered = EasyVisualMcpDispatcher::applyFilters('evmcp_callback', null, $tool, $args, $id, $this);
+			   if (!is_null($filtered)) {
+				   if (is_array($filtered) && isset($filtered['jsonrpc']) && isset($filtered['id'])) {
+					   return $filtered;
+				   }
+				   return array(
+					   'jsonrpc' => '2.0',
+					   'id' => $id,
+					   'result' => $filtered,
+				   );
+			   }
+			   throw new Exception("Unknown tool: {$tool}");
+		   }
+		   catch ( Exception $e ) {
+			   if (defined('WP_DEBUG') && WP_DEBUG) {
+				   error_log('[EVMCP] executeTool: Exception: ' . $e->getMessage());
+			   }
+			   return $this->rpcError( $id, -44003, $e->getMessage() );
+		   }
 	}
 
 	private function rpcError( $id, int $code, string $msg, $extra = null ): array {

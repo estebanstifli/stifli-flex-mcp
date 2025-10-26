@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "tool": "wp_create_term",
+    "args": {
+      "taxonomy": "category",
+      "name": "Prueba"
+    }
+  }
+}

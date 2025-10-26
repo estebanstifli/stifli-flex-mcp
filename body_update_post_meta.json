@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "tool": "wp_update_post_meta",
+    "args": {
+      "post_id": 1,
+      "meta_key": "prueba_meta",
+      "meta_value": "valor de prueba"
+    }
+  }
+}
