@@ -1,0 +1,17 @@
+### Open SSE stream (curl-like in REST Client)
+# REST Client doesn't support streaming SSE; this example shows the header usage for normal requests.
+
+GET {{wordpress-mcp.url}}
+Authorization: Bearer {{wordpress-mcp.token}}
+
+### Example: call messages endpoint (JSON-RPC POST)
+POST https://100blogs.ovh/30/index.php/wp-json/easy-visual-mcp/v1/messages
+Content-Type: application/json
+Authorization: Bearer {{wordpress-mcp.token}}
+
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": { "tool": "mcp_ping", "args": {} },
+  "id": 1
+}
