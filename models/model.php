@@ -1,369 +1,608 @@
 <?php
-// Model stub para tools
+// Model MCP con tools completas + intención/consentimiento
 class EasyVisualMcpModel {
-	private $tools = false;
+    private $tools = false;
 
-	public function getToolsList() {
-		$tools = $this->getTools();
-		if (!is_array($tools)) {
-			return [];
-		}
-		foreach ($tools as &$tool) {
-			if (in_array($tool['name'], array('search', 'fetch'))) {
-				$tool['category'] = 'Core: OpenAI';
-			} else {
-				$tool['category'] = 'Core';
-			}
-		}
-		return array_values($tools);
-	}
+    /**
+     * Clasificación de intención y confirmación por tool.
+     */
+    private function getIntentForTool(string $name): array {
+        // Escritura/mutación
+        $WRITE = array(
+            'wp_create_post','wp_update_post','wp_delete_post',
+            'wp_create_comment','wp_update_comment','wp_delete_comment',
+            'wp_create_user','wp_update_user',
+            'wp_upload_image_from_url',
+            'wp_activate_plugin','wp_deactivate_plugin',
+            'wp_update_option','wp_delete_option',
+            'wp_update_post_meta','wp_delete_post_meta',
+            'wp_create_term','wp_delete_term'
+        );
 
-	public function getTools() {
-		if (empty($this->tools)) {
-			$tools = array(
-				'mcp_ping' => array(
-					'name' => 'mcp_ping',
-					'description' => 'Simple connectivity check. Returns the current GMT time and the WordPress site name.',
-					'inputSchema' => array(
-						'type' => 'object',
-						'properties' => (object) array(),
-						'required' => array(),
-					),
-				),
-				'wp_list_plugins' => array(
-					'name' => 'wp_list_plugins',
-					'description' => 'List installed plugins (returns array of {Name, Version}).',
-					'inputSchema' => array(
-						'type' => 'object',
-						'properties' => array('search' => array('type' => 'string')),
-						'required' => array(),
-					),
-				),
-				'wp_get_users' => array(
-					'name' => 'wp_get_users',
-					'description' => 'Retrieve users (fields: ID, user_login, display_name, roles). If no limit supplied, returns 10. `paged` ignored if `offset` is used.',
-					'inputSchema' => array(
-						'type' => 'object',
-						'properties' => array(
-							'search' => array('type' => 'string'),
-							'role' => array('type' => 'string'),
-							'limit' => array('type' => 'integer'),
-							'offset' => array('type' => 'integer'),
-							'paged' => array('type' => 'integer'),
-						),
-						'required' => array(),
-					),
-				),
-				'wp_create_user' => array(
-					'name' => 'wp_create_user',
-					'description' => 'Create a user. Requires user_login and user_email. Optional: user_pass (random if omitted), display_name, role.',
-					'inputSchema' => array(
-						'type' => 'object',
-						'properties' => array(
-							'user_login' => array('type' => 'string'),
-							'user_email' => array('type' => 'string'),
-							'user_pass' => array('type' => 'string'),
-							'display_name' => array('type' => 'string'),
-							'role' => array('type' => 'string'),
-						),
-						'required' => array('user_login', 'user_email'),
-					),
-				),
-				'wp_update_user' => array(
-					'name' => 'wp_update_user',
-					'description' => 'Update a user – pass ID plus a “fields” object (user_email, display_name, user_pass, role).',
-					'inputSchema' => array(
-						'type' => 'object',
-						'properties' => array(
-							'ID' => array('type' => 'integer'),
-							'fields' => array(
-								'type' => 'object',
-								'properties' => array(
-									'user_email' => array('type' => 'string'),
-									'display_name' => array('type' => 'string'),
-									'user_pass' => array('type' => 'string'),
-									'role' => array('type' => 'string'),
-								),
-								'additionalProperties' => true,
-							),
-						),
-						'required' => array('ID'),
-					),
-				),
-				
-				   'wp_create_post' => array(
-					   'name' => 'wp_create_post',
-					   'description' => 'Crea un post. Requiere post_title. Opcionales: post_content, post_status, post_type, post_excerpt, post_author, meta_input.',
-					   'inputSchema' => array(
-						   'type' => 'object',
-						   'properties' => array(
-							   'post_title' => array('type' => 'string'),
-							   'post_content' => array('type' => 'string'),
-							   'post_status' => array('type' => 'string'),
-							   'post_type' => array('type' => 'string'),
-							   'post_excerpt' => array('type' => 'string'),
-							   'post_author' => array('type' => 'integer'),
-							   'meta_input' => array('type' => 'object'),
-						   ),
-						   'required' => array('post_title'),
-					   ),
-				   ),
-				   'wp_get_comments' => array(
-					'name' => 'wp_get_comments',
-					'description' => 'List comments. Supports post_id, status, search, limit, offset, paged.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'status' => array('type' => 'string'), 'search' => array('type' => 'string'), 'limit' => array('type' => 'integer'), 'offset' => array('type' => 'integer'), 'paged' => array('type' => 'integer')), 'required' => array()),
-				),
-				'wp_create_comment' => array(
-					'name' => 'wp_create_comment',
-					'description' => 'Create a comment. Requires post_id and comment_content.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'comment_content' => array('type' => 'string'), 'comment_author' => array('type' => 'string'), 'comment_author_email' => array('type' => 'string'), 'comment_author_url' => array('type' => 'string'), 'comment_approved' => array('type' => 'integer')), 'required' => array('post_id', 'comment_content')),
-				),
-				   'wp_update_comment' => array(
-					   'name' => 'wp_update_comment',
-					   'description' => 'Update a comment by comment_ID with fields object.',
-					   'inputSchema' => array(
-						   'type' => 'object',
-						   'properties' => array(
-							   'comment_ID' => array('type' => 'integer'),
-							   'fields' => array('type' => 'object'),
-						   ),
-						   'required' => array('comment_ID')
-					   ),
-				   ),
-				   'wp_delete_comment' => array(
-					   'name' => 'wp_delete_comment',
-					   'description' => 'Delete a comment by comment_ID. Optional force flag.',
-					   'inputSchema' => array(
-						   'type' => 'object',
-						   'properties' => array(
-							   'comment_ID' => array('type' => 'integer'),
-							   'force' => array('type' => 'boolean'),
-						   ),
-						   'required' => array('comment_ID')
-					   ),
-				   ),
-				'wp_get_users' => array(
-					'name' => 'wp_get_users',
-					'description' => 'Retrieve users (fields: ID, user_login, display_name, roles).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('search' => array('type' => 'string'), 'role' => array('type' => 'string'), 'limit' => array('type' => 'integer'), 'offset' => array('type' => 'integer'), 'paged' => array('type' => 'integer')), 'required' => array()),
-				),
-				'wp_create_user' => array(
-					'name' => 'wp_create_user',
-					'description' => 'Create a user. Requires user_login and user_email.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('user_login' => array('type' => 'string'), 'user_email' => array('type' => 'string'), 'user_pass' => array('type' => 'string'), 'display_name' => array('type' => 'string'), 'role' => array('type' => 'string')), 'required' => array('user_login', 'user_email')),
-				),
-				'wp_update_user' => array(
-					'name' => 'wp_update_user',
-					'description' => 'Update a user – pass ID plus a fields object (user_email, display_name, user_pass, role).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('ID' => array('type' => 'integer'), 'fields' => array('type' => 'object')), 'required' => array('ID')),
-				),
-				'wp_get_post_meta' => array(
-					'name' => 'wp_get_post_meta',
-					'description' => 'Get post meta (post_id, meta_key, single).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'single' => array('type' => 'boolean')), 'required' => array('post_id', 'meta_key')),
-				),
-				   'wp_update_post_meta' => array(
-					   'name' => 'wp_update_post_meta',
-					   'description' => 'Update post meta (post_id, meta_key, meta_value).',
-					   'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'meta_value' => array('type' => 'string')), 'required' => array('post_id', 'meta_key', 'meta_value')),
-				   ),
-				   'wp_delete_post_meta' => array(
-					   'name' => 'wp_delete_post_meta',
-					   'description' => 'Delete post meta (post_id, meta_key, meta_value optional).',
-					   'inputSchema' => array('type' => 'object', 'properties' => array('post_id' => array('type' => 'integer'), 'meta_key' => array('type' => 'string'), 'meta_value' => array('type' => 'string')), 'required' => array('post_id', 'meta_key')),
-				   ),
-				'wp_get_option' => array(
-					'name' => 'wp_get_option',
-					'description' => 'Get a WordPress option value by name.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('option' => array('type' => 'string')), 'required' => array('option')),
-				),
-				   'wp_update_option' => array(
-					   'name' => 'wp_update_option',
-					   'description' => 'Update a WordPress option.',
-					   'inputSchema' => array('type' => 'object', 'properties' => array('option' => array('type' => 'string'), 'value' => array('type' => 'string')), 'required' => array('option', 'value')),
-				   ),
-				'wp_delete_option' => array(
-					'name' => 'wp_delete_option',
-					'description' => 'Delete a WordPress option.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('option' => array('type' => 'string')), 'required' => array('option')),
-				),
-				'wp_activate_plugin' => array(
-					'name' => 'wp_activate_plugin',
-					'description' => 'Activate a plugin by file path (requires appropriate permissions).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('file' => array('type' => 'string')), 'required' => array('file')),
-				),
-				'wp_deactivate_plugin' => array(
-					'name' => 'wp_deactivate_plugin',
-					'description' => 'Deactivate a plugin by file path (requires appropriate permissions).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('file' => array('type' => 'string')), 'required' => array('file')),
-				),
-				'wp_get_themes' => array(
-					'name' => 'wp_get_themes',
-					'description' => 'List installed themes.',
-					'inputSchema' => array('type' => 'object', 'properties' => (object) array(), 'required' => array()),
-				),
-				'wp_get_media' => array(
-					'name' => 'wp_get_media',
-					'description' => 'List media attachments (limit, offset).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('limit' => array('type' => 'integer'), 'offset' => array('type' => 'integer')), 'required' => array()),
-				),
-				'wp_get_media_item' => array(
-					'name' => 'wp_get_media_item',
-					'description' => 'Get media item details by ID.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('ID' => array('type' => 'integer')), 'required' => array('ID')),
-				),
-				'wp_upload_image_from_url' => array(
-					'name' => 'wp_upload_image_from_url',
-					'description' => 'Download an image from a public URL and create a media attachment. Returns attachment ID and URL.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('url' => array('type' => 'string')), 'required' => array('url')),
-				),
-				'wp_get_taxonomies' => array(
-					'name' => 'wp_get_taxonomies',
-					'description' => 'List registered taxonomies.',
-					'inputSchema' => array('type' => 'object', 'properties' => (object) array(), 'required' => array()),
-				),
-				'wp_get_terms' => array(
-					'name' => 'wp_get_terms',
-					'description' => 'List terms for a taxonomy (taxonomy required).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('taxonomy' => array('type' => 'string')), 'required' => array('taxonomy')),
-				),
-				'wp_create_term' => array(
-					'name' => 'wp_create_term',
-					'description' => 'Create a term in a taxonomy (taxonomy and name required).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('taxonomy' => array('type' => 'string'), 'name' => array('type' => 'string')), 'required' => array('taxonomy', 'name')),
-				),
-				'wp_delete_term' => array(
-					'name' => 'wp_delete_term',
-					'description' => 'Delete a term by term_id and taxonomy.',
-					'inputSchema' => array('type' => 'object', 'properties' => array('term_id' => array('type' => 'integer'), 'taxonomy' => array('type' => 'string')), 'required' => array('term_id', 'taxonomy')),
-				),
-				'search' => array(
-					'name' => 'search',
-					'description' => 'Simple search across posts (q or query param).',
-					'inputSchema' => array('type' => 'object', 'properties' => array('q' => array('type' => 'string'), 'limit' => array('type' => 'integer')), 'required' => array()),
-				),
-				   'fetch' => array(
-					   'name' => 'fetch',
-					   'description' => 'Fetch a URL using WordPress HTTP API (url required, method optional).',
-					   'inputSchema' => array('type' => 'object', 'properties' => array('url' => array('type' => 'string'), 'method' => array('type' => 'string'), 'headers' => array('type' => 'object'), 'body' => array('type' => 'string')), 'required' => array('url')),
-				   ),
-			);
-			$this->tools = $tools;
-		}
-		return $this->tools;
-	}
+        // Lectura sensible (requiere permisos elevados o toca red externa)
+        $SENSITIVE_READ = array(
+            'wp_get_option',        // requiere manage_options en dispatch
+            'wp_get_post_meta',     // requiere manage_options en dispatch
+            'fetch'                 // red externa: tratar como lectura sensible
+        );
 
-	/**
-	 * Return tools formatted as OpenAI/ChatGPT functions (name, description, parameters)
-	 * This does a light mapping from our inputSchema -> parameters property expected by OpenAI.
-	 */
-	public function getOpenAIFunctions() {
-		$tools = $this->getToolsList();
-		$funcs = array();
-		foreach ($tools as $t) {
-			$f = array(
-				'name' => $t['name'],
-				'description' => isset($t['description']) ? $t['description'] : '',
-				'parameters' => array(
-					'type' => 'object',
-					'properties' => (isset($t['inputSchema']) ? $t['inputSchema']['properties'] : new stdClass()),
-					'required' => (isset($t['inputSchema']) && isset($t['inputSchema']['required']) ? $t['inputSchema']['required'] : array()),
-				),
-			);
-			$funcs[] = $f;
-		}
-		return $funcs;
-	}
+        if (in_array($name, $WRITE, true)) {
+            return array('intent' => 'write', 'requires_confirmation' => true);
+        }
+        if (in_array($name, $SENSITIVE_READ, true)) {
+            return array('intent' => 'sensitive_read', 'requires_confirmation' => true);
+        }
+        return array('intent' => 'read', 'requires_confirmation' => false);
+    }
 
-	/**
-	 * Basic validation of arguments against a very small subset of JSON Schema.
-	 * Returns true if valid, false otherwise and fills $err with a message.
-	 */
-	public function validateArgumentsSchema($schema, $args, & $err = '') {
-		$err = '';
-		if (!is_array($schema) || empty($schema['type']) || $schema['type'] !== 'object') {
-			return true; // nothing to validate against
-		}
-		$props = isset($schema['properties']) ? $schema['properties'] : array();
-		// required
-		if (!empty($schema['required']) && is_array($schema['required'])) {
-			foreach ($schema['required'] as $rk) {
-				if (!isset($args[$rk])) {
-					$err = 'Missing required parameter: ' . $rk;
-					return false;
-				}
-			}
-		}
-		// types (basic)
-		foreach ($props as $k => $p) {
-			if (!isset($args[$k])) {
-				continue;
-			}
-			$val = $args[$k];
-			if (!isset($p['type'])) {
-				continue;
-			}
-			$type = $p['type'];
-			switch ($type) {
-				case 'string':
-					if (!is_string($val)) { $err = "Parameter $k must be a string"; return false; }
-					break;
-				case 'integer':
-					if (!is_int($val) && !(is_string($val) && ctype_digit($val))) { $err = "Parameter $k must be an integer"; return false; }
-					break;
-				case 'boolean':
-					if (!is_bool($val) && !in_array($val, array(true,false,0,1,'0','1'), true)) { $err = "Parameter $k must be boolean"; return false; }
-					break;
-				case 'object':
-					if (!is_array($val) && !is_object($val)) { $err = "Parameter $k must be an object"; return false; }
-					break;
-				case 'array':
-					if (!is_array($val)) { $err = "Parameter $k must be an array"; return false; }
-					break;
-				default:
-					// unknown type -> skip
-					break;
-			}
-		}
-		return true;
-	}
+    /**
+     * Devuelve la lista de tools con categoría + intención + confirmación.
+     */
+    public function getToolsList() {
+        $tools = $this->getTools();
+        if (!is_array($tools)) {
+            return [];
+        }
+        foreach ($tools as &$tool) {
+            // Categoría
+            if (in_array($tool['name'], array('search', 'fetch'), true)) {
+                $tool['category'] = 'Core: OpenAI';
+            } else {
+                $tool['category'] = 'Core';
+            }
+            // Intención y consentimiento
+            $meta = $this->getIntentForTool($tool['name']);
+            $tool['intent'] = $meta['intent']; // read | sensitive_read | write
+            $tool['requires_confirmation'] = $meta['requires_confirmation']; // bool
+        }
+        return array_values($tools);
+    }
 
-	/**
-	 * Return the required WP capability for a given tool, or null if none (read-only).
-	 * This is a coarse mapping; some tools may still perform finer-grained checks.
-	 */
-	public function getToolCapability($tool) {
-		$map = array(
-			// posts
-			'wp_create_post' => 'edit_posts',
-			'wp_update_post' => 'edit_posts',
-			'wp_delete_post' => 'delete_posts',
-			// comments
-			'wp_create_comment' => 'moderate_comments',
-			'wp_update_comment' => 'moderate_comments',
-			'wp_delete_comment' => 'moderate_comments',
-			// users
-			'wp_create_user' => 'create_users',
-			'wp_update_user' => 'promote_users',
-			// media
-			'wp_upload_image_from_url' => 'upload_files',
-			// plugins/themes
-			'wp_activate_plugin' => 'activate_plugins',
-			'wp_deactivate_plugin' => 'activate_plugins',
-			// options/meta
-			'wp_update_option' => 'manage_options',
-			'wp_delete_option' => 'manage_options',
-			'wp_update_post_meta' => 'manage_options',
-			'wp_delete_post_meta' => 'manage_options',
-			// terms
-			'wp_create_term' => 'manage_categories',
-			'wp_delete_term' => 'manage_categories',
-			// users list modifications
-			'wp_update_option' => 'manage_options',
-		);
-		return isset($map[$tool]) ? $map[$tool] : null;
-	}
+    /**
+     * Definición completa de tools usadas en dispatch (sin duplicados).
+     */
+    public function getTools() {
+        if (empty($this->tools)) {
+            $tools = array(
+                // Diagnóstico
+                'mcp_ping' => array(
+                    'name' => 'mcp_ping',
+                    'description' => 'Simple connectivity check. Returns the current GMT time and the WordPress site name.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => (object) array(),
+                        'required' => array(),
+                    ),
+                ),
 
+                // Posts (lectura)
+                'wp_get_posts' => array(
+                    'name' => 'wp_get_posts',
+                    'description' => 'List posts with filters.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_type'   => array('type' => 'string'),
+                            'post_status' => array('type' => 'string'),
+                            'search'      => array('type' => 'string'),
+                            'limit'       => array('type' => 'integer'),
+                            'offset'      => array('type' => 'integer'),
+                            'paged'       => array('type' => 'integer'),
+                            'after'       => array('type' => 'string'),
+                            'before'      => array('type' => 'string'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_get_post' => array(
+                    'name' => 'wp_get_post',
+                    'description' => 'Get a single post by ID.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'ID' => array('type' => 'integer'),
+                        ),
+                        'required' => array('ID'),
+                    ),
+                ),
+
+                // Posts (mutación)
+                'wp_create_post' => array(
+                    'name' => 'wp_create_post',
+                    'description' => 'Crea un post. Requiere post_title. Opcionales: post_content, post_status, post_type, post_excerpt, post_author, meta_input.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_title'   => array('type' => 'string'),
+                            'post_content' => array('type' => 'string'),
+                            'post_status'  => array('type' => 'string'),
+                            'post_type'    => array('type' => 'string'),
+                            'post_excerpt' => array('type' => 'string'),
+                            'post_author'  => array('type' => 'integer'),
+                            'meta_input'   => array('type' => 'object'),
+                            'post_name'    => array('type' => 'string'),
+                        ),
+                        'required' => array('post_title'),
+                    ),
+                ),
+                'wp_update_post' => array(
+                    'name' => 'wp_update_post',
+                    'description' => 'Update a post by ID.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'ID' => array('type' => 'integer'),
+                            'fields' => array('type' => 'object'),
+                            'meta_input' => array('type' => 'object'),
+                        ),
+                        'required' => array('ID'),
+                    ),
+                ),
+                'wp_delete_post' => array(
+                    'name' => 'wp_delete_post',
+                    'description' => 'Delete a post by ID.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'ID'    => array('type' => 'integer'),
+                            'force' => array('type' => 'boolean'),
+                        ),
+                        'required' => array('ID'),
+                    ),
+                ),
+
+                // Comentarios
+                'wp_get_comments' => array(
+                    'name' => 'wp_get_comments',
+                    'description' => 'List comments. Supports post_id, status, search, limit, offset, paged.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                            'status'  => array('type' => 'string'),
+                            'search'  => array('type' => 'string'),
+                            'limit'   => array('type' => 'integer'),
+                            'offset'  => array('type' => 'integer'),
+                            'paged'   => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_create_comment' => array(
+                    'name' => 'wp_create_comment',
+                    'description' => 'Create a comment. Requires post_id and comment_content.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                            'comment_content' => array('type' => 'string'),
+                            'comment_author' => array('type' => 'string'),
+                            'comment_author_email' => array('type' => 'string'),
+                            'comment_author_url' => array('type' => 'string'),
+                            'comment_approved' => array('type' => 'integer'),
+                        ),
+                        'required' => array('post_id','comment_content'),
+                    ),
+                ),
+                'wp_update_comment' => array(
+                    'name' => 'wp_update_comment',
+                    'description' => 'Update a comment by comment_ID with fields object.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'comment_ID' => array('type' => 'integer'),
+                            'fields' => array('type' => 'object'),
+                        ),
+                        'required' => array('comment_ID'),
+                    ),
+                ),
+                'wp_delete_comment' => array(
+                    'name' => 'wp_delete_comment',
+                    'description' => 'Delete a comment by comment_ID. Optional force flag.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'comment_ID' => array('type' => 'integer'),
+                            'force' => array('type' => 'boolean'),
+                        ),
+                        'required' => array('comment_ID'),
+                    ),
+                ),
+
+                // Usuarios
+                'wp_get_users' => array(
+                    'name' => 'wp_get_users',
+                    'description' => 'Retrieve users (fields: ID, user_login, display_name, roles). If no limit supplied, returns 10. `paged` ignored if `offset` is used.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'search' => array('type' => 'string'),
+                            'role'   => array('type' => 'string'),
+                            'limit'  => array('type' => 'integer'),
+                            'offset' => array('type' => 'integer'),
+                            'paged'  => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_create_user' => array(
+                    'name' => 'wp_create_user',
+                    'description' => 'Create a user. Requires user_login and user_email. Optional: user_pass (random if omitted), display_name, role.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'user_login'   => array('type' => 'string'),
+                            'user_email'   => array('type' => 'string'),
+                            'user_pass'    => array('type' => 'string'),
+                            'display_name' => array('type' => 'string'),
+                            'role'         => array('type' => 'string'),
+                        ),
+                        'required' => array('user_login','user_email'),
+                    ),
+                ),
+                'wp_update_user' => array(
+                    'name' => 'wp_update_user',
+                    'description' => 'Update a user – pass ID plus a “fields” object (user_email, display_name, user_pass, role).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'ID'     => array('type' => 'integer'),
+                            'fields' => array(
+                                'type' => 'object',
+                                'properties' => array(
+                                    'user_email'   => array('type' => 'string'),
+                                    'display_name' => array('type' => 'string'),
+                                    'user_pass'    => array('type' => 'string'),
+                                    'role'         => array('type' => 'string'),
+                                ),
+                                'additionalProperties' => true,
+                            ),
+                        ),
+                        'required' => array('ID'),
+                    ),
+                ),
+
+                // Media
+                'wp_get_media' => array(
+                    'name' => 'wp_get_media',
+                    'description' => 'List media attachments (limit, offset).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'limit'  => array('type' => 'integer'),
+                            'offset' => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_get_media_item' => array(
+                    'name' => 'wp_get_media_item',
+                    'description' => 'Get media item details by ID.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'ID' => array('type' => 'integer'),
+                        ),
+                        'required' => array('ID'),
+                    ),
+                ),
+                'wp_upload_image_from_url' => array(
+                    'name' => 'wp_upload_image_from_url',
+                    'description' => 'Download an image from a public URL and create a media attachment. Returns attachment ID and URL.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'url' => array('type' => 'string'),
+                        ),
+                        'required' => array('url'),
+                    ),
+                ),
+
+                // Plugins / Temas
+                'wp_list_plugins' => array(
+                    'name' => 'wp_list_plugins',
+                    'description' => 'List installed plugins (returns array of {Name, Version}).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'search' => array('type' => 'string'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_activate_plugin' => array(
+                    'name' => 'wp_activate_plugin',
+                    'description' => 'Activate a plugin by file path (requires appropriate permissions).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'file' => array('type' => 'string'),
+                        ),
+                        'required' => array('file'),
+                    ),
+                ),
+                'wp_deactivate_plugin' => array(
+                    'name' => 'wp_deactivate_plugin',
+                    'description' => 'Deactivate a plugin by file path (requires appropriate permissions).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'file' => array('type' => 'string'),
+                        ),
+                        'required' => array('file'),
+                    ),
+                ),
+                'wp_get_themes' => array(
+                    'name' => 'wp_get_themes',
+                    'description' => 'List installed themes.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => (object) array(),
+                        'required' => array(),
+                    ),
+                ),
+
+                // Taxonomías y términos
+                'wp_get_taxonomies' => array(
+                    'name' => 'wp_get_taxonomies',
+                    'description' => 'List registered taxonomies.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => (object) array(),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_get_terms' => array(
+                    'name' => 'wp_get_terms',
+                    'description' => 'List terms for a taxonomy (taxonomy required).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'taxonomy' => array('type' => 'string'),
+                        ),
+                        'required' => array('taxonomy'),
+                    ),
+                ),
+                'wp_create_term' => array(
+                    'name' => 'wp_create_term',
+                    'description' => 'Create a term in a taxonomy (taxonomy and name required).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'taxonomy' => array('type' => 'string'),
+                            'name'     => array('type' => 'string'),
+                        ),
+                        'required' => array('taxonomy','name'),
+                    ),
+                ),
+                'wp_delete_term' => array(
+                    'name' => 'wp_delete_term',
+                    'description' => 'Delete a term by term_id and taxonomy.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'term_id'  => array('type' => 'integer'),
+                            'taxonomy' => array('type' => 'string'),
+                        ),
+                        'required' => array('term_id','taxonomy'),
+                    ),
+                ),
+
+                // Opciones / Meta (lectura sensible + escritura)
+                'wp_get_option' => array(
+                    'name' => 'wp_get_option',
+                    'description' => 'Get a WordPress option value by name.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'option' => array('type' => 'string'),
+                        ),
+                        'required' => array('option'),
+                    ),
+                ),
+                'wp_update_option' => array(
+                    'name' => 'wp_update_option',
+                    'description' => 'Update a WordPress option.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'option' => array('type' => 'string'),
+                            'value'  => array('type' => 'string'),
+                        ),
+                        'required' => array('option','value'),
+                    ),
+                ),
+                'wp_delete_option' => array(
+                    'name' => 'wp_delete_option',
+                    'description' => 'Delete a WordPress option.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'option' => array('type' => 'string'),
+                        ),
+                        'required' => array('option'),
+                    ),
+                ),
+                'wp_get_post_meta' => array(
+                    'name' => 'wp_get_post_meta',
+                    'description' => 'Get post meta (post_id, meta_key, single).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'  => array('type' => 'integer'),
+                            'meta_key' => array('type' => 'string'),
+                            'single'   => array('type' => 'boolean'),
+                        ),
+                        'required' => array('post_id','meta_key'),
+                    ),
+                ),
+                'wp_update_post_meta' => array(
+                    'name' => 'wp_update_post_meta',
+                    'description' => 'Update post meta (post_id, meta_key, meta_value).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'    => array('type' => 'integer'),
+                            'meta_key'   => array('type' => 'string'),
+                            'meta_value' => array('type' => 'string'),
+                        ),
+                        'required' => array('post_id','meta_key','meta_value'),
+                    ),
+                ),
+                'wp_delete_post_meta' => array(
+                    'name' => 'wp_delete_post_meta',
+                    'description' => 'Delete post meta (post_id, meta_key, meta_value optional).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'    => array('type' => 'integer'),
+                            'meta_key'   => array('type' => 'string'),
+                            'meta_value' => array('type' => 'string'),
+                        ),
+                        'required' => array('post_id','meta_key'),
+                    ),
+                ),
+
+                // Búsqueda y red
+                'search' => array(
+                    'name' => 'search',
+                    'description' => 'Simple search across posts (q or query param).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'q'     => array('type' => 'string'),
+                            'limit' => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'fetch' => array(
+                    'name' => 'fetch',
+                    'description' => 'Fetch a URL using WordPress HTTP API (url required, method optional).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'url'     => array('type' => 'string'),
+                            'method'  => array('type' => 'string'),
+                            'headers' => array('type' => 'object'),
+                            'body'    => array('type' => 'string'),
+                        ),
+                        'required' => array('url'),
+                    ),
+                ),
+            );
+            $this->tools = $tools;
+        }
+        return $this->tools;
+    }
+
+    /**
+     * Exportar herramientas como funciones OpenAI/ChatGPT (+metadata)
+     */
+    public function getOpenAIFunctions() {
+        $tools = $this->getToolsList();
+        $funcs = array();
+        foreach ($tools as $t) {
+            $f = array(
+                'name' => $t['name'],
+                'description' => isset($t['description']) ? $t['description'] : '',
+                'parameters' => array(
+                    'type' => 'object',
+                    'properties' => (isset($t['inputSchema']) ? $t['inputSchema']['properties'] : new stdClass()),
+                    'required' => (isset($t['inputSchema']) && isset($t['inputSchema']['required']) ? $t['inputSchema']['required'] : array()),
+                ),
+                // NUEVO: metadata para controlar confirmaciones en el cliente
+                'metadata' => array(
+                    'intent' => $t['intent'] ?? 'read',
+                    'requires_confirmation' => $t['requires_confirmation'] ?? false,
+                    'category' => $t['category'] ?? 'Core',
+                ),
+            );
+            $funcs[] = $f;
+        }
+        return $funcs;
+    }
+
+    /**
+     * Validación básica de argumentos
+     */
+    public function validateArgumentsSchema($schema, $args, & $err = '') {
+        $err = '';
+        if (!is_array($schema) || empty($schema['type']) || $schema['type'] !== 'object') {
+            return true; // sin esquema
+        }
+        $props = isset($schema['properties']) ? $schema['properties'] : array();
+        // required
+        if (!empty($schema['required']) && is_array($schema['required'])) {
+            foreach ($schema['required'] as $rk) {
+                if (!isset($args[$rk])) {
+                    $err = 'Missing required parameter: ' . $rk;
+                    return false;
+                }
+            }
+        }
+        // tipos básicos
+        foreach ($props as $k => $p) {
+            if (!isset($args[$k])) continue;
+            $val = $args[$k];
+            if (!isset($p['type'])) continue;
+            $type = $p['type'];
+            switch ($type) {
+                case 'string':
+                    if (!is_string($val)) { $err = "Parameter $k must be a string"; return false; }
+                    break;
+                case 'integer':
+                    if (!is_int($val) && !(is_string($val) && ctype_digit($val))) { $err = "Parameter $k must be an integer"; return false; }
+                    break;
+                case 'boolean':
+                    if (!is_bool($val) && !in_array($val, array(true,false,0,1,'0','1'), true)) { $err = "Parameter $k must be boolean"; return false; }
+                    break;
+                case 'object':
+                    if (!is_array($val) && !is_object($val)) { $err = "Parameter $k must be an object"; return false; }
+                    break;
+                case 'array':
+                    if (!is_array($val)) { $err = "Parameter $k must be an array"; return false; }
+                    break;
+                default:
+                    break;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Capacidades WP para tools de escritura (lecturas sensibles se chequean en dispatch).
+     */
+    public function getToolCapability($tool) {
+        $map = array(
+            // posts
+            'wp_create_post' => 'edit_posts',
+            'wp_update_post' => 'edit_posts',
+            'wp_delete_post' => 'delete_posts',
+            // comments
+            'wp_create_comment' => 'moderate_comments',
+            'wp_update_comment' => 'moderate_comments',
+            'wp_delete_comment' => 'moderate_comments',
+            // users
+            'wp_create_user' => 'create_users',
+            'wp_update_user' => 'promote_users',
+            // media
+            'wp_upload_image_from_url' => 'upload_files',
+            // plugins/themes
+            'wp_activate_plugin' => 'activate_plugins',
+            'wp_deactivate_plugin' => 'activate_plugins',
+            // options/meta
+            'wp_update_option' => 'manage_options',
+            'wp_delete_option' => 'manage_options',
+            'wp_update_post_meta' => 'manage_options',
+            'wp_delete_post_meta' => 'manage_options',
+            // terms
+            'wp_create_term' => 'manage_categories',
+            'wp_delete_term' => 'manage_categories',
+        );
+        return isset($map[$tool]) ? $map[$tool] : null;
+    }
+	
 	public function dispatchTool($tool, $args, $id = null) {
 		$r = array('jsonrpc' => '2.0', 'id' => $id);
 		$utils = 'EasyVisualMcpUtils';
@@ -843,7 +1082,7 @@ class EasyVisualMcpModel {
 				   }
 				   $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
 				   $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
-				   $meta_value = isset($args['meta_value']) ? $args['meta_value'] : null;
+				   $meta_value = isset($args['meta_value']) ? maybe_serialize($args['meta_value']) : null;
 				   if (!$post_id || !$meta_key) {
 					   $r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
 					   return $r;

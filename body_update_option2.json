@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "tool": "wp_update_option",
+    "args": {
+      "option": "prueba_option_mcp_2",
+      "value": "valor de prueba option 2"
+    }
+  }
+}
