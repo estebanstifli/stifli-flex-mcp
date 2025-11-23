@@ -250,7 +250,9 @@ class StifliFlexMcp_WC_Customers {
                 
                 $reassign = intval($utils::getArrayValue($args, 'reassign', 0));
                 
-                require_once(ABSPATH . 'wp-admin/includes/user.php');
+                if (!function_exists('wp_delete_user')) {
+                    require_once(ABSPATH . 'wp-admin/includes/user.php');
+                }
                 $result = wp_delete_user($customer_id, $reassign);
                 
                 if ($result) {

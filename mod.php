@@ -915,8 +915,7 @@ class StifliFlexMcp {
 		$profile_tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($profile_tools_table);
 		$tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($tools_table);
 
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitizeJsonString.
-		$json_data = isset($_POST['profile_json']) ? StifliFlexMcpUtils::sanitizeJsonString( wp_unslash( $_POST['profile_json'] ) ) : '';
+		$json_data = isset($_POST['profile_json']) ? StifliFlexMcpUtils::sanitizeJsonString( sanitize_text_field( wp_unslash( $_POST['profile_json'] ) ) ) : '';
 		if (empty($json_data)) {
 			wp_send_json_error(array('message' => 'No JSON data provided'));
 		}
@@ -1117,10 +1116,25 @@ class StifliFlexMcp {
 	}
 	
 	private function renderSettingsTab() {
+		// Generate default token if empty (required for write operations)
 		$token = get_option('stifli_flex_mcp_token', '');
-		$token_user = intval(get_option('stifli_flex_mcp_token_user', 0));
+		if (empty($token)) {
+			$token = bin2hex(random_bytes(16));
+			update_option('stifli_flex_mcp_token', $token);
+		}
+		
 		$endpoint = rest_url($this->namespace . '/messages');
 		$users = get_users(array('orderby' => 'display_name', 'fields' => array('ID','display_name','user_login')));
+		
+		// Get first admin user as default
+		$admin_users = get_users(array('role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1));
+		$default_user_id = !empty($admin_users) ? intval($admin_users[0]->ID) : 0;
+		$token_user = intval(get_option('stifli_flex_mcp_token_user', $default_user_id));
+		
+		// Save default user if not set
+		if (get_option('stifli_flex_mcp_token_user', false) === false && $default_user_id > 0) {
+			update_option('stifli_flex_mcp_token_user', $default_user_id);
+		}
 		?>
 		<form method="post" action="options.php">
 			<?php settings_fields('StifLi_Flex_MCP'); ?>
@@ -1141,12 +1155,11 @@ class StifliFlexMcp {
 					<th scope="row"><?php echo esc_html__('Assign Token to User', 'stifli-flex-mcp'); ?></th>
 					<td>
 						<select name="stifli_flex_mcp_token_user">
-							<option value="0"><?php echo esc_html__('-- None (fallback to admin) --', 'stifli-flex-mcp'); ?></option>
 							<?php foreach ($users as $u): ?>
 								<option value="<?php echo esc_attr(intval($u->ID)); ?>" <?php selected($token_user, intval($u->ID)); ?>><?php echo esc_html($u->display_name . ' (' . $u->user_login . ')'); ?></option>
 							<?php endforeach; ?>
 						</select>
-						<p class="description"><?php echo esc_html__('If you select a user, authenticated calls with the token will be executed with that user\'s permissions.', 'stifli-flex-mcp'); ?></p>
+						<p class="description"><?php echo esc_html__('Authenticated calls with the token will be executed with this user\'s permissions.', 'stifli-flex-mcp'); ?></p>
 					</td>
 				</tr>
 				<tr valign="top">
@@ -1162,18 +1175,11 @@ class StifliFlexMcp {
 			<h2><?php echo esc_html__('🚀 Quick Start Guide', 'stifli-flex-mcp'); ?></h2>
 			
 			<h3><?php echo esc_html__('1. Copy Your Endpoint', 'stifli-flex-mcp'); ?></h3>
-			<p><?php echo esc_html__('Use one of these ready-to-use URLs:', 'stifli-flex-mcp'); ?></p>
+			<p><?php echo esc_html__('Use one of these authentication methods:', 'stifli-flex-mcp'); ?></p>
 			
 			<table class="form-table" style="background:#f9f9f9;border:1px solid #ddd;padding:15px;margin:10px 0;">
 				<tr>
-					<th style="width:200px;padding:10px;"><?php echo esc_html__('Endpoint without token:', 'stifli-flex-mcp'); ?></th>
-					<td style="padding:10px;">
-						<input type="text" value="<?php echo esc_attr($endpoint); ?>" class="large-text code" readonly style="background:#fff;" onclick="this.select();" />
-						<p class="description"><?php echo esc_html__('Use this if you haven\'t generated a token (public access).', 'stifli-flex-mcp'); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th style="padding:10px;"><?php echo esc_html__('Endpoint with token:', 'stifli-flex-mcp'); ?></th>
+					<th style="width:200px;padding:10px;"><?php echo esc_html__('Endpoint with token:', 'stifli-flex-mcp'); ?></th>
 					<td style="padding:10px;">
 						<input type="text" id="sflmcp_url_with_token" class="large-text code" readonly style="background:#fff;" onclick="this.select();" />
 						<button id="sflmcp_copy_url" class="button" style="margin-left:5px;"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
@@ -1285,10 +1291,9 @@ class StifliFlexMcp {
 		// Handle tool enable/disable
 		$tools_nonce = isset($_POST['sflmcp_tools_nonce']) ? sanitize_text_field( wp_unslash( $_POST['sflmcp_tools_nonce'] ) ) : '';
 		if (!empty($tools_nonce) && wp_verify_nonce($tools_nonce, 'sflmcp_update_tools')) {
-			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- values sanitized via sanitizeCheckboxMap.
 			$tool_enabled = StifliFlexMcpUtils::sanitizeCheckboxMap(
 				isset($_POST['tool_enabled']) && is_array($_POST['tool_enabled'])
-					? wp_unslash( $_POST['tool_enabled'] )
+					? map_deep( wp_unslash( $_POST['tool_enabled'] ), 'sanitize_text_field' )
 					: array()
 			);
 			if (!empty($tool_enabled)) {
@@ -1447,10 +1452,9 @@ class StifliFlexMcp {
 		// Handle tool enable/disable
 		$tools_nonce = isset($_POST['sflmcp_tools_nonce']) ? sanitize_text_field( wp_unslash( $_POST['sflmcp_tools_nonce'] ) ) : '';
 		if (!empty($tools_nonce) && wp_verify_nonce($tools_nonce, 'sflmcp_update_tools')) {
-			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- values sanitized via sanitizeCheckboxMap.
 			$tool_enabled = StifliFlexMcpUtils::sanitizeCheckboxMap(
 				isset($_POST['tool_enabled']) && is_array($_POST['tool_enabled'])
-					? wp_unslash( $_POST['tool_enabled'] )
+					? map_deep( wp_unslash( $_POST['tool_enabled'] ), 'sanitize_text_field' )
 					: array()
 			);
 			if (!empty($tool_enabled)) {

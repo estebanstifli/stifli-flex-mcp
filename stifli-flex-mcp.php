@@ -2,8 +2,8 @@
 /*
 Plugin Name: StifLi Flex MCP
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
-Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 129 tools (63 WordPress, 65 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 1.0.0
+Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 124 tools (58 WordPress, 65 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
+Version: 1.0.1
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -324,13 +324,10 @@ function stifli_flex_mcp_seed_initial_tools() {
 		
 		// Plugins
 		array('wp_list_plugins', 'List all installed plugins with status, version, etc.', 'WordPress - Plugins', 1),
-		array('wp_activate_plugin', 'Activate a plugin by file path.', 'WordPress - Plugins', 1),
-		array('wp_deactivate_plugin', 'Deactivate a plugin by file path.', 'WordPress - Plugins', 1),
-		array('wp_install_plugin', 'Install a plugin from WordPress.org by slug.', 'WordPress - Plugins', 1),
+		// Removed for WordPress.org compliance (Issue #5): wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin
 		
 		// Themes
-		array('wp_install_theme', 'Install a theme from WordPress.org by slug.', 'WordPress - Themes', 1),
-		array('wp_switch_theme', 'Switch to a theme by stylesheet name.', 'WordPress - Themes', 1),
+		// Removed for WordPress.org compliance (Issue #6): wp_install_theme, wp_switch_theme
 		array('wp_get_themes', 'List all installed themes.', 'WordPress - Themes', 1),
 		
 		// Media
@@ -568,10 +565,10 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_users', 'wp_create_user', 'wp_update_user', 'wp_delete_user',
 				// User Meta (3)
 				'wp_get_user_meta', 'wp_update_user_meta', 'wp_delete_user_meta',
-				// Plugins (4)
-				'wp_list_plugins', 'wp_activate_plugin', 'wp_deactivate_plugin', 'wp_install_plugin',
-				// Themes (3)
-				'wp_install_theme', 'wp_switch_theme', 'wp_get_themes',
+				// Plugins (1) - Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin
+				'wp_list_plugins',
+				// Themes (1) - Removed: wp_install_theme, wp_switch_theme
+				'wp_get_themes',
 				// Media (6)
 				'wp_get_media', 'wp_get_media_item', 'wp_upload_image_from_url', 'wp_upload_image', 'wp_update_media_item', 'wp_delete_media_item',
 				// Taxonomies (4)
@@ -661,7 +658,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 		),
 		array(
 			'name' => 'Complete Site',
-			'description' => 'All available tools (WordPress + WooCommerce = 129 tools)',
+			'description' => 'All available tools (WordPress + WooCommerce = 124 tools)',
 			'tools' => 'ALL', // Special marker to include all tools
 		),
 		array(

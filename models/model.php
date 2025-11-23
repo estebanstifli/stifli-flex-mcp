@@ -1,6 +1,5 @@
 <?php
-require_once ABSPATH . 'wp-admin/includes/misc.php';
-require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader-skin.php';
+if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
 // Load WooCommerce modules if WooCommerce is active
 if ( class_exists( 'WooCommerce' ) ) {
@@ -24,9 +23,7 @@ class StifliFlexMcpModel {
             'wp_create_comment','wp_update_comment','wp_delete_comment',
             'wp_create_user','wp_update_user','wp_delete_user',
             'wp_upload_image_from_url',
-            'wp_activate_plugin','wp_deactivate_plugin',
-            'wp_install_plugin','wp_install_theme',
-            'wp_switch_theme',
+            // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
             'wp_update_option','wp_delete_option',
             'wp_update_post_meta','wp_delete_post_meta',
             'wp_create_term','wp_delete_term',
@@ -426,61 +423,12 @@ class StifliFlexMcpModel {
                         'required' => array(),
                     ),
                 ),
-                'wp_activate_plugin' => array(
-                    'name' => 'wp_activate_plugin',
-                    'description' => 'Activate a plugin by file path (requires appropriate permissions).',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'file' => array('type' => 'string'),
-                        ),
-                        'required' => array('file'),
-                    ),
-                ),
-                'wp_deactivate_plugin' => array(
-                    'name' => 'wp_deactivate_plugin',
-                    'description' => 'Deactivate a plugin by file path (requires appropriate permissions).',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'file' => array('type' => 'string'),
-                        ),
-                        'required' => array('file'),
-                    ),
-                ),
-                'wp_install_plugin' => array(
-                    'name' => 'wp_install_plugin',
-                    'description' => 'Install a plugin from a public URL (ZIP file). Requires appropriate permissions.',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'url' => array('type' => 'string'),
-                        ),
-                        'required' => array('url'),
-                    ),
-                ),
-                'wp_install_theme' => array(
-                    'name' => 'wp_install_theme',
-                    'description' => 'Install a theme from a public URL (ZIP file). Requires appropriate permissions.',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'url' => array('type' => 'string'),
-                        ),
-                        'required' => array('url'),
-                    ),
-                ),
-                'wp_switch_theme' => array(
-                    'name' => 'wp_switch_theme',
-                    'description' => 'Activate (switch to) a theme by stylesheet slug (requires appropriate permissions).',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'stylesheet' => array('type' => 'string'),
-                        ),
-                        'required' => array('stylesheet'),
-                    ),
-                ),
+                // Removed tools for WordPress.org compliance (Issues #5 & #6):
+                // - wp_activate_plugin (activates plugins)
+                // - wp_deactivate_plugin (deactivates plugins)
+                // - wp_install_plugin (installs plugins)
+                // - wp_install_theme (installs themes)
+                // - wp_switch_theme (switches active theme)
                 'wp_get_themes' => array(
                     'name' => 'wp_get_themes',
                     'description' => 'List installed themes.',
@@ -1742,119 +1690,9 @@ class StifliFlexMcpModel {
                 }
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
                 break;
-            case 'wp_activate_plugin':
-                if (empty($args['file'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'file parameter required');
-                    break;
-                }
-                if (!current_user_can('activate_plugins')) {
-                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions');
-                    break;
-                }
-                require_once ABSPATH . 'wp-admin/includes/plugin.php';
-                $resp = activate_plugin(sanitize_text_field($args['file']));
-                if (is_wp_error($resp)) {
-                    $r['error'] = array('code' => $resp->get_error_code(), 'message' => $resp->get_error_message());
-                } else {
-                    $addResultText($r, 'Plugin activated: ' . $args['file']);
-                }
-                break;
-            case 'wp_deactivate_plugin':
-                if (empty($args['file'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'file parameter required');
-                    break;
-                }
-                if (!current_user_can('activate_plugins')) {
-                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions');
-                    break;
-                }
-                deactivate_plugins(sanitize_text_field($args['file']));
-                $addResultText($r, 'Plugin deactivated: ' . $args['file']);
-                break;
-            case 'wp_install_plugin':
-                if (empty($args['url'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'url parameter required');
-                    break;
-                }
-                if (!current_user_can('install_plugins')) {
-                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to install plugins');
-                    break;
-                }
-                // Incluir dependencias necesarias
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                require_once ABSPATH . 'wp-admin/includes/class-automatic-upgrader-skin.php';
-                require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
-                require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-                
-                // Inicializar WP_Filesystem
-                $creds = request_filesystem_credentials(site_url() . '/wp-admin/', '', false, false, array());
-                if (!WP_Filesystem($creds)) {
-                    $r['error'] = array('code' => -42606, 'message' => 'Failed to initialize filesystem. Check permissions or wp-config.php for FS_METHOD.');
-                    break;
-                }
-                
-                $skin = new Automatic_Upgrader_Skin();
-                $upgrader = new Plugin_Upgrader($skin);
-                $result = $upgrader->install($args['url']);
-                if (is_wp_error($result)) {
-                    $r['error'] = array('code' => $result->get_error_code(), 'message' => $result->get_error_message());
-                } elseif ($result === false) {
-                    $r['error'] = array('code' => -42607, 'message' => 'Installation failed without specific error');
-                } else {
-                    $addResultText($r, 'Plugin installed successfully from ' . $args['url']);
-                }
-                break;
-            case 'wp_install_theme':
-                if (empty($args['url'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'url parameter required');
-                    break;
-                }
-                if (!current_user_can('install_themes')) {
-                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to install themes');
-                    break;
-                }
-                // Incluir dependencias necesarias
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                require_once ABSPATH . 'wp-admin/includes/class-automatic-upgrader-skin.php';
-                require_once ABSPATH . 'wp-admin/includes/theme-install.php';
-                require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-                
-                // Inicializar WP_Filesystem
-                $creds = request_filesystem_credentials(site_url() . '/wp-admin/', '', false, false, array());
-                if (!WP_Filesystem($creds)) {
-                    $r['error'] = array('code' => -42606, 'message' => 'Failed to initialize filesystem. Check permissions or wp-config.php for FS_METHOD.');
-                    break;
-                }
-                
-                $skin = new Automatic_Upgrader_Skin();
-                $upgrader = new Theme_Upgrader($skin);
-                $result = $upgrader->install($args['url']);
-                if (is_wp_error($result)) {
-                    $r['error'] = array('code' => $result->get_error_code(), 'message' => $result->get_error_message());
-                } elseif ($result === false) {
-                    $r['error'] = array('code' => -42607, 'message' => 'Installation failed without specific error');
-                } else {
-                    $addResultText($r, 'Theme installed successfully from ' . $args['url']);
-                }
-                break;
-            case 'wp_switch_theme':
-                if (empty($args['stylesheet'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'stylesheet parameter required');
-                    break;
-                }
-                if (!current_user_can('switch_themes')) {
-                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to switch themes');
-                    break;
-                }
-                $stylesheet = sanitize_text_field($args['stylesheet']);
-                $themes = wp_get_themes();
-                if (!isset($themes[$stylesheet])) {
-                    $r['error'] = array('code' => -42600, 'message' => 'Theme not found');
-                    break;
-                }
-                switch_theme($stylesheet);
-                $addResultText($r, 'Theme switched to ' . $stylesheet);
-                break;
+            // Removed cases for WordPress.org compliance (Issues #5 & #6):
+            // - wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin (Issue #5)
+            // - wp_install_theme, wp_switch_theme (Issue #6)
             case 'wp_get_themes':
                 $themes = wp_get_themes();
                 $out = array();
@@ -1888,10 +1726,6 @@ class StifliFlexMcpModel {
                 if (!$url) { $r['error'] = array('code' => -42602, 'message' => 'url required'); break; }
                 if (!current_user_can('upload_files')) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to upload files'); break; }
                 
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                require_once ABSPATH . 'wp-admin/includes/media.php';
-                require_once ABSPATH . 'wp-admin/includes/image.php';
-                
                 // Temporarily allow all MIME types for images
                 add_filter('upload_mimes', function($mimes) {
                     $mimes['jpg|jpeg|jpe'] = 'image/jpeg';
@@ -1902,6 +1736,13 @@ class StifliFlexMcpModel {
                 });
                 
                 stifli_flex_mcp_log('wp_upload_image_from_url: Starting download...');
+                if (!function_exists('download_url')) {
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                }
+                if (!function_exists('media_handle_sideload')) {
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                }
                 $tmp = download_url($url);
                 
                 if (is_wp_error($tmp)) { 
@@ -1998,11 +1839,14 @@ class StifliFlexMcpModel {
                 
                 if ($decoded === false) { $r['error'] = array('code' => -42602, 'message' => 'Invalid base64 data'); break; }
                 
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                require_once ABSPATH . 'wp-admin/includes/media.php';
-                require_once ABSPATH . 'wp-admin/includes/image.php';
-                
                 // Save to temp file
+                if (!function_exists('wp_upload_dir')) {
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                }
+                if (!function_exists('media_handle_sideload')) {
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                }
                 $upload_dir = wp_upload_dir();
                 $temp_file = $upload_dir['path'] . '/' . wp_unique_filename($upload_dir['path'], $filename);
                 

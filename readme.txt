@@ -4,20 +4,20 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, automation, rest-api
 Requires at least: 5.8
 Tested up to: 6.8
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Transform your WordPress site into an AI-powered Model Context Protocol (MCP) server with 129 tools for ChatGPT, Claude, and other AI agents.
+Transform your WordPress site into an AI-powered Model Context Protocol (MCP) server with 124 tools for ChatGPT, Claude, and other AI agents.
 
 == Description ==
 
-StifLi Flex MCP transforms your WordPress site into a powerful Model Context Protocol (MCP) server, exposing 129 tools that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site.
+StifLi Flex MCP transforms your WordPress site into a powerful Model Context Protocol (MCP) server, exposing 124 tools that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site.
 
 **Key Features:**
 
-* 63 WordPress tools (posts, pages, users, comments, media, plugins, themes, taxonomies, options)
+* 58 WordPress tools (posts, pages, users, comments, media, taxonomies, options)
 * 65 WooCommerce tools (products, orders, customers, coupons, shipping, taxes, webhooks)
 * JSON-RPC 2.0 compliant REST endpoint
 * Server-Sent Events (SSE) support for real-time streaming
@@ -33,7 +33,7 @@ StifLi Flex MCP transforms your WordPress site into a powerful Model Context Pro
 * WooCommerce Read Only - Query WooCommerce data without modifications
 * WooCommerce Store Management - Full store management capabilities
 * Complete E-commerce - All WooCommerce tools including advanced settings
-* Complete Site - All 129 tools enabled
+* Complete Site - All 124 tools enabled
 * Safe Mode - Non-sensitive read-only access
 * Development/Debug - Diagnostic and configuration tools
 
@@ -116,7 +116,7 @@ Yes! The plugin includes 65 WooCommerce-specific tools. WooCommerce tools will o
 
 = Can I use this without WooCommerce? =
 
-Absolutely! The 63 WordPress tools work independently. WooCommerce tools are optional.
+Absolutely! The 58 WordPress tools work independently. WooCommerce tools are optional.
 
 == Screenshots ==
 
@@ -131,7 +131,7 @@ Absolutely! The 63 WordPress tools work independently. WooCommerce tools are opt
 
 = 1.0.0 =
 * Initial public release
-* 63 WordPress management tools (posts, pages, users, comments, media, plugins, themes, taxonomies, options)
+* 58 WordPress management tools (posts, pages, users, comments, media, taxonomies, options)
 * 65 WooCommerce tools (products, orders, customers, coupons, shipping, taxes, webhooks)
 * Profile-based tool management with 8 predefined profiles
 * Token-based authentication with WordPress user mapping

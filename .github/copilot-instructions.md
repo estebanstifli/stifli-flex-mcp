@@ -1,68 +1,96 @@
 # Copilot Instructions for StifLi Flex MCP
 
 ## Project Overview
-**StifLi Flex MCP** is a WordPress plugin exposing WordPress management via JSON-RPC 2.0, designed for LLM integration (ChatGPT, Claude, etc.). It provides tool discovery (`tools/list`), execution (`tools/call`), and SSE streaming at `/wp-json/stifli-flex-mcp/v1/`.
+**StifLi Flex MCP** is a WordPress plugin exposing WordPress/WooCommerce management via JSON-RPC 2.0, designed for LLM integration (ChatGPT, Claude, etc.). It implements the Model Context Protocol (MCP) specification with **124 tools** (58 WordPress + 65 WooCommerce + 1 Core), tool discovery (`tools/list`), execution (`tools/call`), and SSE streaming at `/wp-json/stifli-flex-mcp/v1/`.
+
+**Critical Context**: This is a **pure PHP WordPress plugin** – no build step, no npm/webpack. Edit files → reload WordPress.
 
 ## Architecture & Data Flow
 
 ### Request Flow (JSON-RPC 2.0)
-1. Client → `/wp-json/stifli-flex-mcp/v1/messages` (POST) or `/sse` (GET for streaming)
+1. Client → `/wp-json/stifli-flex-mcp/v1/messages` (POST) or `/sse` (GET/POST for streaming)
 2. `mod.php::canAccessMCP()` → token validation (Bearer header or `?token=` query param)
 3. `mod.php::handleDirectJsonRPC()` → method routing (`initialize`, `tools/list`, `tools/call`)
 4. `models/model.php::dispatchTool()` → tool execution with capability check
-5. Response → JSON-RPC result or error
+5. Response → JSON-RPC result or error (stored in `wp_sflmcp_queue` for SSE clients)
 
 ### Key Components
-- **`stifli-flex-mcp.php`**: Bootstrap (loads helpers/models, initializes `StifliFlexMcp`), table creation (`wp_SFLMCP_queue`, `wp_SFLMCP_tools`), seeding, cron scheduling
-- **`mod.php`**: Core logic – REST API registration, auth (`canAccessMCP`), JSON-RPC dispatch, SSE streaming, **two-tab admin UI** (Settings + Tools Management)
-- **`models/model.php`**: Tool registry (`getTools()`), dispatch logic (`dispatchTool()`), capability mapping (`getToolCapability()`), **tools filtering** (`getToolsList()`)
-- **Helpers**: `utils.php` (safe array access), `dispatcher.php` (filter wrapper), `frame.php` (stub for logging)
+- **`stifli-flex-mcp.php`**: Bootstrap (activation hooks, table creation, seeding), loads helpers/models, initializes `StifliFlexMcp`, registers cron (`sflmcp_clean_queue` hourly)
+- **`mod.php`**: Core logic – REST API registration (`/messages`, `/sse`), auth (`canAccessMCP`), JSON-RPC dispatch, SSE streaming loop, **four-tab admin UI** (Settings, Profiles, WordPress Tools, WooCommerce Tools)
+- **`models/model.php`**: Tool registry (`getTools()`), dispatch logic (`dispatchTool()`), capability mapping (`getToolCapability()`), tools filtering (`getToolsList()`), intent classification
+- **WooCommerce modules** (`models/woocommerce/*.php`): Separate tool definitions + dispatch logic for products, orders, customers/coupons, system/settings
+- **Helpers**: `utils.php` (safe array access, token estimation, table naming), `dispatcher.php` (filter wrapper), `frame.php` (logging stub), `req.php` (unused controller stub)
+
+### Database Schema (4 Tables)
+- **`wp_sflmcp_queue`**: Session-based message queue for SSE (fields: `session_id`, `message_id`, `payload`, `expires_at`); cleaned hourly by cron
+- **`wp_sflmcp_tools`**: Tool registry with enable/disable state (fields: `tool_name`, `tool_description`, `category`, `enabled`, `token_estimate`)
+- **`wp_sflmcp_profiles`**: Tool profile configurations (fields: `profile_name`, `profile_description`, `is_system`, `is_active`)
+- **`wp_sflmcp_profile_tools`**: Many-to-many mapping of profiles → tools (fields: `profile_id`, `tool_name`)
 
 ### SSE Streaming (Critical for ChatGPT Connectors)
-- SSE endpoint: `/wp-json/stifli-flex-mcp/v1/sse` (GET or POST)
-- On connect, sends `event: endpoint` with `/messages` URL for client to POST to
-- Polls session queue every 200ms, sends `event: message` with JSON-RPC responses
+- SSE endpoint: `/wp-json/stifli-flex-mcp/v1/sse` (GET or POST accepted)
+- **Connection flow**: Sends `event: endpoint` with `/messages` URL → client POSTs JSON-RPC to `/messages` → responses buffered in `wp_sflmcp_queue` → SSE polls every 200ms and streams `event: message`
 - Sends `event: heartbeat` every 10s, `event: bye` on disconnect/timeout (5min idle)
-- **Important**: Disables output buffering (`ob_end_flush()`, `X-Accel-Buffering: no`) to prevent CDN/proxy blocking
-- Responses are buffered in MySQL table `wp_SFLMCP_queue`; messages expire after 5 min and the `SFLMCP_clean_queue` cron job (hourly) purges old rows.
+- **Critical**: Disables output buffering (`ob_end_flush()`, `X-Accel-Buffering: no`) to prevent CDN/proxy blocking SSE streams
+- Messages in queue expire after 5 min; `sflmcp_clean_queue` cron (hourly) purges old rows
 
 ## Tool Development Pattern
 
-### Adding a New Tool (3-Step Pattern)
+### Adding a New Tool (4-Step Pattern)
 ```php
-// 1. Define in getTools() (models/model.php ~line 70)
+// 1. Define in getTools() (models/model.php ~line 163)
 'my_new_tool' => array(
     'name' => 'my_new_tool',
     'description' => 'Does X with Y. Returns Z.',
     'inputSchema' => array(
         'type' => 'object',
         'properties' => array(
-            'param1' => array('type' => 'string'),
+            'param1' => array('type' => 'string', 'description' => 'Parameter description'),
         ),
         'required' => array('param1'),
     ),
 ),
 
-// 2. Add capability if mutating (models/model.php::getToolCapability ~line 693)
-'my_new_tool' => 'edit_posts', // or null for public
+// 2. Add capability if mutating (models/model.php::getToolCapability ~line 1168)
+'my_new_tool' => 'edit_posts', // or null for public/read-only
 
-// 3. Implement in dispatchTool() (models/model.php ~line 730)
+// 3. Implement in dispatchTool() (models/model.php::dispatchTool ~line 1253)
 case 'my_new_tool':
     $param1 = $args['param1'] ?? '';
     // ... logic using WP functions ...
     $addResultText($r, "Success message");
     return $r;
 
-// 4. Add to wp_SFLMCP_tools table on activation (stifli-flex-mcp.php::stifli_flex_mcp_seed_initial_tools)
+// 4. Seed into wp_sflmcp_tools (stifli-flex-mcp.php::stifli_flex_mcp_seed_initial_tools ~line 375)
 array('my_new_tool', 'Does X with Y. Returns Z.', 'WordPress - YourCategory', 1),
 ```
 
-**Important**: Only enabled tools (where `enabled = 1` in `wp_SFLMCP_tools`) are returned by `getToolsList()`. Users can enable/disable tools from the admin UI Tools Management tab.
+**Important**: Only enabled tools (where `enabled = 1` in `wp_sflmcp_tools`) are returned by `getToolsList()`. Users toggle tools in admin UI (4 tabs: Settings, Profiles, WordPress Tools, WooCommerce Tools).
 
-### Intent Classification (models/model.php::getIntentForTool)
-- **`read`**: Public tools (no confirmation) – e.g., `wp_get_posts`, `wp_get_users`
-- **`sensitive_read`**: Requires confirmation – `wp_get_option`, `wp_get_post_meta`, `fetch`
-- **`write`**: Requires confirmation – all `wp_create_*`, `wp_update_*`, `wp_delete_*`, plugin/theme install
+### WooCommerce Tools Pattern
+WooCommerce tools follow a **modular architecture**:
+- Tool definitions: `models/woocommerce/wc-{module}.php::getTools()` (e.g., `wc-products.php`, `wc-orders.php`)
+- Dispatch logic: Same file, `dispatch()` method with switch statement
+- Auto-loaded when `class_exists('WooCommerce')` (see `models/model.php` ~line 6)
+- Main model delegates to WC modules via `StifliFlexMcp_WC_Products::dispatch()` etc.
+
+### Intent Classification (models/model.php::getIntentForTool ~line 23)
+- **`read`**: Public tools (no confirmation) – e.g., `wp_get_posts`, `wp_get_users`, `wc_get_products`
+- **`sensitive_read`**: Requires confirmation – `wp_get_option`, `wp_get_post_meta`, `wp_get_user_meta`, `fetch`, `wc_get_customers`, `wc_get_system_status`
+- **`write`**: Requires confirmation – all `wp_create_*`, `wp_update_*`, `wp_delete_*`, `wc_create_*`, `wc_update_*`, plugin/theme install
+
+### Profile System (8 Predefined Profiles)
+Profiles control which tools are available to clients. Managed in admin UI Profiles tab:
+- **WordPress Read Only**: Safe read-only access (posts, pages, users, taxonomies, media)
+- **WordPress Full Management**: All 58 WordPress CRUD tools (removed 5 for WordPress.org compliance)
+- **WooCommerce Read Only**: Query products, orders, customers without modifications
+- **WooCommerce Store Management**: Products, stock, orders, coupons (no advanced settings)
+- **Complete E-commerce**: All 65 WooCommerce tools (tax, shipping, webhooks)
+- **Complete Site**: All 129 tools enabled
+- **Safe Mode**: Non-sensitive reads only (no options, settings, user_meta, system status)
+- **Development/Debug**: Diagnostic tools (site health, settings, system status)
+
+Profiles stored in `wp_sflmcp_profiles` + `wp_sflmcp_profile_tools` (many-to-many). Seeded on activation via `stifli_flex_mcp_seed_system_profiles()` (~line 511).
 
 ## Authentication & Security Patterns
 
@@ -87,33 +115,58 @@ if ($required_cap && !current_user_can($required_cap)) {
 
 ## Critical Developer Workflows
 
-### Testing with REST Client
-Use `examples/wordpress-mcp.http`:
-```http
-POST https://your-site.test/wp-json/stifli-flex-mcp/v1/messages
-Authorization: Bearer YOUR_TOKEN
-Content-Type: application/json
+### Testing with PowerShell Scripts (.dev directory)
+The `.dev/` directory contains testing scripts (excluded from distribution):
+```powershell
+# Test connectivity
+.\.dev\test-mcp-ping.ps1
 
-{
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "params": {"name": "mcp_ping", "arguments": {}},
-  "id": 1
-}
+# List all available tools
+.\.dev\test-tools-list.ps1
+
+# Test authentication
+.\.dev\test-query-auth.ps1 -Token "your_token"
+
+# Test image upload from base64
+.\.dev\test-upload-base64.ps1
 ```
 
-### Debugging (WP_DEBUG mode)
-- Enable: `define('WP_DEBUG', true);` in `wp-config.php`
-- Logs in `mod.php`: auth flow (`canAccessMCP`), SSE events, token masking
-- Logs in `models/model.php`: tool not found, capability checks
-- Check WordPress debug.log or error_log
+### Testing with REST Client (.dev examples)
+Manual REST testing pattern (PowerShell with `Invoke-RestMethod`):
+```powershell
+$headers = @{
+    "Authorization" = "Bearer YOUR_TOKEN"
+    "Content-Type" = "application/json"
+}
+$body = @{
+    jsonrpc = "2.0"
+    method = "tools/call"
+    params = @{
+        name = "mcp_ping"
+        arguments = @{}
+    }
+    id = 1
+} | ConvertTo-Json
 
-### Admin UI (Settings & Tools Management)
-- **Location**: WordPress Admin → StifLi Flex MCP (top-level menu with dashicons-rest-api icon)
-- **Two Tabs**:
-  - **Settings**: Generate/revoke tokens (AJAX `SFLMCP_generate_token`, `SFLMCP_revoke_token`), map token to WP user, endpoint URLs
-  - **Tools Management**: Enable/disable tools per category, updates `wp_SFLMCP_tools` table
-- **Registered in**: `mod.php::registerAdmin()`, `mod.php::renderSettingsTab()`, `mod.php::renderToolsTab()`
+Invoke-RestMethod -Uri "https://your-site.test/wp-json/stifli-flex-mcp/v1/messages" `
+    -Method POST -Headers $headers -Body $body
+```
+
+### Debugging (WP_DEBUG + SFLMCP_DEBUG)
+- Enable WordPress debug: `define('WP_DEBUG', true);` in `wp-config.php`
+- Enable plugin debug: `define('SFLMCP_DEBUG', true);` in `wp-config.php` (see `stifli-flex-mcp.php` ~line 22)
+- Logs use `stifli_flex_mcp_log()` function (writes to `error_log` when `SFLMCP_DEBUG` enabled)
+- Key log points: `mod.php` (auth flow, SSE events, token masking), `models/model.php` (tool dispatch, capability checks)
+- Check `wp-content/debug.log` or server error_log
+
+### Admin UI (4-Tab Interface)
+- **Location**: WordPress Admin → StifLi Flex MCP (top-level menu, dashicons-rest-api icon)
+- **Four Tabs** (registered in `mod.php::registerAdmin()` ~line 1000):
+  1. **Settings**: Generate/revoke tokens (AJAX handlers), map token to WP user, view endpoint URLs
+  2. **Profiles**: Create/edit/delete/duplicate profiles, apply profiles, import/export JSON configs (AJAX: `sflmcp_create_profile`, etc.)
+  3. **WordPress Tools**: Enable/disable WordPress tools by category (63 tools)
+  4. **WooCommerce Tools**: Enable/disable WooCommerce tools by category (65 tools)
+- **AJAX Handlers**: All in `mod.php` (`ajax_generate_token`, `ajax_create_profile`, `ajax_apply_profile`, etc.)
 
 ## Project-Specific Conventions
 
@@ -144,18 +197,27 @@ The `id` field in JSON-RPC 2.0 can be **string, int, or null**. All methods hand
 
 ## Migration & Extension
 
-### Porting Tools from ai-copilot (see MIGRACION_TOOLS.md)
+### Porting Tools from ai-copilot (see .dev/MIGRACION_TOOLS.md)
 - Replace `WaicUtils` → `StifliFlexMcpUtils`
 - Replace `WaicFrame` → `StifliFlexMcpFrame`
 - Update tool array in `getTools()`
 - Copy/adapt dispatch case blocks
-- Test with `body_*.json` example files
+- Test with PowerShell scripts in `.dev/`
 
-### Current Status (TODO.md priorities)
+### Current Status (.dev/TODO.md priorities)
 - ✅ Basic tools (posts, users, comments, taxonomies, media, plugins)
 - 🚧 OpenAI/ChatGPT `functions` adapter (in-progress)
 - ⏳ Token validation for mutating tools (partially done)
 - ⏳ Strict parameter validation against schemas
+
+### Development Files (.dev directory - NOT distributed)
+- `MIGRACION_TOOLS.md`: Tool migration checklist from ai-copilot
+- `TODO.md`: Development roadmap and priorities
+- `PERFILES_DESIGN.md`: Profile system design docs
+- `WOOCOMMERCE_TOOLS.md`: WooCommerce tools documentation
+- `build-plugin.ps1`: ZIP build script for WordPress.org distribution
+- `count_tools.php`: Tool counting utility
+- Test scripts: `test-*.ps1` (PowerShell REST API tests)
 
 ## External Dependencies & Integration
 
@@ -180,16 +242,10 @@ The `id` field in JSON-RPC 2.0 can be **string, int, or null**. All methods hand
 - Add capability: `models/model.php` → `getToolCapability()`
 - Modify auth: `mod.php` → `canAccessMCP()`
 - Admin UI: `mod.php` → `registerAdmin()`, `settingsPage()`
-- Test requests: `examples/wordpress-mcp.http` or `body_*.json` files
-- Queue storage: `mod.php::storeMessage()` / `fetchMessages()` (table `wp_SFLMCP_queue`)
-- Queue cleanup cron: `stifli-flex-mcp.php::stifli_flex_mcp_clean_queue()` (hook `SFLMCP_clean_queue` hourly)
-- Tools database: `stifli-flex-mcp.php::stifli_flex_mcp_maybe_create_tools_table()`, `stifli_flex_mcp_seed_initial_tools()` (table `wp_SFLMCP_tools`)
-
-### No Build Step
-Pure PHP plugin – edit files, reload WordPress. No npm/composer/webpack required.
-- Test requests: `examples/wordpress-mcp.http` or `body_*.json` files
-- Queue storage: `mod.php::storeMessage()` / `fetchMessages()` (table `wp_SFLMCP_queue`)
-- Queue cleanup cron: `stifli-flex-mcp.php::stifli_flex_mcp_clean_queue()` (hook `SFLMCP_clean_queue` hourly)
+- Test requests: `.dev/test-*.ps1` PowerShell scripts
+- Queue storage: `mod.php::storeMessage()` / `fetchMessages()` (table `wp_sflmcp_queue`)
+- Queue cleanup cron: `stifli-flex-mcp.php::stifli_flex_mcp_clean_queue()` (hook `sflmcp_clean_queue` hourly)
+- Tools database: `stifli-flex-mcp.php::stifli_flex_mcp_maybe_create_tools_table()`, `stifli_flex_mcp_seed_initial_tools()` (table `wp_sflmcp_tools`)
 
 ### No Build Step
 Pure PHP plugin – edit files, reload WordPress. No npm/composer/webpack required.
