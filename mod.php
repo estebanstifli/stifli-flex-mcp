@@ -27,6 +27,7 @@ class StifliFlexMcp {
 		if (is_admin()) {
 			add_action('admin_menu', array($this, 'registerAdmin'));
 			add_action('admin_init', array($this, 'registerSettings'));
+			add_action('admin_enqueue_scripts', array($this, 'enqueueAdminScripts'));
 			// AJAX handler for token generation
 			add_action('wp_ajax_sflmcp_generate_token', array($this, 'ajax_generate_token'));
 			// AJAX handlers for profiles management
@@ -1071,6 +1072,55 @@ class StifliFlexMcp {
 	}
 
 	/**
+	 * Enqueue admin scripts and styles
+	 */
+	public function enqueueAdminScripts($hook) {
+		// Only load on our plugin page
+		if ($hook !== 'toplevel_page_stifli-flex-mcp') {
+			return;
+		}
+
+		// Enqueue Settings tab JavaScript
+		wp_enqueue_script(
+			'sflmcp-admin-settings',
+			plugin_dir_url(__FILE__) . 'assets/admin-settings.js',
+			array(),
+			'1.0.1',
+			true
+		);
+
+		// Localize script with data
+		wp_localize_script('sflmcp-admin-settings', 'sflmcpSettings', array(
+			'ajaxUrl' => admin_url('admin-ajax.php'),
+			'nonce' => wp_create_nonce('SFLMCP-admin'),
+			'token' => get_option('stifli_flex_mcp_token', ''),
+			'i18n' => array(
+				'tokenGenerated' => __('Token generated. Save changes to persist it in the option.', 'stifli-flex-mcp'),
+				'errorGenerating' => __('Error generating token', 'stifli-flex-mcp'),
+				'urlCopied' => __('URL copied', 'stifli-flex-mcp'),
+				'headerCopied' => __('Header copied', 'stifli-flex-mcp'),
+			),
+		));
+
+		// Enqueue Profiles tab JavaScript
+		wp_enqueue_script(
+			'sflmcp-admin-profiles',
+			plugin_dir_url(__FILE__) . 'assets/admin-profiles.js',
+			array(),
+			'1.0.1',
+			true
+		);
+
+		// Localize script with data
+		wp_localize_script('sflmcp-admin-profiles', 'sflmcpProfiles', array(
+			'nonce' => wp_create_nonce('sflmcp_profiles'),
+			'i18n' => array(
+				'includedTools' => __('Included tools:', 'stifli-flex-mcp'),
+			),
+		));
+	}
+
+	/**
 	 * Render the admin settings page
 	 */
 	public function adminPage() {
@@ -1223,45 +1273,7 @@ class StifliFlexMcp {
 		</form>
 		</p>
 
-		<script type="text/javascript">
-		(function(){
-			var ajaxUrl = '<?php echo esc_js( admin_url('admin-ajax.php') ); ?>';
-			var nonce = '<?php echo esc_js( wp_create_nonce('SFLMCP-admin') ); ?>';
-			function setFields(token) {
-				var endpoint = document.getElementById('sflmcp_endpoint').textContent || '';
-				document.getElementById('sflmcp_token_field').value = token || '';
-				document.getElementById('sflmcp_url_with_token').value = endpoint + (endpoint.indexOf('?')===-1 ? '?token=' : '&token=') + (token || '');
-				document.getElementById('sflmcp_auth_header').value = 'Authorization: Bearer ' + (token || '');
-			}
-			// init with existing token
-			setFields('<?php echo esc_js($token); ?>');
-
-			document.getElementById('sflmcp_generate').addEventListener('click', function(){
-				document.getElementById('sflmcp_spinner').style.display = '';
-				fetch(ajaxUrl, {
-					method: 'POST',
-					credentials: 'same-origin',
-					headers: {'Content-Type':'application/x-www-form-urlencoded'},
-					body: 'action=sflmcp_generate_token&_wpnonce=' + encodeURIComponent(nonce)
-				}).then(function(r){return r.json();}).then(function(j){
-					document.getElementById('sflmcp_spinner').style.display = 'none';
-					if (j.success && j.data && j.data.token) {
-						setFields(j.data.token);
-						alert('<?php echo esc_js(__('Token generated. Save changes to persist it in the option.', 'stifli-flex-mcp')); ?>');
-					} else {
-						alert('<?php echo esc_js(__('Error generating token', 'stifli-flex-mcp')); ?>: ' + (j.data && j.data.message ? j.data.message : ''));
-					}
-				}).catch(function(e){ document.getElementById('sflmcp_spinner').style.display = 'none'; alert('Error: '+e); });
-			});
-
-			document.getElementById('sflmcp_copy_url').addEventListener('click', function(){
-				navigator.clipboard.writeText(document.getElementById('sflmcp_url_with_token').value).then(function(){ alert('URL copied'); });
-			});
-			document.getElementById('sflmcp_copy_header').addEventListener('click', function(){
-				navigator.clipboard.writeText(document.getElementById('sflmcp_auth_header').value).then(function(){ alert('Header copied'); });
-			});
-		})();
-		</script>
+		
 		<?php
 	}
 	
@@ -1798,131 +1810,13 @@ class StifliFlexMcp {
 		<!-- Hidden file input for import -->
 		<input type="file" id="sflmcp_import_file" accept=".json" style="display: none;" />
 		
-		<script>
-		(function(){
-			// Helper for AJAX calls
-			function SFLMCPAjax(action, data, successMsg) {
-				data.action = action;
-				data._wpnonce = '<?php echo esc_js( wp_create_nonce('sflmcp_profiles') ); ?>';
-				
-				return fetch(ajaxurl, {
-					method: 'POST',
-					headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-					body: new URLSearchParams(data)
-				}).then(r => r.json()).then(j => {
-					if (j.success) {
-						if (successMsg) alert(successMsg);
-						location.reload();
-					} else {
-						alert('Error: ' + (j.data && j.data.message ? j.data.message : 'Unknown error'));
-					}
-				}).catch(e => alert('Error: ' + e));
-			}
-			
-			// Apply profile
-			document.querySelectorAll('.SFLMCP-apply-profile').forEach(btn => {
-				btn.addEventListener('click', function() {
-					if (!confirm('Apply profile "' + this.dataset.profileName + '"?\n\nThis will change the enabled tools.')) return;
-					SFLMCPAjax('sflmcp_apply_profile', {profile_id: this.dataset.profileId}, 'Profile applied successfully');
-				});
-			});
-			
-			// Delete profile
-			document.querySelectorAll('.SFLMCP-delete-profile').forEach(btn => {
-				btn.addEventListener('click', function() {
-					if (!confirm('Delete profile "' + this.dataset.profileName + '"?\n\nThis action cannot be undone.')) return;
-					SFLMCPAjax('sflmcp_delete_profile', {profile_id: this.dataset.profileId}, 'Profile deleted successfully');
-				});
-			});
-			
-			// Duplicate profile
-			document.querySelectorAll('.SFLMCP-duplicate-profile').forEach(btn => {
-				btn.addEventListener('click', function() {
-					SFLMCPAjax('sflmcp_duplicate_profile', {profile_id: this.dataset.profileId}, 'Profile duplicated successfully');
-				});
-			});
-			
-			// Export profile
-			document.querySelectorAll('.SFLMCP-export-profile').forEach(btn => {
-				btn.addEventListener('click', function() {
-					const profileId = this.dataset.profileId;
-					const profileName = this.dataset.profileName;
-					window.location.href = ajaxurl + '?action=sflmcp_export_profile&profile_id=' + profileId + '&_wpnonce=<?php echo esc_js( wp_create_nonce('sflmcp_profiles') ); ?>';
-				});
-			});
-			
-			// Import profile
-			document.getElementById('sflmcp_import_profile').addEventListener('click', function() {
-				document.getElementById('sflmcp_import_file').click();
-			});
-			
-			document.getElementById('sflmcp_import_file').addEventListener('change', function() {
-				if (!this.files.length) return;
-				const file = this.files[0];
-				const reader = new FileReader();
-				reader.onload = function(e) {
-					try {
-						const json = JSON.parse(e.target.result);
-						SFLMCPAjax('sflmcp_import_profile', {profile_json: JSON.stringify(json)}, 'Profile imported successfully');
-					} catch (err) {
-						alert('Error reading JSON file: ' + err.message);
-					}
-				};
-				reader.readAsText(file);
-			});
-			
-			// Restore system profiles
-			document.getElementById('sflmcp_restore_system_profiles').addEventListener('click', function() {
-				if (!confirm('Restore system profiles?\n\nThis will recreate the 8 predefined profiles.')) return;
-				SFLMCPAjax('sflmcp_restore_system_profiles', {}, 'System profiles restored');
-			});
-			
-			// Edit profile (TODO: implement modal)
-			document.querySelectorAll('.SFLMCP-edit-profile').forEach(btn => {
-				btn.addEventListener('click', function() {
-					alert('Profile creation/editing functionality with modal will be implemented in the next phase');
-				});
-			});
-			
-			// View tools tooltip
-			var tooltip = null;
-			document.querySelectorAll('.SFLMCP-view-tools').forEach(link => {
-				link.addEventListener('mouseenter', function(e) {
-					e.preventDefault();
-					// Remove existing tooltip
-					if (tooltip) tooltip.remove();
-					
-					// Create tooltip
-					tooltip = document.createElement('div');
-					tooltip.style.cssText = 'position: absolute; background: #fff; border: 1px solid #ccc; padding: 10px; max-width: 400px; max-height: 300px; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; font-size: 12px; line-height: 1.5;';
-					tooltip.innerHTML = '<strong><?php echo esc_js(__('Included tools:', 'stifli-flex-mcp')); ?></strong><br>' + this.dataset.tools;
-					document.body.appendChild(tooltip);
-					
-					// Position tooltip near mouse
-					var rect = this.getBoundingClientRect();
-					tooltip.style.left = (rect.left + window.scrollX) + 'px';
-					tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-				});
-				
-				link.addEventListener('mouseleave', function() {
-					setTimeout(function() {
-						if (tooltip) {
-							tooltip.remove();
-							tooltip = null;
-						}
-					}, 200);
-				});
-				
-				link.addEventListener('click', function(e) {
-					e.preventDefault();
-				});
-			});
-		})();
-		</script>
+		
 		<?php
 	}
 	/* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 }
+
+
 
 
 

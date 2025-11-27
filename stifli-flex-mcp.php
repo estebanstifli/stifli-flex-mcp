@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 124 tools (58 WordPress, 65 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 1.0.1
+Version: 1.0.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later

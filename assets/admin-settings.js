@@ -34,7 +34,7 @@
 					setFields(j.data.token);
 					alert(sflmcpSettings.i18n.tokenGenerated || 'Token generated. Save changes to persist it.');
 				} else {
-					alert((sflmcpSettings.i18n.tokenError || 'Error generating token') + ': ' + (j.data && j.data.message ? j.data.message : ''));
+					alert((sflmcpSettings.i18n.errorGenerating || 'Error generating token') + ': ' + (j.data && j.data.message ? j.data.message : ''));
 				}
 			}).catch(function(err){
 				if (spinner) spinner.style.display = 'none';
@@ -50,7 +50,7 @@
 			var urlField = document.getElementById('sflmcp_url_with_token');
 			if (urlField && navigator.clipboard) {
 				navigator.clipboard.writeText(urlField.value).then(function(){
-					alert('URL copied');
+					alert(sflmcpSettings.i18n.urlCopied || 'URL copied');
 				});
 			}
 		});
@@ -63,7 +63,7 @@
 			var headerField = document.getElementById('sflmcp_auth_header');
 			if (headerField && navigator.clipboard) {
 				navigator.clipboard.writeText(headerField.value).then(function(){
-					alert('Header copied');
+					alert(sflmcpSettings.i18n.headerCopied || 'Header copied');
 				});
 			}
 		});
