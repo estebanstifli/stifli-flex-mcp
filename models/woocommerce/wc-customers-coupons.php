@@ -7,265 +7,35 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * WooCommerce Customers class - REMOVED for WordPress.org compliance
+ * Creating/managing users is not allowed per plugin guidelines.
+ * See: https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/
+ */
 class StifliFlexMcp_WC_Customers {
     
     public static function getTools() {
-        return array(
-            'wc_get_customers' => array(
-                'name' => 'wc_get_customers',
-                'description' => 'List WooCommerce customers with filters (email, role, search, limit, offset, orderby, order).',
-                'inputSchema' => array(
-                    'type' => 'object',
-                    'properties' => array(
-                        'email'   => array('type' => 'string'),
-                        'role'    => array('type' => 'string'),
-                        'search'  => array('type' => 'string'),
-                        'limit'   => array('type' => 'integer'),
-                        'offset'  => array('type' => 'integer'),
-                        'orderby' => array('type' => 'string'),
-                        'order'   => array('type' => 'string'),
-                    ),
-                    'required' => array(),
-                ),
-            ),
-            'wc_create_customer' => array(
-                'name' => 'wc_create_customer',
-                'description' => 'Create a WooCommerce customer (email, first_name, last_name, username, password, billing, shipping).',
-                'inputSchema' => array(
-                    'type' => 'object',
-                    'properties' => array(
-                        'email'      => array('type' => 'string'),
-                        'first_name' => array('type' => 'string'),
-                        'last_name'  => array('type' => 'string'),
-                        'username'   => array('type' => 'string'),
-                        'password'   => array('type' => 'string'),
-                        'billing'    => array('type' => 'object'),
-                        'shipping'   => array('type' => 'object'),
-                    ),
-                    'required' => array('email'),
-                ),
-            ),
-            'wc_update_customer' => array(
-                'name' => 'wc_update_customer',
-                'description' => 'Update a WooCommerce customer by ID.',
-                'inputSchema' => array(
-                    'type' => 'object',
-                    'properties' => array(
-                        'id'         => array('type' => 'integer'),
-                        'email'      => array('type' => 'string'),
-                        'first_name' => array('type' => 'string'),
-                        'last_name'  => array('type' => 'string'),
-                        'billing'    => array('type' => 'object'),
-                        'shipping'   => array('type' => 'object'),
-                    ),
-                    'required' => array('id'),
-                ),
-            ),
-            'wc_delete_customer' => array(
-                'name' => 'wc_delete_customer',
-                'description' => 'Delete a WooCommerce customer by ID. Pass reassign to reassign orders.',
-                'inputSchema' => array(
-                    'type' => 'object',
-                    'properties' => array(
-                        'id'       => array('type' => 'integer'),
-                        'reassign' => array('type' => 'integer'),
-                        'force'    => array('type' => 'boolean'),
-                    ),
-                    'required' => array('id'),
-                ),
-            ),
-        );
+        // All customer tools removed for WordPress.org compliance
+        return array();
     }
     
     public static function getCapabilities() {
-        return array(
-            'wc_create_customer' => 'edit_users',
-            'wc_update_customer' => 'edit_users',
-            'wc_delete_customer' => 'delete_users',
-        );
+        return array();
     }
     
     public static function dispatch($tool, $args, &$r, $addResultText, $utils) {
-        if (!class_exists('WooCommerce')) {
-            $r['error'] = array('code' => -50000, 'message' => 'WooCommerce is not active');
-            return true;
-        }
-        
-        switch ($tool) {
-            case 'wc_get_customers':
-                $query_args = array(
-                    'limit' => intval($utils::getArrayValue($args, 'limit', 10)),
-                    'offset' => intval($utils::getArrayValue($args, 'offset', 0)),
-                    'orderby' => sanitize_key($utils::getArrayValue($args, 'orderby', 'registered')),
-                    'order' => sanitize_key($utils::getArrayValue($args, 'order', 'DESC')),
-                );
-                
-                if (!empty($args['email'])) {
-                    $query_args['email'] = sanitize_email($args['email']);
-                }
-                if (!empty($args['search'])) {
-                    $query_args['search'] = '*' . sanitize_text_field($args['search']) . '*';
-                }
-                if (!empty($args['role'])) {
-                    $query_args['role'] = sanitize_key($args['role']);
-                }
-                
-                $customer_query = new WP_User_Query($query_args);
-                $customers = $customer_query->get_results();
-                $result = array();
-                
-                foreach ($customers as $user) {
-                    $customer = new WC_Customer($user->ID);
-                    $result[] = array(
-                        'id' => $customer->get_id(),
-                        'email' => $customer->get_email(),
-                        'first_name' => $customer->get_first_name(),
-                        'last_name' => $customer->get_last_name(),
-                        'username' => $customer->get_username(),
-                        'billing' => array(
-                            'first_name' => $customer->get_billing_first_name(),
-                            'last_name' => $customer->get_billing_last_name(),
-                            'email' => $customer->get_billing_email(),
-                            'phone' => $customer->get_billing_phone(),
-                        ),
-                        'total_spent' => $customer->get_total_spent(),
-                        'orders_count' => $customer->get_order_count(),
-                    );
-                }
-                
-                $addResultText($r, 'Found ' . count($result) . ' customers: ' . wp_json_encode($result, JSON_PRETTY_PRINT));
-                return true;
-                
-            case 'wc_create_customer':
-                $email = sanitize_email($utils::getArrayValue($args, 'email', ''));
-                if (empty($email)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'email is required');
-                    return true;
-                }
-                
-                $username = sanitize_user($utils::getArrayValue($args, 'username', $email));
-                $password = $utils::getArrayValue($args, 'password', wp_generate_password());
-                
-                $user_id = wc_create_new_customer($email, $username, $password);
-                
-                if (is_wp_error($user_id)) {
-                    $r['error'] = array('code' => -50004, 'message' => $user_id->get_error_message());
-                    return true;
-                }
-                
-                $customer = new WC_Customer($user_id);
-                
-                if (!empty($args['first_name'])) {
-                    $customer->set_first_name(sanitize_text_field($args['first_name']));
-                }
-                if (!empty($args['last_name'])) {
-                    $customer->set_last_name(sanitize_text_field($args['last_name']));
-                }
-                
-                // Billing
-                if (!empty($args['billing']) && is_array($args['billing'])) {
-                    $customer->set_billing_first_name(sanitize_text_field($utils::getArrayValue($args['billing'], 'first_name', '')));
-                    $customer->set_billing_last_name(sanitize_text_field($utils::getArrayValue($args['billing'], 'last_name', '')));
-                    $customer->set_billing_email(sanitize_email($utils::getArrayValue($args['billing'], 'email', $email)));
-                    $customer->set_billing_phone(sanitize_text_field($utils::getArrayValue($args['billing'], 'phone', '')));
-                    $customer->set_billing_address_1(sanitize_text_field($utils::getArrayValue($args['billing'], 'address_1', '')));
-                    $customer->set_billing_address_2(sanitize_text_field($utils::getArrayValue($args['billing'], 'address_2', '')));
-                    $customer->set_billing_city(sanitize_text_field($utils::getArrayValue($args['billing'], 'city', '')));
-                    $customer->set_billing_postcode(sanitize_text_field($utils::getArrayValue($args['billing'], 'postcode', '')));
-                    $customer->set_billing_country(sanitize_text_field($utils::getArrayValue($args['billing'], 'country', '')));
-                    $customer->set_billing_state(sanitize_text_field($utils::getArrayValue($args['billing'], 'state', '')));
-                }
-                
-                // Shipping
-                if (!empty($args['shipping']) && is_array($args['shipping'])) {
-                    $customer->set_shipping_first_name(sanitize_text_field($utils::getArrayValue($args['shipping'], 'first_name', '')));
-                    $customer->set_shipping_last_name(sanitize_text_field($utils::getArrayValue($args['shipping'], 'last_name', '')));
-                    $customer->set_shipping_address_1(sanitize_text_field($utils::getArrayValue($args['shipping'], 'address_1', '')));
-                    $customer->set_shipping_address_2(sanitize_text_field($utils::getArrayValue($args['shipping'], 'address_2', '')));
-                    $customer->set_shipping_city(sanitize_text_field($utils::getArrayValue($args['shipping'], 'city', '')));
-                    $customer->set_shipping_postcode(sanitize_text_field($utils::getArrayValue($args['shipping'], 'postcode', '')));
-                    $customer->set_shipping_country(sanitize_text_field($utils::getArrayValue($args['shipping'], 'country', '')));
-                    $customer->set_shipping_state(sanitize_text_field($utils::getArrayValue($args['shipping'], 'state', '')));
-                }
-                
-                $customer->save();
-                
-                $addResultText($r, 'Customer created with ID: ' . $user_id);
-                return true;
-                
-            case 'wc_update_customer':
-                $customer_id = intval($utils::getArrayValue($args, 'id', 0));
-                if (empty($customer_id)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'id is required');
-                    return true;
-                }
-                
-                $customer = new WC_Customer($customer_id);
-                if (!$customer->get_id()) {
-                    $r['error'] = array('code' => -50002, 'message' => 'Customer not found');
-                    return true;
-                }
-                
-                if (!empty($args['email'])) {
-                    $customer->set_email(sanitize_email($args['email']));
-                }
-                if (!empty($args['first_name'])) {
-                    $customer->set_first_name(sanitize_text_field($args['first_name']));
-                }
-                if (!empty($args['last_name'])) {
-                    $customer->set_last_name(sanitize_text_field($args['last_name']));
-                }
-                
-                // Update billing if provided
-                if (isset($args['billing']) && is_array($args['billing'])) {
-                    foreach ($args['billing'] as $key => $value) {
-                        $method = 'set_billing_' . $key;
-                        if (method_exists($customer, $method)) {
-                            $customer->$method(sanitize_text_field($value));
-                        }
-                    }
-                }
-                
-                // Update shipping if provided
-                if (isset($args['shipping']) && is_array($args['shipping'])) {
-                    foreach ($args['shipping'] as $key => $value) {
-                        $method = 'set_shipping_' . $key;
-                        if (method_exists($customer, $method)) {
-                            $customer->$method(sanitize_text_field($value));
-                        }
-                    }
-                }
-                
-                $customer->save();
-                
-                $addResultText($r, 'Customer updated: ' . $customer_id);
-                return true;
-                
-            case 'wc_delete_customer':
-                $customer_id = intval($utils::getArrayValue($args, 'id', 0));
-                if (empty($customer_id)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'id is required');
-                    return true;
-                }
-                
-                $reassign = intval($utils::getArrayValue($args, 'reassign', 0));
-                
-                if (!function_exists('wp_delete_user')) {
-                    require_once(ABSPATH . 'wp-admin/includes/user.php');
-                }
-                $result = wp_delete_user($customer_id, $reassign);
-                
-                if ($result) {
-                    $addResultText($r, 'Customer deleted: ' . $customer_id);
-                } else {
-                    $r['error'] = array('code' => -50003, 'message' => 'Failed to delete customer');
-                }
-                return true;
-        }
-        
+        // All customer dispatch removed for WordPress.org compliance
         return false;
     }
 }
+
+/**
+ * Legacy dispatch code removed - the following tools were removed:
+ * - wc_get_customers
+ * - wc_create_customer
+ * - wc_update_customer  
+ * - wc_delete_customer
+ */
 
 class StifliFlexMcp_WC_Coupons {
     

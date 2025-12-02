@@ -21,7 +21,7 @@ class StifliFlexMcpModel {
         $WRITE = array(
             'wp_create_post','wp_update_post','wp_delete_post',
             'wp_create_comment','wp_update_comment','wp_delete_comment',
-            'wp_create_user','wp_update_user','wp_delete_user',
+            // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
             'wp_upload_image_from_url',
             // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
             'wp_update_option','wp_delete_option',
@@ -44,7 +44,7 @@ class StifliFlexMcpModel {
             'wc_create_product_review','wc_update_product_review','wc_delete_product_review',
             'wc_create_order','wc_update_order','wc_delete_order','wc_batch_update_orders',
             'wc_create_order_note','wc_delete_order_note',
-            'wc_create_customer','wc_update_customer','wc_delete_customer',
+            // Removed for WordPress.org compliance: wc_create_customer, wc_update_customer, wc_delete_customer
             'wc_create_coupon','wc_update_coupon','wc_delete_coupon',
             'wc_create_tax_rate','wc_update_tax_rate','wc_delete_tax_rate',
             'wc_create_shipping_zone','wc_update_shipping_zone','wc_delete_shipping_zone',
@@ -66,8 +66,7 @@ class StifliFlexMcpModel {
             // WordPress - Additional sensitive reads
             'wp_get_user_meta',     // user privacy data
             'wp_get_site_health',   // system information
-            // WooCommerce sensitive reads
-            'wc_get_customers',     // customer data privacy
+            // WooCommerce sensitive reads (wc_get_customers removed for WordPress.org compliance)
             'wc_get_orders',        // order data privacy
             'wc_get_order_notes',   // order notes may contain sensitive info
             'wc_get_system_status', // system information
@@ -323,42 +322,7 @@ class StifliFlexMcpModel {
                         'required' => array(),
                     ),
                 ),
-                'wp_create_user' => array(
-                    'name' => 'wp_create_user',
-                    'description' => 'Create a user. Requires user_login and user_email. Optional: user_pass (random if omitted), display_name, role.',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'user_login'   => array('type' => 'string'),
-                            'user_email'   => array('type' => 'string'),
-                            'user_pass'    => array('type' => 'string'),
-                            'display_name' => array('type' => 'string'),
-                            'role'         => array('type' => 'string'),
-                        ),
-                        'required' => array('user_login','user_email'),
-                    ),
-                ),
-                'wp_update_user' => array(
-                    'name' => 'wp_update_user',
-                    'description' => 'Update a user – pass ID plus a “fields” object (user_email, display_name, user_pass, role).',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'ID'     => array('type' => 'integer'),
-                            'fields' => array(
-                                'type' => 'object',
-                                'properties' => array(
-                                    'user_email'   => array('type' => 'string'),
-                                    'display_name' => array('type' => 'string'),
-                                    'user_pass'    => array('type' => 'string'),
-                                    'role'         => array('type' => 'string'),
-                                ),
-                                'additionalProperties' => true,
-                            ),
-                        ),
-                        'required' => array('ID'),
-                    ),
-                ),
+                // Removed for WordPress.org compliance: wp_create_user, wp_update_user
 
                 // Media
                 'wp_get_media' => array(
@@ -727,19 +691,7 @@ class StifliFlexMcpModel {
                     ),
                 ),
                 
-                // Users - delete
-                'wp_delete_user' => array(
-                    'name' => 'wp_delete_user',
-                    'description' => 'Delete a user by ID. Optional: reassign (user ID to reassign posts to).',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'ID'       => array('type' => 'integer'),
-                            'reassign' => array('type' => 'integer'),
-                        ),
-                        'required' => array('ID'),
-                    ),
-                ),
+                // Removed for WordPress.org compliance: wp_delete_user
                 
                 // User Meta
                 'wp_get_user_meta' => array(
@@ -1127,10 +1079,7 @@ class StifliFlexMcpModel {
             'wp_create_comment' => 'moderate_comments',
             'wp_update_comment' => 'moderate_comments',
             'wp_delete_comment' => 'moderate_comments',
-            // users
-            'wp_create_user' => 'create_users',
-            'wp_update_user' => 'promote_users',
-            'wp_delete_user' => 'delete_users',
+            // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
             // user meta
             'wp_get_user_meta' => 'list_users',
             'wp_update_user_meta' => 'edit_users',
@@ -1568,55 +1517,7 @@ class StifliFlexMcpModel {
                 }
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
                 break;
-            case 'wp_create_user':
-                $data = array(
-                    'user_login' => sanitize_user($args['user_login']),
-                    'user_email' => sanitize_email($args['user_email']),
-                    'user_pass' => $utils::getArrayValue($args, 'user_pass', wp_generate_password(12, true)),
-                    'display_name' => sanitize_text_field($utils::getArrayValue($args, 'display_name')),
-                    'role' => sanitize_key($utils::getArrayValue($args, 'role', get_option('default_role', 'subscriber'))),
-                );
-                $uid = wp_insert_user($data);
-                if (is_wp_error($uid)) {
-                    $r['error'] = array('code' => $uid->get_error_code(), 'message' => $uid->get_error_message());
-                } else {
-                    $addResultText($r, 'User created ID ' . $uid);
-                }
-                break;
-            case 'wp_update_user':
-                if (empty($args['ID'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'ID required');
-                    break;
-                }
-                $upd = array('ID' => intval($args['ID']));
-                if (!empty($args['fields']) && is_array($args['fields'])) {
-                    foreach ($args['fields'] as $k => $v) {
-                        $upd[$k] = ( 'role' === $k ) ? sanitize_key($v) : sanitize_text_field($v);
-                    }
-                }
-                $u = wp_update_user($upd);
-                if (is_wp_error($u)) {
-                    $r['error'] = array('code' => $u->get_error_code(), 'message' => $u->get_error_message());
-                } else {
-                    $addResultText($r, 'User #' . $u . ' updated');
-                }
-                break;
-            case 'wp_delete_user':
-                if (empty($args['ID'])) {
-                    $r['error'] = array('code' => -42602, 'message' => 'ID required');
-                    break;
-                }
-                if (!function_exists('wp_delete_user')) {
-                    require_once ABSPATH . 'wp-admin/includes/user.php';
-                }
-                $reassign = isset($args['reassign']) ? intval($args['reassign']) : null;
-                $deleted = wp_delete_user(intval($args['ID']), $reassign);
-                if ($deleted) {
-                    $addResultText($r, 'User #' . $args['ID'] . ' deleted');
-                } else {
-                    $r['error'] = array('code' => -42603, 'message' => 'User deletion failed');
-                }
-                break;
+            // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
                 
             // User Meta
             case 'wp_get_user_meta':

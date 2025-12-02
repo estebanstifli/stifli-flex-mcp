@@ -93,7 +93,7 @@ Opción B - Con GitHub CLI:
 ```powershell
 gh release create v1.0.0 dist/stifli-flex-mcp-1.0.0.zip `
   --title "1.0.0 - Initial Release" `
-  --notes "Initial release as StifLi Flex MCP (formerly Easy Visual MCP). Includes 129 tools for WordPress and WooCommerce management via MCP protocol."
+  --notes "Initial release as StifLi Flex MCP (formerly Easy Visual MCP). Includes 117 tools for WordPress and WooCommerce management via MCP protocol."
 ```
 
 ### 4. Enviar a WordPress.org

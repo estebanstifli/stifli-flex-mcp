@@ -4,21 +4,21 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, automation, rest-api
 Requires at least: 5.8
 Tested up to: 6.8
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Transform your WordPress site into an AI-powered Model Context Protocol (MCP) server with 124 tools for ChatGPT, Claude, and other AI agents.
+Transform your WordPress site into an AI-powered Model Context Protocol (MCP) server with 117 tools for ChatGPT, Claude, and other AI agents.
 
 == Description ==
 
-StifLi Flex MCP transforms your WordPress site into a powerful Model Context Protocol (MCP) server, exposing 124 tools that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site.
+StifLi Flex MCP transforms your WordPress site into a powerful Model Context Protocol (MCP) server, exposing 117 tools that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site.
 
 **Key Features:**
 
-* 58 WordPress tools (posts, pages, users, comments, media, taxonomies, options)
-* 65 WooCommerce tools (products, orders, customers, coupons, shipping, taxes, webhooks)
+* 55 WordPress tools (posts, pages, users, comments, media, taxonomies, options)
+* 61 WooCommerce tools (products, orders, coupons, shipping, taxes, webhooks)
 * JSON-RPC 2.0 compliant REST endpoint
 * Server-Sent Events (SSE) support for real-time streaming
 * Profile-based tool management (8 predefined profiles + custom profiles)
@@ -33,7 +33,7 @@ StifLi Flex MCP transforms your WordPress site into a powerful Model Context Pro
 * WooCommerce Read Only - Query WooCommerce data without modifications
 * WooCommerce Store Management - Full store management capabilities
 * Complete E-commerce - All WooCommerce tools including advanced settings
-* Complete Site - All 124 tools enabled
+* Complete Site - All 117 tools enabled
 * Safe Mode - Non-sensitive read-only access
 * Development/Debug - Diagnostic and configuration tools
 
@@ -47,19 +47,17 @@ StifLi Flex MCP transforms your WordPress site into a powerful Model Context Pro
 
 **Security Features:**
 
-* Optional token authentication
+* Required token authentication (auto-generated on activation)
 * User permission mapping
 * Tool-level capability checks
-* Public access mode for read-only operations
 * Profile-based tool restrictions
 
 == Installation ==
 
 1. Upload the `stifli-flex-mcp` folder to `/wp-content/plugins/` directory
 2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Go to StifLi Flex MCP → Settings to configure your endpoint
-4. (Optional) Generate a token for authenticated access
-5. Use the provided endpoint URLs to connect your AI client
+3. Go to StifLi Flex MCP → Settings to view your security token (generated automatically)
+4. Use the provided endpoint URLs to connect your AI client
 
 **Endpoints:**
 
@@ -74,7 +72,7 @@ Model Context Protocol (MCP) is a standard protocol for exposing tools and data 
 
 = How do I connect ChatGPT? =
 
-1. Generate a token in Settings
+1. Copy your token from Settings (generated automatically on activation)
 2. Create a custom connector in ChatGPT
 3. Use the SSE endpoint URL with your token
 4. ChatGPT will discover all available tools automatically
@@ -82,7 +80,7 @@ Model Context Protocol (MCP) is a standard protocol for exposing tools and data 
 = Is this safe for production sites? =
 
 Yes, when configured properly:
-* Use token authentication (disable public access)
+* Token authentication is required (generated automatically on activation)
 * Map tokens to users with minimal permissions
 * Use profile-based restrictions (e.g., "WordPress Read Only")
 * Review enabled tools in the Tools Management tab
@@ -104,7 +102,7 @@ Yes! You can:
 
 = Does this work with WooCommerce? =
 
-Yes! The plugin includes 65 WooCommerce-specific tools. WooCommerce tools will only function when WooCommerce is installed and active.
+Yes! The plugin includes 61 WooCommerce-specific tools. WooCommerce tools will only function when WooCommerce is installed and active.
 
 = How do I troubleshoot connection issues? =
 
@@ -116,7 +114,7 @@ Yes! The plugin includes 65 WooCommerce-specific tools. WooCommerce tools will o
 
 = Can I use this without WooCommerce? =
 
-Absolutely! The 58 WordPress tools work independently. WooCommerce tools are optional.
+Absolutely! The 55 WordPress tools work independently. WooCommerce tools are optional.
 
 == Screenshots ==
 
@@ -131,8 +129,8 @@ Absolutely! The 58 WordPress tools work independently. WooCommerce tools are opt
 
 = 1.0.0 =
 * Initial public release
-* 58 WordPress management tools (posts, pages, users, comments, media, taxonomies, options)
-* 65 WooCommerce tools (products, orders, customers, coupons, shipping, taxes, webhooks)
+* 55 WordPress management tools (posts, pages, comments, media, taxonomies, options)
+* 61 WooCommerce tools (products, orders, coupons, shipping, taxes, webhooks)
 * Profile-based tool management with 8 predefined profiles
 * Token-based authentication with WordPress user mapping
 * JSON-RPC 2.0 compliant REST API endpoint

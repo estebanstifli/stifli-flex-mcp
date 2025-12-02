@@ -1,7 +1,7 @@
 # Copilot Instructions for StifLi Flex MCP
 
 ## Project Overview
-**StifLi Flex MCP** is a WordPress plugin exposing WordPress/WooCommerce management via JSON-RPC 2.0, designed for LLM integration (ChatGPT, Claude, etc.). It implements the Model Context Protocol (MCP) specification with **124 tools** (58 WordPress + 65 WooCommerce + 1 Core), tool discovery (`tools/list`), execution (`tools/call`), and SSE streaming at `/wp-json/stifli-flex-mcp/v1/`.
+**StifLi Flex MCP** is a WordPress plugin exposing WordPress/WooCommerce management via JSON-RPC 2.0, designed for LLM integration (ChatGPT, Claude, etc.). It implements the Model Context Protocol (MCP) specification with **117 tools** (55 WordPress + 61 WooCommerce + 1 Core), tool discovery (`tools/list`), execution (`tools/call`), and SSE streaming at `/wp-json/stifli-flex-mcp/v1/`.
 
 **Critical Context**: This is a **pure PHP WordPress plugin** – no build step, no npm/webpack. Edit files → reload WordPress.
 
@@ -82,11 +82,11 @@ WooCommerce tools follow a **modular architecture**:
 ### Profile System (8 Predefined Profiles)
 Profiles control which tools are available to clients. Managed in admin UI Profiles tab:
 - **WordPress Read Only**: Safe read-only access (posts, pages, users, taxonomies, media)
-- **WordPress Full Management**: All 58 WordPress CRUD tools (removed 5 for WordPress.org compliance)
+- **WordPress Full Management**: All 55 WordPress CRUD tools (removed 8 for WordPress.org compliance)
 - **WooCommerce Read Only**: Query products, orders, customers without modifications
 - **WooCommerce Store Management**: Products, stock, orders, coupons (no advanced settings)
-- **Complete E-commerce**: All 65 WooCommerce tools (tax, shipping, webhooks)
-- **Complete Site**: All 129 tools enabled
+- **Complete E-commerce**: All 61 WooCommerce tools (tax, shipping, webhooks)
+- **Complete Site**: All 117 tools enabled
 - **Safe Mode**: Non-sensitive reads only (no options, settings, user_meta, system status)
 - **Development/Debug**: Diagnostic tools (site health, settings, system status)
 

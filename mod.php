@@ -79,10 +79,10 @@ class StifliFlexMcp {
 	}
 
 	public function canAccessMCP( $request ) {
-		// If no token configured, allow public access
+		// Token is required - deny access if not configured
 		if (empty($this->mcpToken)) {
-			stifli_flex_mcp_log('canAccessMCP: no token configured, allowing public access');
-			return true;
+			stifli_flex_mcp_log('canAccessMCP: no token configured, access denied (token is required)');
+			return false;
 		}
 		$isAdmin = current_user_can('manage_options');
 		$hdr = $request->get_header('Authorization');
@@ -1166,25 +1166,14 @@ class StifliFlexMcp {
 	}
 	
 	private function renderSettingsTab() {
-		// Generate default token if empty (required for write operations)
+		// Token is generated on plugin activation, just read it here
 		$token = get_option('stifli_flex_mcp_token', '');
-		if (empty($token)) {
-			$token = bin2hex(random_bytes(16));
-			update_option('stifli_flex_mcp_token', $token);
-		}
 		
 		$endpoint = rest_url($this->namespace . '/messages');
 		$users = get_users(array('orderby' => 'display_name', 'fields' => array('ID','display_name','user_login')));
 		
-		// Get first admin user as default
-		$admin_users = get_users(array('role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1));
-		$default_user_id = !empty($admin_users) ? intval($admin_users[0]->ID) : 0;
-		$token_user = intval(get_option('stifli_flex_mcp_token_user', $default_user_id));
-		
-		// Save default user if not set
-		if (get_option('stifli_flex_mcp_token_user', false) === false && $default_user_id > 0) {
-			update_option('stifli_flex_mcp_token_user', $default_user_id);
-		}
+		// Get token user (set during activation)
+		$token_user = intval(get_option('stifli_flex_mcp_token_user', 0));
 		?>
 		<form method="post" action="options.php">
 			<?php settings_fields('StifLi_Flex_MCP'); ?>
@@ -1193,10 +1182,10 @@ class StifliFlexMcp {
 				<tr valign="top">
 					<th scope="row"><?php echo esc_html__('Token (Bearer)', 'stifli-flex-mcp'); ?></th>
 					<td>
-						<input id="sflmcp_token_field" type="text" name="stifli_flex_mcp_token" value="<?php echo esc_attr($token); ?>" class="regular-text" />
-						<p class="description"><?php echo esc_html__('Token that will allow authenticated calls to the endpoint. Leave empty to allow public access (not recommended).', 'stifli-flex-mcp'); ?></p>
+						<input id="sflmcp_token_field" type="text" name="stifli_flex_mcp_token" value="<?php echo esc_attr($token); ?>" class="regular-text" readonly />
+						<p class="description"><?php echo esc_html__('Security token required for API access. This token was generated when the plugin was activated.', 'stifli-flex-mcp'); ?></p>
 						<p>
-							<button id="sflmcp_generate" class="button button-secondary" type="button"><?php echo esc_html__('Generate Token', 'stifli-flex-mcp'); ?></button>
+							<button id="sflmcp_generate" class="button button-secondary" type="button"><?php echo esc_html__('Regenerate Token', 'stifli-flex-mcp'); ?></button>
 							<span id="sflmcp_spinner" style="display:none;margin-left:10px;"><?php echo esc_html__('Processing...', 'stifli-flex-mcp'); ?></span>
 						</p>
 					</td>

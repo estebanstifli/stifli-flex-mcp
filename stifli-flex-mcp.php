@@ -2,8 +2,8 @@
 /*
 Plugin Name: StifLi Flex MCP
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
-Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 124 tools (58 WordPress, 65 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 1.0.2
+Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117 tools (55 WordPress, 61 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
+Version: 1.0.3
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -313,9 +313,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		
 		// Users
 		array('wp_get_users', 'List users with filters (role, search, limit, offset, paged).', 'WordPress - Users', 1),
-		array('wp_create_user', 'Create a user. Requires user_login, user_email, user_pass.', 'WordPress - Users', 1),
-		array('wp_update_user', 'Update a user by ID with fields object.', 'WordPress - Users', 1),
-		array('wp_delete_user', 'Delete a user by ID.', 'WordPress - Users', 1),
+		// Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
 		
 		// User Meta
 		array('wp_get_user_meta', 'Get user meta by user ID and optional meta key.', 'WordPress - User Meta', 1),
@@ -441,11 +439,8 @@ function stifli_flex_mcp_seed_initial_tools() {
 	$tools[] = array('wc_get_low_stock_products', 'Get products with low stock.', 'WooCommerce - Stock', 1);
 	$tools[] = array('wc_set_stock_status', 'Set product stock status.', 'WooCommerce - Stock', 1);
 	
-	// WooCommerce Customers
-	$tools[] = array('wc_get_customers', 'List WooCommerce customers.', 'WooCommerce - Customers', 1);
-	$tools[] = array('wc_create_customer', 'Create a new customer.', 'WooCommerce - Customers', 1);
-	$tools[] = array('wc_update_customer', 'Update a customer by ID.', 'WooCommerce - Customers', 1);
-	$tools[] = array('wc_delete_customer', 'Delete a customer by ID.', 'WooCommerce - Customers', 1);
+	// WooCommerce Customers - Removed for WordPress.org compliance
+	// wc_get_customers, wc_create_customer, wc_update_customer, wc_delete_customer removed
 	
 	// WooCommerce Coupons
 	$tools[] = array('wc_get_coupons', 'List WooCommerce coupons.', 'WooCommerce - Coupons', 1);
@@ -561,8 +556,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_pages', 'wp_create_page', 'wp_update_page', 'wp_delete_page',
 				// Comments (4)
 				'wp_get_comments', 'wp_create_comment', 'wp_update_comment', 'wp_delete_comment',
-				// Users (4)
-				'wp_get_users', 'wp_create_user', 'wp_update_user', 'wp_delete_user',
+				// Users (1) - Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
+				'wp_get_users',
 				// User Meta (3)
 				'wp_get_user_meta', 'wp_update_user_meta', 'wp_delete_user_meta',
 				// Plugins (1) - Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin
@@ -600,7 +595,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				'wc_get_products', 'wc_get_product_variations', 'wc_get_product_categories', 'wc_get_product_tags', 'wc_get_product_reviews',
 				'wc_get_orders', 'wc_get_order_notes',
-				'wc_get_customers',
+				// Removed for WordPress.org compliance: wc_get_customers
 				'wc_get_coupons',
 				'wc_get_low_stock_products',
 				'wc_get_refunds',
@@ -623,8 +618,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_orders', 'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
 				'wc_get_order_notes', 'wc_create_order_note', 'wc_delete_order_note',
 				'wc_create_refund', 'wc_get_refunds', 'wc_delete_refund',
-				// Customers & Coupons
-				'wc_get_customers', 'wc_create_customer', 'wc_update_customer', 'wc_delete_customer',
+				// Coupons (Customers removed for WordPress.org compliance)
 				'wc_get_coupons', 'wc_create_coupon', 'wc_update_coupon', 'wc_delete_coupon',
 				// Reports
 				'wc_get_sales_report', 'wc_get_top_sellers_report',
@@ -645,7 +639,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_orders', 'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
 				'wc_get_order_notes', 'wc_create_order_note', 'wc_delete_order_note',
 				'wc_create_refund', 'wc_get_refunds', 'wc_delete_refund',
-				'wc_get_customers', 'wc_create_customer', 'wc_update_customer', 'wc_delete_customer',
+				// Customers removed for WordPress.org compliance
 				'wc_get_coupons', 'wc_create_coupon', 'wc_update_coupon', 'wc_delete_coupon',
 				'wc_get_sales_report', 'wc_get_top_sellers_report',
 				'wc_get_tax_classes', 'wc_get_tax_rates', 'wc_create_tax_rate', 'wc_update_tax_rate', 'wc_delete_tax_rate',
@@ -658,7 +652,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 		),
 		array(
 			'name' => 'Complete Site',
-			'description' => 'All available tools (WordPress + WooCommerce = 124 tools)',
+			'description' => 'All available tools (WordPress + WooCommerce = 117 tools)',
 			'tools' => 'ALL', // Special marker to include all tools
 		),
 		array(
@@ -685,7 +679,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_product_categories', 'wc_get_product_tags',
 				'wc_get_product_reviews',
 				'wc_get_orders', 'wc_get_order_notes',
-				'wc_get_customers',
+				// Removed for WordPress.org compliance: wc_get_customers
 				'wc_get_coupons',
 				'wc_get_low_stock_products',
 				'wc_get_refunds',
@@ -781,6 +775,21 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
+	
+	// Generate security token on first activation (required for API access)
+	$token = get_option('stifli_flex_mcp_token', '');
+	if (empty($token)) {
+		$token = bin2hex(random_bytes(16));
+		update_option('stifli_flex_mcp_token', $token);
+	}
+	
+	// Assign token to first admin user if not set
+	if (get_option('stifli_flex_mcp_token_user', false) === false) {
+		$admin_users = get_users(array('role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1));
+		if (!empty($admin_users)) {
+			update_option('stifli_flex_mcp_token_user', intval($admin_users[0]->ID));
+		}
+	}
 }
 
 function stifli_flex_mcp_deactivate() {
