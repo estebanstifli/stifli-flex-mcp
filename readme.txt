@@ -3,8 +3,8 @@ Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, automation, rest-api
 Requires at least: 5.8
-Tested up to: 6.8
-Stable tag: 1.0.3
+Tested up to: 6.9
+Stable tag: 1.0.4
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -25,6 +25,10 @@ StifLi Flex MCP transforms your WordPress site into a powerful Model Context Pro
 * WordPress Application Passwords authentication (recommended by WordPress.org)
 * Compatible with ChatGPT Custom Connectors, Claude Desktop, LibreChat
 * Granular permissions control
+
+**Demo & Installation Tutorial:**
+
+https://youtu.be/KHr1zt2R8Ew
 
 **Predefined Profiles:**
 
@@ -124,10 +128,16 @@ Absolutely! The 55 WordPress tools work independently. WooCommerce tools are opt
 2. Profiles tab - Manage tool configurations
 3. WordPress Tools tab - Enable/disable WordPress tools
 4. WooCommerce Tools tab - Manage WooCommerce tools
-5. ChatGPT integration example
-6. Profile export/import functionality
+
 
 == Changelog ==
+= 1.0.4 =
+* New: Debug logging system with dedicated log file (wp-content/uploads/sflmcp-logs/)
+* New: Logs tab in admin UI to enable/disable logging and view debug logs
+* New: Clear logs and refresh functionality from admin panel
+* New: "WordPress Full Management" profile now active by default on fresh installs
+* Security: Log directory protected with .htaccess and index.php
+
 
 = 1.0.3 =
 * Security: Replaced custom token authentication with WordPress Application Passwords

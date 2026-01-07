@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117 tools (55 WordPress, 61 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 1.0.3
+Version: 1.0.4
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -24,31 +24,120 @@ if ( ! defined( 'SFLMCP_DEBUG' ) ) {
 // Debug logging function
 if (!function_exists('stifli_flex_mcp_log')) {
 	function stifli_flex_mcp_log($message, array $context = []) {
-        if (!defined('SFLMCP_DEBUG') || SFLMCP_DEBUG !== true) {
-            return;
-        }
+		// Check if logging is enabled via option (admin setting) or constant
+		$logging_enabled = get_option('sflmcp_logging_enabled', false);
+		if (!$logging_enabled && (!defined('SFLMCP_DEBUG') || SFLMCP_DEBUG !== true)) {
+			return;
+		}
 
-        if (!is_string($message)) {
-            $encoded = wp_json_encode($message);
-            if ($encoded !== false) {
-                $message = $encoded;
-            } else {
-                // Fallback to safe string/serialization without using print_r
-                if (is_scalar($message)) {
-                    $message = (string) $message;
-                } else {
-                    $message = maybe_serialize($message);
-                }
-            }
-        }
+		if (!is_string($message)) {
+			$encoded = wp_json_encode($message);
+			if ($encoded !== false) {
+				$message = $encoded;
+			} else {
+				// Fallback to safe string/serialization without using print_r
+				if (is_scalar($message)) {
+					$message = (string) $message;
+				} else {
+					$message = maybe_serialize($message);
+				}
+			}
+		}
 
-        if (!empty($context)) {
-            $encoded_context = wp_json_encode($context);
-            if ($encoded_context !== false) {
-                $message .= ' ' . $encoded_context;
-            }
-        }
-		error_log('[SFLMCP] ' . $message); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- gated by SFLMCP_DEBUG for opt-in debugging only
+		if (!empty($context)) {
+			$encoded_context = wp_json_encode($context);
+			if ($encoded_context !== false) {
+				$message .= ' ' . $encoded_context;
+			}
+		}
+
+		// Write to plugin's own log file
+		$log_file = stifli_flex_mcp_get_log_file_path();
+		$timestamp = gmdate('Y-m-d H:i:s');
+		$log_entry = sprintf("[%s] %s\n", $timestamp, $message);
+		
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- logging to plugin-managed file
+		file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
+	}
+}
+
+// Get log file path
+if (!function_exists('stifli_flex_mcp_get_log_file_path')) {
+	function stifli_flex_mcp_get_log_file_path() {
+		$upload_dir = wp_upload_dir();
+		$log_dir = $upload_dir['basedir'] . '/sflmcp-logs';
+		
+		// Create log directory if it doesn't exist
+		if (!file_exists($log_dir)) {
+			wp_mkdir_p($log_dir);
+			// Add .htaccess to protect log files
+			$htaccess = $log_dir . '/.htaccess';
+			if (!file_exists($htaccess)) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+				file_put_contents($htaccess, "Order deny,allow\nDeny from all");
+			}
+			// Add index.php for extra protection
+			$index = $log_dir . '/index.php';
+			if (!file_exists($index)) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+				file_put_contents($index, '<?php // Silence is golden.');
+			}
+		}
+		
+		return $log_dir . '/sflmcp-debug.log';
+	}
+}
+
+// Get log file contents
+if (!function_exists('stifli_flex_mcp_get_log_contents')) {
+	function stifli_flex_mcp_get_log_contents($max_lines = 500) {
+		$log_file = stifli_flex_mcp_get_log_file_path();
+		
+		if (!file_exists($log_file)) {
+			return '';
+		}
+		
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$content = file_get_contents($log_file);
+		if ($content === false) {
+			return '';
+		}
+		
+		// Limit to last N lines
+		$lines = explode("\n", $content);
+		if (count($lines) > $max_lines) {
+			$lines = array_slice($lines, -$max_lines);
+		}
+		
+		return implode("\n", $lines);
+	}
+}
+
+// Clear log file
+if (!function_exists('stifli_flex_mcp_clear_log')) {
+	function stifli_flex_mcp_clear_log() {
+		$log_file = stifli_flex_mcp_get_log_file_path();
+		
+		if (file_exists($log_file)) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			file_put_contents($log_file, '');
+			return true;
+		}
+		
+		return false;
+	}
+}
+
+// Get log file size
+if (!function_exists('stifli_flex_mcp_get_log_size')) {
+	function stifli_flex_mcp_get_log_size() {
+		$log_file = stifli_flex_mcp_get_log_file_path();
+		
+		if (!file_exists($log_file)) {
+			return 0;
+		}
+		
+		return filesize($log_file);
 	}
 }
 
@@ -715,13 +804,16 @@ function stifli_flex_mcp_seed_system_profiles() {
 	
 	// Insert profiles
 	foreach ($system_profiles as $profile) {
+		// Set "WordPress Full Management" as the default active profile
+		$is_active = ($profile['name'] === 'WordPress Full Management') ? 1 : 0;
+		
 		$wpdb->insert(
 			$profiles_table,
 			array(
 				'profile_name' => $profile['name'],
 				'profile_description' => $profile['description'],
 				'is_system' => 1,
-				'is_active' => 0,
+				'is_active' => $is_active,
 				'created_at' => $now,
 				'updated_at' => $now,
 			),

@@ -1,0 +1,69 @@
+/**
+ * StifLi Flex MCP - Logs Tab Styles
+ * 
+ * @package StifLi_Flex_MCP
+ */
+
+/* Info box */
+.sflmcp-logs-info-box {
+	background: #f0f9ff;
+	border: 1px solid #0073aa;
+	padding: 20px;
+	margin: 20px 0;
+	border-radius: 4px;
+}
+
+.sflmcp-logs-info-box h3 {
+	margin-top: 0;
+	color: #0073aa;
+}
+
+/* Warning text */
+.sflmcp-warning-text {
+	color: #e65100;
+}
+
+/* Log file path display */
+.sflmcp-log-path {
+	display: block;
+	background: #f0f0f0;
+	padding: 8px;
+	margin: 5px 0;
+	font-size: 12px;
+	word-break: break-all;
+}
+
+/* Clear logs button */
+.sflmcp-btn-danger {
+	color: #a00;
+}
+
+/* Log viewer textarea */
+.sflmcp-log-viewer {
+	width: 100%;
+	height: 400px;
+	font-family: monospace !important;
+	font-size: 12px;
+	background: #1e1e1e !important;
+	color: #d4d4d4 !important;
+	padding: 10px;
+	border-radius: 4px;
+	white-space: pre-wrap;
+	overflow-y: scroll;
+	resize: vertical;
+	box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+	border: 1px solid #444 !important;
+}
+
+.sflmcp-log-viewer:focus {
+	outline: none;
+	border-color: #0073aa !important;
+	box-shadow: inset 0 0 5px rgba(0,0,0,0.5), 0 0 2px #0073aa;
+}
+	resize: vertical;
+}
+
+/* Small text helper */
+.sflmcp-small-text {
+	font-weight: normal;
+}

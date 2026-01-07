@@ -36,6 +36,10 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_export_profile', array($this, 'ajax_export_profile'));
 			add_action('wp_ajax_sflmcp_import_profile', array($this, 'ajax_import_profile'));
 			add_action('wp_ajax_sflmcp_restore_system_profiles', array($this, 'ajax_restore_system_profiles'));
+			// AJAX handlers for logs management
+			add_action('wp_ajax_sflmcp_toggle_logging', array($this, 'ajax_toggle_logging'));
+			add_action('wp_ajax_sflmcp_clear_logs', array($this, 'ajax_clear_logs'));
+			add_action('wp_ajax_sflmcp_refresh_logs', array($this, 'ajax_refresh_logs'));
 		}
 	}
 
@@ -996,6 +1000,38 @@ class StifliFlexMcp {
 				'includedTools' => __('Included tools:', 'stifli-flex-mcp'),
 			),
 		));
+
+		// Enqueue Logs tab CSS
+		wp_enqueue_style(
+			'sflmcp-admin-logs',
+			plugin_dir_url(__FILE__) . 'assets/admin-logs.css',
+			array(),
+			'1.0.4'
+		);
+
+		// Enqueue Logs tab JavaScript
+		wp_enqueue_script(
+			'sflmcp-admin-logs',
+			plugin_dir_url(__FILE__) . 'assets/admin-logs.js',
+			array('jquery'),
+			'1.0.4',
+			true
+		);
+
+		// Localize script with data
+		wp_localize_script('sflmcp-admin-logs', 'sflmcpLogs', array(
+			'ajaxUrl' => admin_url('admin-ajax.php'),
+			'nonce' => wp_create_nonce('sflmcp_logs'),
+			'i18n' => array(
+				'loggingEnabled' => __('Logging enabled', 'stifli-flex-mcp'),
+				'loggingDisabled' => __('Logging disabled', 'stifli-flex-mcp'),
+				'errorSaving' => __('Error saving setting', 'stifli-flex-mcp'),
+				'loading' => __('Loading...', 'stifli-flex-mcp'),
+				'confirmClear' => __('Are you sure you want to clear all logs?', 'stifli-flex-mcp'),
+				'logsCleared' => __('Logs cleared successfully', 'stifli-flex-mcp'),
+				'errorClearing' => __('Error clearing logs', 'stifli-flex-mcp'),
+			),
+		));
 	}
 
 	/**
@@ -1026,6 +1062,9 @@ class StifliFlexMcp {
 				<a href="?page=stifli-flex-mcp&tab=wc_tools" class="nav-tab <?php echo $active_tab === 'wc_tools' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('WooCommerce Tools', 'stifli-flex-mcp'); ?>
 				</a>
+				<a href="?page=stifli-flex-mcp&tab=logs" class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>">
+					<?php echo esc_html__('Logs', 'stifli-flex-mcp'); ?>
+				</a>
 			</h2>
 			
 			<?php
@@ -1037,6 +1076,8 @@ class StifliFlexMcp {
 				$this->renderToolsTab();
 			} elseif ($active_tab === 'wc_tools') {
 				$this->renderWCToolsTab();
+			} elseif ($active_tab === 'logs') {
+				$this->renderLogsTab();
 			}
 			?>
 		</div>
@@ -1687,6 +1728,129 @@ class StifliFlexMcp {
 		
 		
 		<?php
+	}
+
+	/**
+	 * Render the Logs tab
+	 */
+	private function renderLogsTab() {
+		$logging_enabled = get_option('sflmcp_logging_enabled', false);
+		$log_contents = stifli_flex_mcp_get_log_contents(500);
+		$log_size = stifli_flex_mcp_get_log_size();
+		$log_file_path = stifli_flex_mcp_get_log_file_path();
+		
+		// Format file size
+		if ($log_size >= 1048576) {
+			$log_size_formatted = number_format($log_size / 1048576, 2) . ' MB';
+		} elseif ($log_size >= 1024) {
+			$log_size_formatted = number_format($log_size / 1024, 2) . ' KB';
+		} else {
+			$log_size_formatted = $log_size . ' bytes';
+		}
+		
+		?>
+		<h2><?php echo esc_html__('📋 Debug Logging', 'stifli-flex-mcp'); ?></h2>
+		
+		<div class="sflmcp-logs-info-box">
+			<h3><?php echo esc_html__('About Logging', 'stifli-flex-mcp'); ?></h3>
+			<p><?php echo esc_html__('When enabled, the plugin will log debug information to help troubleshoot issues. Logs include API requests, authentication events, and tool executions.', 'stifli-flex-mcp'); ?></p>
+			<p><strong><?php echo esc_html__('Note:', 'stifli-flex-mcp'); ?></strong> <?php echo esc_html__('Logging can also be enabled by defining SFLMCP_DEBUG as true in wp-config.php.', 'stifli-flex-mcp'); ?></p>
+		</div>
+		
+		<table class="form-table">
+			<tr valign="top">
+				<th scope="row"><?php echo esc_html__('Enable Logging', 'stifli-flex-mcp'); ?></th>
+				<td>
+					<label>
+						<input type="checkbox" id="sflmcp_logging_enabled" <?php checked($logging_enabled, true); ?> />
+						<?php echo esc_html__('Enable debug logging', 'stifli-flex-mcp'); ?>
+					</label>
+					<p class="description"><?php echo esc_html__('When enabled, debug information will be written to the log file.', 'stifli-flex-mcp'); ?></p>
+					<?php if (defined('SFLMCP_DEBUG') && SFLMCP_DEBUG === true): ?>
+						<p class="sflmcp-warning-text"><strong><?php echo esc_html__('⚠️ SFLMCP_DEBUG is defined as true in wp-config.php. Logging is always enabled.', 'stifli-flex-mcp'); ?></strong></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr valign="top">
+				<th scope="row"><?php echo esc_html__('Log File', 'stifli-flex-mcp'); ?></th>
+				<td>
+					<code class="sflmcp-log-path"><?php echo esc_html($log_file_path); ?></code>
+					<p class="description"><?php echo sprintf(
+						/* translators: %s: file size */
+						esc_html__('Current file size: %s', 'stifli-flex-mcp'),
+						esc_html($log_size_formatted)
+					); ?></p>
+				</td>
+			</tr>
+		</table>
+		
+		<p>
+			<button type="button" class="button button-secondary" id="sflmcp_refresh_logs">
+				<?php echo esc_html__('🔄 Refresh Logs', 'stifli-flex-mcp'); ?>
+			</button>
+			<button type="button" class="button button-secondary sflmcp-btn-danger" id="sflmcp_clear_logs">
+				<?php echo esc_html__('🗑️ Clear Logs', 'stifli-flex-mcp'); ?>
+			</button>
+		</p>
+		
+		<h3><?php echo esc_html__('Log Contents', 'stifli-flex-mcp'); ?> <small class="sflmcp-small-text">(<?php echo esc_html__('last 500 lines', 'stifli-flex-mcp'); ?>)</small></h3>
+		
+		<textarea id="sflmcp_log_viewer" class="sflmcp-log-viewer" readonly><?php echo esc_textarea($log_contents); ?></textarea>
+		<?php
+	}
+
+	/**
+	 * AJAX handler to toggle logging
+	 */
+	public function ajax_toggle_logging() {
+		check_ajax_referer('sflmcp_logs', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$enabled_raw = isset($_POST['enabled']) ? sanitize_text_field( wp_unslash( $_POST['enabled'] ) ) : '0';
+		$enabled = (bool) intval($enabled_raw);
+		update_option('sflmcp_logging_enabled', $enabled);
+		
+		wp_send_json_success(array('enabled' => $enabled));
+	}
+
+	/**
+	 * AJAX handler to clear logs
+	 */
+	public function ajax_clear_logs() {
+		check_ajax_referer('sflmcp_logs', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$result = stifli_flex_mcp_clear_log();
+		
+		if ($result) {
+			wp_send_json_success();
+		} else {
+			wp_send_json_error(array('message' => __('Could not clear log file', 'stifli-flex-mcp')));
+		}
+	}
+
+	/**
+	 * AJAX handler to refresh logs
+	 */
+	public function ajax_refresh_logs() {
+		check_ajax_referer('sflmcp_logs', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$contents = stifli_flex_mcp_get_log_contents(500);
+		
+		wp_send_json_success(array('contents' => $contents));
 	}
 	/* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 }
