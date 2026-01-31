@@ -1,0 +1,138 @@
+﻿{
+    "summary":  {
+                    "failed":  1,
+                    "passRate":  96.8,
+                    "total":  31,
+                    "passed":  30
+                },
+    "endpoint":  "http://pruebaswp.local/wp-json/stifli-flex-mcp/v1/messages",
+    "timestamp":  "2026-01-31 18:14:15",
+    "failed":  [
+                   {
+                       "Error":  "Failed to create refund: Cantidad de reembolso no válida.",
+                       "Tool":  "wc_create_refund"
+                   }
+               ],
+    "passed":  [
+                   {
+                       "Tool":  "wc_create_product",
+                       "Description":  "Create variable product"
+                   },
+                   {
+                       "Tool":  "wc_get_product_variations",
+                       "Description":  "Get variations (empty)"
+                   },
+                   {
+                       "Tool":  "wc_create_product_variation",
+                       "Description":  "Create variation"
+                   },
+                   {
+                       "Tool":  "wc_update_product_variation",
+                       "Description":  "Update variation"
+                   },
+                   {
+                       "Tool":  "wc_get_product_variations",
+                       "Description":  "Get variations (with data)"
+                   },
+                   {
+                       "Tool":  "wc_delete_product_variation",
+                       "Description":  "Delete variation"
+                   },
+                   {
+                       "Tool":  "wc_delete_product",
+                       "Description":  "Delete variable product"
+                   },
+                   {
+                       "Tool":  "wc_get_low_stock_products",
+                       "Description":  "Get low stock products"
+                   },
+                   {
+                       "Tool":  "wc_create_order",
+                       "Description":  "Create order for notes test"
+                   },
+                   {
+                       "Tool":  "wc_get_order_notes",
+                       "Description":  "Get order notes"
+                   },
+                   {
+                       "Tool":  "wc_create_order_note",
+                       "Description":  "Create order note"
+                   },
+                   {
+                       "Tool":  "wc_create_order_note",
+                       "Description":  "Create customer note"
+                   },
+                   {
+                       "Tool":  "wc_delete_order_note",
+                       "Description":  "Delete order note"
+                   },
+                   {
+                       "Tool":  "wc_delete_order",
+                       "Description":  "Delete order"
+                   },
+                   {
+                       "Tool":  "wc_create_coupon",
+                       "Description":  "Create coupon"
+                   },
+                   {
+                       "Tool":  "wc_update_coupon",
+                       "Description":  "Update coupon"
+                   },
+                   {
+                       "Tool":  "wc_delete_coupon",
+                       "Description":  "Delete coupon"
+                   },
+                   {
+                       "Tool":  "wc_create_tax_rate",
+                       "Description":  "Create tax rate"
+                   },
+                   {
+                       "Tool":  "wc_update_tax_rate",
+                       "Description":  "Update tax rate"
+                   },
+                   {
+                       "Tool":  "wc_delete_tax_rate",
+                       "Description":  "Delete tax rate"
+                   },
+                   {
+                       "Tool":  "wc_create_shipping_zone",
+                       "Description":  "Create shipping zone"
+                   },
+                   {
+                       "Tool":  "wc_update_shipping_zone",
+                       "Description":  "Update shipping zone"
+                   },
+                   {
+                       "Tool":  "wc_get_shipping_zone_methods",
+                       "Description":  "Get zone methods"
+                   },
+                   {
+                       "Tool":  "wc_delete_shipping_zone",
+                       "Description":  "Delete shipping zone"
+                   },
+                   {
+                       "Tool":  "wc_create_webhook",
+                       "Description":  "Create webhook"
+                   },
+                   {
+                       "Tool":  "wc_update_webhook",
+                       "Description":  "Update webhook"
+                   },
+                   {
+                       "Tool":  "wc_delete_webhook",
+                       "Description":  "Delete webhook"
+                   },
+                   {
+                       "Tool":  "wc_run_system_status_tool",
+                       "Description":  "Run clear_transients"
+                   },
+                   {
+                       "Tool":  "wc_get_settings",
+                       "Description":  "Get general settings"
+                   },
+                   {
+                       "Tool":  "wc_get_settings",
+                       "Description":  "Get products settings"
+                   }
+               ]
+}

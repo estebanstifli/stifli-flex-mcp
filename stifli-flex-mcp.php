@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117 tools (55 WordPress, 61 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 1.0.4
+Version: 1.0.5
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // define debug constant
 if ( ! defined( 'SFLMCP_DEBUG' ) ) {
-	define( 'SFLMCP_DEBUG', false );
+	define( 'SFLMCP_DEBUG', true );
 }
 
 // Debug logging function
@@ -838,6 +838,431 @@ function stifli_flex_mcp_seed_system_profiles() {
 			);
 		}
 	}
+	
+	// Apply the default active profile (WordPress Full Management)
+	// This disables tools not in the profile (like WooCommerce tools)
+	stifli_flex_mcp_apply_active_profile();
+}
+
+/**
+ * Apply the currently active profile to the tools table.
+ * Disables all tools, then enables only those in the active profile.
+ */
+function stifli_flex_mcp_apply_active_profile() {
+	global $wpdb;
+	
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	
+	// Get active profile ID
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- profile lookup for activation.
+	$active_profile_id = $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT id FROM {$profiles_table} WHERE is_active = %d LIMIT 1",
+			1
+		)
+	);
+	
+	if (!$active_profile_id) {
+		return; // No active profile, leave all tools enabled
+	}
+	
+	// Get tools in the active profile
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- profile tools lookup.
+	$profile_tools = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT tool_name FROM {$profile_tools_table} WHERE profile_id = %d",
+			$active_profile_id
+		)
+	);
+	
+	if (empty($profile_tools)) {
+		return; // No tools in profile, leave all enabled
+	}
+	
+	// Disable all tools first
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk update for profile application.
+	$wpdb->query(
+		$wpdb->prepare("UPDATE {$tools_table} SET enabled = %d", 0)
+	);
+	
+	// Enable only tools in the active profile
+	$placeholders = implode(',', array_fill(0, count($profile_tools), '%s'));
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk update for profile application.
+	$wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$tools_table} SET enabled = 1 WHERE tool_name IN ({$placeholders})",
+			...$profile_tools
+		)
+	);
+}
+
+if (!function_exists('stifli_flex_mcp_maybe_create_custom_tools_table')) {
+	function stifli_flex_mcp_maybe_create_custom_tools_table() {
+		global $wpdb;
+		$table_name = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools');
+		$charset_collate = $wpdb->get_charset_collate();
+
+		if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+			$sql = "CREATE TABLE $table_name (
+				id bigint(20) NOT NULL AUTO_INCREMENT,
+				tool_name varchar(100) NOT NULL,
+				tool_description text NOT NULL,
+				method varchar(10) DEFAULT 'POST' NOT NULL,
+				endpoint text NOT NULL,
+				headers text,
+				arguments text,
+				enabled tinyint(1) DEFAULT 1 NOT NULL,
+				created_at datetime DEFAULT CURRENT_TIMESTAMP,
+				PRIMARY KEY  (id),
+				UNIQUE KEY tool_name (tool_name)
+			) $charset_collate;";
+
+			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+			dbDelta($sql);
+		}
+	}
+}
+
+function stifli_flex_mcp_seed_custom_tools_examples() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'sflmcp_custom_tools';
+	
+	// Check if already seeded (any row exists)
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-managed table, table name is safe.
+	$count = $wpdb->get_var( "SELECT COUNT(*) FROM `$table`" );
+	if ( $count > 0 ) {
+		return;
+	}
+	
+	$site_url = site_url();
+	
+	$examples = array(
+		// ============================================================
+		// TYPE 1: External REST APIs
+		// ============================================================
+		
+		// External Example: Public API (Weather)
+		array(
+			'tool_name' => 'custom_get_weather',
+			'tool_description' => 'Get current weather for a location using wttr.in public API. Returns temperature, conditions, etc.',
+			'method' => 'GET',
+			'endpoint' => 'https://wttr.in/{location}?format=j1',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'location' => array('type' => 'string', 'description' => 'City name (e.g. London, Madrid, New York)')
+				),
+				'required' => array('location')
+			)),
+			'enabled' => 0
+		),
+		
+		// External Example: Public IP/Geolocation
+		array(
+			'tool_name' => 'custom_get_ip_info',
+			'tool_description' => 'Get geolocation info for an IP address or the server IP if not specified.',
+			'method' => 'GET',
+			'endpoint' => 'https://ipapi.co/{ip}/json/',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'ip' => array('type' => 'string', 'description' => 'IP address to lookup (leave empty for server IP)')
+				),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+
+		// ============================================================
+		// TYPE 2: Webhooks / Automation Platforms
+		// ============================================================
+		
+		// Webhook Example: Zapier/n8n/Make
+		array(
+			'tool_name' => 'custom_trigger_workflow',
+			'tool_description' => 'Trigger an external automation workflow (Zapier, n8n, Make) via webhook POST.',
+			'method' => 'POST',
+			'endpoint' => 'https://hooks.zapier.com/hooks/catch/YOUR_ID/YOUR_HOOK/',
+			'headers' => "Content-Type: application/json",
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'event_type' => array('type' => 'string', 'description' => 'Type of event (e.g. new_lead, order_placed)'),
+					'data' => array('type' => 'string', 'description' => 'JSON string with event data')
+				),
+				'required' => array('event_type')
+			)),
+			'enabled' => 0
+		),
+
+		// ============================================================
+		// TYPE 3: Internal WordPress REST API
+		// ============================================================
+		
+		// Internal: Advanced Post Search with filters
+		array(
+			'tool_name' => 'custom_wp_search',
+			'tool_description' => 'Search posts using WordPress REST API with advanced filters (status, category, author).',
+			'method' => 'GET',
+			'endpoint' => $site_url . '/wp-json/wp/v2/posts?search={term}&per_page={limit}&status={status}',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'term' => array('type' => 'string', 'description' => 'Search keyword'),
+					'limit' => array('type' => 'integer', 'description' => 'Number of results (default 10)'),
+					'status' => array('type' => 'string', 'description' => 'Post status: publish, draft, pending')
+				),
+				'required' => array('term')
+			)),
+			'enabled' => 0
+		),
+		
+		// Internal: Get Page with SEO data (works with Yoast, RankMath, etc.)
+		array(
+			'tool_name' => 'custom_get_page_seo',
+			'tool_description' => 'Get page details with SEO metadata. If Yoast/RankMath installed, includes yoast_head or rank_math fields.',
+			'method' => 'GET',
+			'endpoint' => $site_url . '/wp-json/wp/v2/pages/{id}',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'id' => array('type' => 'integer', 'description' => 'Page ID')
+				),
+				'required' => array('id')
+			)),
+			'enabled' => 0
+		),
+		
+		// Internal: Get Site Info
+		array(
+			'tool_name' => 'custom_get_site_info',
+			'tool_description' => 'Get WordPress site information (name, description, URL, timezone, etc.).',
+			'method' => 'GET',
+			'endpoint' => $site_url . '/wp-json/',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// ============================================================
+		// TYPE 4: WooCommerce REST API (if installed)
+		// ============================================================
+		
+		// WooCommerce: Get Product by SKU
+		array(
+			'tool_name' => 'custom_wc_product_by_sku',
+			'tool_description' => 'Search WooCommerce product by SKU code. Requires WooCommerce and REST API keys.',
+			'method' => 'GET',
+			'endpoint' => $site_url . '/wp-json/wc/v3/products?sku={sku}',
+			'headers' => "Authorization: Basic YOUR_BASE64_CONSUMER_KEY_SECRET",
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'sku' => array('type' => 'string', 'description' => 'Product SKU code')
+				),
+				'required' => array('sku')
+			)),
+			'enabled' => 0
+		),
+		
+		// ============================================================
+		// TYPE 5: Plugin-Specific REST APIs
+		// ============================================================
+		
+		// Contact Form 7: Get Forms List
+		array(
+			'tool_name' => 'custom_cf7_forms',
+			'tool_description' => 'List all Contact Form 7 forms. Requires CF7 plugin with REST API enabled.',
+			'method' => 'GET',
+			'endpoint' => $site_url . '/wp-json/contact-form-7/v1/contact-forms',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// Jetpack: Get Site Stats (if Jetpack connected)
+		array(
+			'tool_name' => 'custom_jetpack_stats',
+			'tool_description' => 'Get Jetpack site statistics summary. Requires Jetpack plugin connected.',
+			'method' => 'GET',
+			'endpoint' => $site_url . '/wp-json/jetpack/v4/module/stats',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+
+		// ============================================================
+		// TYPE 6: WordPress Actions (Internal PHP Hooks)
+		// Use method = "ACTION" to execute do_action()
+		// These call REAL WordPress/plugin actions - no prefix needed
+		// ============================================================
+		
+		// WordPress Core: Flush Rewrite Rules
+		array(
+			'tool_name' => 'custom_flush_rewrites',
+			'tool_description' => 'Flush WordPress rewrite rules (permalinks). Useful after changing permalink settings or adding custom post types.',
+			'method' => 'ACTION',
+			'endpoint' => 'flush_rewrite_rules',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// WordPress Core: Trigger Cron
+		array(
+			'tool_name' => 'custom_run_cron',
+			'tool_description' => 'Manually trigger WordPress scheduled tasks (wp-cron). Runs all pending scheduled events.',
+			'method' => 'ACTION',
+			'endpoint' => 'wp_cron',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// WooCommerce: Cancel Unpaid Orders
+		array(
+			'tool_name' => 'custom_wc_cancel_unpaid',
+			'tool_description' => 'Trigger WooCommerce to cancel unpaid orders that have exceeded the hold time.',
+			'method' => 'ACTION',
+			'endpoint' => 'woocommerce_cancel_unpaid_orders',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// WooCommerce: Cleanup Sessions
+		array(
+			'tool_name' => 'custom_wc_cleanup_sessions',
+			'tool_description' => 'Trigger WooCommerce session cleanup. Removes expired customer sessions from database.',
+			'method' => 'ACTION',
+			'endpoint' => 'woocommerce_cleanup_sessions',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// Yoast SEO: Reindex
+		array(
+			'tool_name' => 'custom_yoast_reindex',
+			'tool_description' => 'Trigger Yoast SEO indexable rebuild. Regenerates SEO data for all posts/pages.',
+			'method' => 'ACTION',
+			'endpoint' => 'wpseo_reindex',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// WP Super Cache: Clear Cache
+		array(
+			'tool_name' => 'custom_wpsc_clear',
+			'tool_description' => 'Clear WP Super Cache. Only works if WP Super Cache plugin is active.',
+			'method' => 'ACTION',
+			'endpoint' => 'wp_cache_clear_cache',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// W3 Total Cache: Flush All
+		array(
+			'tool_name' => 'custom_w3tc_flush',
+			'tool_description' => 'Flush all W3 Total Cache caches. Only works if W3 Total Cache plugin is active.',
+			'method' => 'ACTION',
+			'endpoint' => 'w3tc_flush_all',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(),
+				'required' => array()
+			)),
+			'enabled' => 0
+		),
+		
+		// WordPress: Update Option (via custom wrapper)
+		array(
+			'tool_name' => 'custom_maintenance_mode',
+			'tool_description' => 'Toggle WordPress maintenance mode on/off using the sflmcp_maintenance_mode action.',
+			'method' => 'ACTION',
+			'endpoint' => 'sflmcp_maintenance_mode',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'enable' => array('type' => 'boolean', 'description' => 'true to enable maintenance mode, false to disable')
+				),
+				'required' => array('enable')
+			)),
+			'enabled' => 0
+		),
+		
+		// Custom: Send Admin Notification
+		array(
+			'tool_name' => 'custom_admin_notify',
+			'tool_description' => 'Send an email notification to the site admin with a custom message.',
+			'method' => 'ACTION',
+			'endpoint' => 'sflmcp_admin_notify',
+			'headers' => '',
+			'arguments' => json_encode(array(
+				'type' => 'object',
+				'properties' => array(
+					'subject' => array('type' => 'string', 'description' => 'Email subject'),
+					'message' => array('type' => 'string', 'description' => 'Email message body')
+				),
+				'required' => array('subject', 'message')
+			)),
+			'enabled' => 0
+		)
+	);
+	
+	foreach ($examples as $tool) {
+		$wpdb->insert(
+			$table,
+			$tool,
+			array('%s', '%s', '%s', '%s', '%s', '%s', '%d')
+		);
+	}
 }
 
 function stifli_flex_mcp_ensure_clean_queue_event() {
@@ -860,10 +1285,12 @@ register_deactivation_hook(__FILE__, 'stifli_flex_mcp_deactivate');
 function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_maybe_create_queue_table();
 	stifli_flex_mcp_maybe_create_tools_table();
+	stifli_flex_mcp_maybe_create_custom_tools_table();
 	stifli_flex_mcp_maybe_add_tools_token_column();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
 	stifli_flex_mcp_seed_initial_tools();
+	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
@@ -890,19 +1317,111 @@ function stifli_flex_mcp_clean_queue() {
 
 /* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 
+// ============================================================
+// Custom Tool Actions - Handlers for sflmcp_* actions
+// These provide results for our custom actions. Other actions
+// (like woocommerce_cancel_unpaid_orders) are native WP/plugin hooks
+// ============================================================
+
+/**
+ * Maintenance mode toggle
+ */
+add_action('sflmcp_maintenance_mode', function($args) {
+    $enable = isset($args['enable']) ? (bool) $args['enable'] : false;
+    $maintenance_file = ABSPATH . '.maintenance';
+    
+    if ($enable) {
+        $content = '<?php $upgrading = ' . time() . '; ?>';
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+        file_put_contents($maintenance_file, $content);
+    } else {
+        if (file_exists($maintenance_file)) {
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
+            unlink($maintenance_file);
+        }
+    }
+});
+
+add_filter('sflmcp_action_result', function($result, $action, $args) {
+    if ($action === 'sflmcp_maintenance_mode') {
+        $enable = isset($args['enable']) ? (bool) $args['enable'] : false;
+        return $enable ? 'Maintenance mode ENABLED. Site now shows maintenance message to visitors.' : 'Maintenance mode DISABLED. Site is now accessible.';
+    }
+    return $result;
+}, 10, 3);
+
+/**
+ * Send admin notification email
+ */
+add_action('sflmcp_admin_notify', function($args) {
+    $subject = isset($args['subject']) ? sanitize_text_field($args['subject']) : 'MCP Notification';
+    $message = isset($args['message']) ? sanitize_textarea_field($args['message']) : '';
+    
+    if (empty($message)) {
+        return;
+    }
+    
+    $admin_email = get_option('admin_email');
+    $full_message = "Notification from StifLi Flex MCP:\n\n" . $message;
+    $full_message .= "\n\n---\nSite: " . get_bloginfo('name') . "\nTime: " . current_time('mysql');
+    
+    wp_mail($admin_email, $subject, $full_message);
+});
+
+add_filter('sflmcp_action_result', function($result, $action, $args) {
+    if ($action === 'sflmcp_admin_notify') {
+        $message = isset($args['message']) ? $args['message'] : '';
+        if (empty($message)) {
+            return 'Error: Message cannot be empty.';
+        }
+        return 'Notification sent to admin: ' . get_option('admin_email');
+    }
+    return $result;
+}, 10, 3);
+
+/**
+ * Result handlers for native WordPress actions
+ */
+add_filter('sflmcp_action_result', function($result, $action, $args) {
+    switch ($action) {
+        case 'flush_rewrite_rules':
+            return 'Rewrite rules (permalinks) flushed successfully.';
+        case 'wp_cron':
+            return 'WordPress cron triggered. Pending scheduled tasks have been executed.';
+        case 'woocommerce_cancel_unpaid_orders':
+            return 'WooCommerce unpaid orders check completed.';
+        case 'woocommerce_cleanup_sessions':
+            return 'WooCommerce session cleanup completed.';
+        case 'wpseo_reindex':
+            return 'Yoast SEO reindex triggered.';
+        case 'wp_cache_clear_cache':
+            return 'WP Super Cache cleared.';
+        case 'w3tc_flush_all':
+            return 'W3 Total Cache flushed.';
+    }
+    return $result;
+}, 5, 3);
+
+// Global instance variable to prevent garbage collection
+global $stifli_flex_mcp_instance;
+
 // Plugin initialization
 add_action('plugins_loaded', function() {
+	global $stifli_flex_mcp_instance;
+	
 	stifli_flex_mcp_maybe_create_queue_table();
 	stifli_flex_mcp_maybe_create_tools_table();
+	stifli_flex_mcp_maybe_create_custom_tools_table();
 	stifli_flex_mcp_maybe_add_tools_token_column();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
+	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
 	if (class_exists('StifliFlexMcp')) {
-		$mod = new StifliFlexMcp();
-		$mod->init();
+		$stifli_flex_mcp_instance = new StifliFlexMcp();
+		$stifli_flex_mcp_instance->init();
 	}
 });

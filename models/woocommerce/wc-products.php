@@ -8,6 +8,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- StifliFlexMcp is the plugin prefix
 class StifliFlexMcp_WC_Products {
     
     /**
@@ -65,7 +66,7 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'                => array('type' => 'integer'),
+                        'product_id'        => array('type' => 'integer'),
                         'name'              => array('type' => 'string'),
                         'regular_price'     => array('type' => 'string'),
                         'sale_price'        => array('type' => 'string'),
@@ -79,7 +80,7 @@ class StifliFlexMcp_WC_Products {
                         'tags'              => array('type' => 'array'),
                         'status'            => array('type' => 'string'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('product_id'),
                 ),
             ),
             'wc_delete_product' => array(
@@ -88,10 +89,10 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'    => array('type' => 'integer'),
-                        'force' => array('type' => 'boolean'),
+                        'product_id' => array('type' => 'integer'),
+                        'force'      => array('type' => 'boolean'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('product_id'),
                 ),
             ),
             'wc_batch_update_products' => array(
@@ -198,12 +199,12 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'          => array('type' => 'integer'),
+                        'category_id' => array('type' => 'integer'),
                         'name'        => array('type' => 'string'),
                         'slug'        => array('type' => 'string'),
                         'description' => array('type' => 'string'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('category_id'),
                 ),
             ),
             'wc_delete_product_category' => array(
@@ -212,10 +213,10 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'    => array('type' => 'integer'),
-                        'force' => array('type' => 'boolean'),
+                        'category_id' => array('type' => 'integer'),
+                        'force'       => array('type' => 'boolean'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('category_id'),
                 ),
             ),
             
@@ -252,12 +253,12 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'          => array('type' => 'integer'),
+                        'tag_id'      => array('type' => 'integer'),
                         'name'        => array('type' => 'string'),
                         'slug'        => array('type' => 'string'),
                         'description' => array('type' => 'string'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('tag_id'),
                 ),
             ),
             'wc_delete_product_tag' => array(
@@ -266,10 +267,10 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'    => array('type' => 'integer'),
-                        'force' => array('type' => 'boolean'),
+                        'tag_id' => array('type' => 'integer'),
+                        'force'  => array('type' => 'boolean'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('tag_id'),
                 ),
             ),
             
@@ -294,12 +295,12 @@ class StifliFlexMcp_WC_Products {
                     'type' => 'object',
                     'properties' => array(
                         'product_id' => array('type' => 'integer'),
-                        'review'     => array('type' => 'string'),
-                        'reviewer'   => array('type' => 'string'),
-                        'reviewer_email' => array('type' => 'string'),
+                        'content'    => array('type' => 'string'),
+                        'author'     => array('type' => 'string'),
+                        'email'      => array('type' => 'string'),
                         'rating'     => array('type' => 'integer'),
                     ),
-                    'required' => array('product_id', 'review', 'reviewer', 'reviewer_email'),
+                    'required' => array('product_id', 'content'),
                 ),
             ),
             'wc_update_product_review' => array(
@@ -308,12 +309,12 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'product_id' => array('type' => 'integer'),
-                        'review_id'  => array('type' => 'integer'),
-                        'review'     => array('type' => 'string'),
-                        'rating'     => array('type' => 'integer'),
+                        'review_id' => array('type' => 'integer'),
+                        'content'   => array('type' => 'string'),
+                        'status'    => array('type' => 'string'),
+                        'rating'    => array('type' => 'integer'),
                     ),
-                    'required' => array('product_id', 'review_id'),
+                    'required' => array('review_id'),
                 ),
             ),
             'wc_delete_product_review' => array(
@@ -322,11 +323,10 @@ class StifliFlexMcp_WC_Products {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'product_id' => array('type' => 'integer'),
-                        'review_id'  => array('type' => 'integer'),
-                        'force'      => array('type' => 'boolean'),
+                        'review_id' => array('type' => 'integer'),
+                        'force'     => array('type' => 'boolean'),
                     ),
-                    'required' => array('product_id', 'review_id'),
+                    'required' => array('review_id'),
                 ),
             ),
             
@@ -412,11 +412,13 @@ class StifliFlexMcp_WC_Products {
                     'limit' => intval($utils::getArrayValue($args, 'limit', 10)),
                     'offset' => intval($utils::getArrayValue($args, 'offset', 0)),
                     'status' => sanitize_text_field($utils::getArrayValue($args, 'status', 'any')),
-                    'type' => sanitize_text_field($utils::getArrayValue($args, 'type', '')),
                     'orderby' => sanitize_key($utils::getArrayValue($args, 'orderby', 'date')),
                     'order' => sanitize_key($utils::getArrayValue($args, 'order', 'DESC')),
                 );
                 
+                if (!empty($args['type'])) {
+                    $query_args['type'] = sanitize_text_field($args['type']);
+                }
                 if (!empty($args['category'])) {
                     $query_args['category'] = array(sanitize_text_field($args['category']));
                 }
@@ -449,7 +451,23 @@ class StifliFlexMcp_WC_Products {
                 return true;
                 
             case 'wc_create_product':
-                $product = new WC_Product_Simple();
+                $product_type = sanitize_key($utils::getArrayValue($args, 'type', 'simple'));
+                
+                // Create product based on type
+                switch ($product_type) {
+                    case 'variable':
+                        $product = new WC_Product_Variable();
+                        break;
+                    case 'grouped':
+                        $product = new WC_Product_Grouped();
+                        break;
+                    case 'external':
+                        $product = new WC_Product_External();
+                        break;
+                    default:
+                        $product = new WC_Product_Simple();
+                }
+                
                 $product->set_name(sanitize_text_field($utils::getArrayValue($args, 'name', '')));
                 
                 if (!empty($args['description'])) {
@@ -483,8 +501,34 @@ class StifliFlexMcp_WC_Products {
                     $product->set_tag_ids($tag_ids);
                 }
                 
+                // Handle attributes for variable products
+                if (!empty($args['attributes']) && is_array($args['attributes'])) {
+                    $attributes = array();
+                    $position = 0;
+                    
+                    foreach ($args['attributes'] as $attr_data) {
+                        $attr_name = sanitize_text_field($attr_data['name'] ?? '');
+                        if (empty($attr_name)) {
+                            continue;
+                        }
+                        
+                        $attribute = new WC_Product_Attribute();
+                        $attribute->set_name($attr_name);
+                        $attribute->set_options(isset($attr_data['options']) ? (array) $attr_data['options'] : array());
+                        $attribute->set_visible(isset($attr_data['visible']) ? (bool) $attr_data['visible'] : true);
+                        $attribute->set_variation(isset($attr_data['variation']) ? (bool) $attr_data['variation'] : false);
+                        $attribute->set_position($position++);
+                        
+                        $attributes[] = $attribute;
+                    }
+                    
+                    if (!empty($attributes)) {
+                        $product->set_attributes($attributes);
+                    }
+                }
+                
                 $product_id = $product->save();
-                $addResultText($r, 'Product created with ID: ' . $product_id);
+                $addResultText($r, 'Product created with ID: ' . $product_id . ' (type: ' . $product_type . ')');
                 return true;
                 
             case 'wc_update_product':
@@ -1113,6 +1157,6 @@ class StifliFlexMcp_WC_Products {
                 return true;
         }
         
-        return false;
+        return null; // Tool not handled by this module
     }
 }

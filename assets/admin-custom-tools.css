@@ -1,0 +1,159 @@
+/**
+ * StifLi Flex MCP - Custom Tools Styles
+ */
+
+.sflmcp-custom-tools-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sflmcp-header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.sflmcp-header-actions h3 {
+    margin: 0;
+}
+
+/* Modal Styles */
+.sflmcp-modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.6);
+    backdrop-filter: blur(2px);
+}
+
+.sflmcp-modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 0;
+    border: 1px solid #888;
+    width: 60%;
+    min-width: 600px;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+    border-radius: 6px;
+    animation-name: slideIn;
+    animation-duration: 0.3s;
+}
+
+@keyframes slideIn {
+    from {transform: translateY(-50px); opacity: 0;}
+    to {transform: translateY(0); opacity: 1;}
+}
+
+.sflmcp-modal-header {
+    padding: 15px 20px;
+    background-color: #f0f0f1;
+    border-bottom: 1px solid #ddd;
+    border-radius: 6px 6px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sflmcp-modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #1d2327;
+}
+
+.sflmcp-modal-close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.sflmcp-modal-close:hover,
+.sflmcp-modal-close:focus {
+    color: #d63638;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sflmcp-modal-body {
+    padding: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.sflmcp-modal-footer {
+    padding: 15px 20px;
+    background-color: #f0f0f1;
+    border-top: 1px solid #ddd;
+    border-radius: 0 0 6px 6px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Form Styles */
+.sflmcp-form-row {
+    margin-bottom: 15px;
+}
+
+.sflmcp-form-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #2c3338;
+}
+
+.sflmcp-form-row input[type="text"],
+.sflmcp-form-row input[type="url"],
+.sflmcp-form-row textarea,
+.sflmcp-form-row select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+}
+
+.sflmcp-form-group-inline {
+    display: flex;
+    gap: 15px;
+}
+
+/* Args Builder Table */
+#sflmcp_args_builder {
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 10px;
+    background: #f6f7f7;
+}
+
+#sflmcp_args_table th {
+    font-size: 11px;
+    background: #f0f0f1;
+    padding: 8px;
+}
+
+#sflmcp_args_table input,
+#sflmcp_args_table select {
+    width: 100%;
+    font-size: 12px;
+}
+
+.sflmcp-remove-arg {
+    color: #d63638;
+    cursor: pointer;
+    text-align: center;
+    font-weight: bold;
+}
+
+.sflmcp-advanced-toggle {
+    margin: 10px 0;
+    font-size: 12px;
+}

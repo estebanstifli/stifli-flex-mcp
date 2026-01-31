@@ -8,6 +8,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- StifliFlexMcp is the plugin prefix
 class StifliFlexMcp_WC_System {
     
     public static function getTools() {
@@ -208,9 +209,9 @@ class StifliFlexMcp_WC_System {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id' => array('type' => 'string'),
+                        'tool' => array('type' => 'string'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('tool'),
                 ),
             ),
             
@@ -729,23 +730,43 @@ class StifliFlexMcp_WC_System {
                 return true;
                 
             case 'wc_update_setting_option':
-                $option = sanitize_key($utils::getArrayValue($args, 'option', ''));
+                $group = sanitize_key($utils::getArrayValue($args, 'group', ''));
+                $option_id = sanitize_key($utils::getArrayValue($args, 'id', ''));
                 $value = $utils::getArrayValue($args, 'value', '');
                 
-                if (empty($option)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'option is required');
+                if (empty($group)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'group is required');
                     return true;
                 }
                 
-                // Validate it's a WooCommerce option
-                if (strpos($option, 'woocommerce_') !== 0) {
-                    $r['error'] = array('code' => -50006, 'message' => 'Option must start with woocommerce_');
+                if (empty($option_id)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'id is required');
                     return true;
                 }
                 
-                update_option($option, $value);
+                // Use WC Settings API if available
+                $option_name = $option_id;
                 
-                $addResultText($r, 'Setting updated: ' . $option);
+                // Common WC setting groups map to specific options
+                $settings_map = array(
+                    'general' => array(
+                        'woocommerce_store_address' => 'woocommerce_store_address',
+                        'woocommerce_store_address_2' => 'woocommerce_store_address_2',
+                        'woocommerce_store_city' => 'woocommerce_store_city',
+                        'woocommerce_default_country' => 'woocommerce_default_country',
+                        'woocommerce_store_postcode' => 'woocommerce_store_postcode',
+                        'woocommerce_currency' => 'woocommerce_currency',
+                    ),
+                );
+                
+                // If option_id doesn't start with woocommerce_, prefix it
+                if (strpos($option_name, 'woocommerce_') !== 0) {
+                    $option_name = 'woocommerce_' . $option_id;
+                }
+                
+                update_option($option_name, $value);
+                
+                $addResultText($r, 'Setting updated: ' . $option_name . ' = ' . $value);
                 return true;
                 
             // Webhooks
@@ -852,6 +873,6 @@ class StifliFlexMcp_WC_System {
                 return true;
         }
         
-        return false;
+        return null; // Tool not handled by this module
     }
 }

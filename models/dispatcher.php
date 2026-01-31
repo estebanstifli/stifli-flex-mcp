@@ -1,4 +1,14 @@
 <?php
+/**
+ * Dispatcher mínimo para StifliFlexMcp (stub)
+ *
+ * @package StifLi_Flex_MCP
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 // Dispatcher mínimo para StifliFlexMcp (stub)
 class StifliFlexMcpDispatcher {
 	public static function addFilter($tag, $function_to_add, $priority = 10, $accepted_args = 1) {

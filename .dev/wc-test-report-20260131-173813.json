@@ -1,0 +1,214 @@
+﻿{
+    "summary":  {
+                    "failed":  1,
+                    "passRate":  97.5,
+                    "total":  40,
+                    "passed":  39
+                },
+    "endpoint":  "http://pruebaswp.local/wp-json/stifli-flex-mcp/v1/messages",
+    "timestamp":  "2026-01-31 17:38:13",
+    "failed":  [
+                   {
+                       "Error":  "Product is not a variable product",
+                       "Description":  "Get variations (needs variable product)",
+                       "Tool":  "wc_get_product_variations"
+                   }
+               ],
+    "passed":  [
+                   {
+                       "Description":  "List products",
+                       "Tool":  "wc_get_products",
+                       "Response":  "Found 5 products: [\n    {\n        \"id\": 151,\n        \"name\": \"Test Product 173132\",\n        \"slug\": \"test-product-173132\",\n        \"type\": \"simple\",\n        \"status\": \"publish\",\n        \"price\": \"99.9"
+                   },
+                   {
+                       "Description":  "Create product",
+                       "Tool":  "wc_create_product",
+                       "Response":  "Product created with ID: 153"
+                   },
+                   {
+                       "Description":  "Update product",
+                       "Tool":  "wc_update_product",
+                       "Response":  "Product updated: 153"
+                   },
+                   {
+                       "Description":  "Update stock quantity",
+                       "Tool":  "wc_update_stock",
+                       "Response":  "Stock updated for product #153: 100"
+                   },
+                   {
+                       "Description":  "Set stock status",
+                       "Tool":  "wc_set_stock_status",
+                       "Response":  "Stock status set to \"instock\" for product #153"
+                   },
+                   {
+                       "Description":  "Batch update products",
+                       "Tool":  "wc_batch_update_products",
+                       "Response":  "Updated 1 products: 145"
+                   },
+                   {
+                       "Description":  "List categories",
+                       "Tool":  "wc_get_product_categories",
+                       "Response":  "Found 3 categories: [\n    {\n        \"id\": 72,\n        \"name\": \"Sin categorizar\",\n        \"slug\": \"sin-categorizar\",\n        \"count\": 7,\n        \"parent\": 0\n    },\n    {\n        \"id\": 73,\n        \"name"
+                   },
+                   {
+                       "Description":  "Create category",
+                       "Tool":  "wc_create_product_category",
+                       "Response":  "Category created with ID: 79"
+                   },
+                   {
+                       "Description":  "Update category",
+                       "Tool":  "wc_update_product_category",
+                       "Response":  "Category updated: 79"
+                   },
+                   {
+                       "Description":  "List tags",
+                       "Tool":  "wc_get_product_tags",
+                       "Response":  "Found 2 tags: [\n    {\n        \"id\": 74,\n        \"name\": \"TestTag170533\",\n        \"slug\": \"testtag170533\",\n        \"count\": 0\n    },\n    {\n        \"id\": 76,\n        \"name\": \"TestTag173134\",\n        \"sl"
+                   },
+                   {
+                       "Description":  "Create tag",
+                       "Tool":  "wc_create_product_tag",
+                       "Response":  "Tag created with ID: 80"
+                   },
+                   {
+                       "Description":  "Update tag",
+                       "Tool":  "wc_update_product_tag",
+                       "Response":  "Tag updated: 80"
+                   },
+                   {
+                       "Description":  "List reviews",
+                       "Tool":  "wc_get_product_reviews",
+                       "Response":  "Found 0 reviews: []"
+                   },
+                   {
+                       "Description":  "Create review",
+                       "Tool":  "wc_create_product_review",
+                       "Response":  "Review created with ID: 3"
+                   },
+                   {
+                       "Description":  "Update review",
+                       "Tool":  "wc_update_product_review",
+                       "Response":  "Review updated: 3"
+                   },
+                   {
+                       "Description":  "List orders",
+                       "Tool":  "wc_get_orders",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create order",
+                       "Tool":  "wc_create_order",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Batch update orders",
+                       "Tool":  "wc_batch_update_orders",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List refunds",
+                       "Tool":  "wc_get_refunds",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List coupons",
+                       "Tool":  "wc_get_coupons",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create coupon",
+                       "Tool":  "wc_create_coupon",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List tax classes",
+                       "Tool":  "wc_get_tax_classes",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List tax rates",
+                       "Tool":  "wc_get_tax_rates",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create tax rate",
+                       "Tool":  "wc_create_tax_rate",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List shipping zones",
+                       "Tool":  "wc_get_shipping_zones",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create shipping zone",
+                       "Tool":  "wc_create_shipping_zone",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List payment gateways",
+                       "Tool":  "wc_get_payment_gateways",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Update payment gateway",
+                       "Tool":  "wc_update_payment_gateway",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get system status",
+                       "Tool":  "wc_get_system_status",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get sales report",
+                       "Tool":  "wc_get_sales_report",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get top sellers report",
+                       "Tool":  "wc_get_top_sellers_report",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get settings",
+                       "Tool":  "wc_get_settings",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Update setting",
+                       "Tool":  "wc_update_setting_option",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List webhooks",
+                       "Tool":  "wc_get_webhooks",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create webhook",
+                       "Tool":  "wc_create_webhook",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Delete review",
+                       "Tool":  "wc_delete_product_review",
+                       "Response":  "Review deleted: 3"
+                   },
+                   {
+                       "Description":  "Delete product",
+                       "Tool":  "wc_delete_product",
+                       "Response":  "Product deleted: 153"
+                   },
+                   {
+                       "Description":  "Delete category",
+                       "Tool":  "wc_delete_product_category",
+                       "Response":  "Category deleted: 79"
+                   },
+                   {
+                       "Description":  "Delete tag",
+                       "Tool":  "wc_delete_product_tag",
+                       "Response":  "Tag deleted: 80"
+                   }
+               ]
+}

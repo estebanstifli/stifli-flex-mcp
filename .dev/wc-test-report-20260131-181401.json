@@ -1,0 +1,285 @@
+﻿{
+    "summary":  {
+                    "failed":  0,
+                    "passRate":  100,
+                    "total":  54,
+                    "passed":  54
+                },
+    "endpoint":  "http://pruebaswp.local/wp-json/stifli-flex-mcp/v1/messages",
+    "timestamp":  "2026-01-31 18:14:01",
+    "failed":  [
+
+               ],
+    "passed":  [
+                   {
+                       "Description":  "List products",
+                       "Tool":  "wc_get_products",
+                       "Response":  "Found 5 products: [\n    {\n        \"id\": 159,\n        \"name\": \"Test\",\n        \"slug\": \"test\",\n        \"type\": \"simple\",\n        \"status\": \"publish\",\n        \"price\": \"10\",\n        \"regular_price\": \"10\""
+                   },
+                   {
+                       "Description":  "Create product",
+                       "Tool":  "wc_create_product",
+                       "Response":  "Product created with ID: 168 (type: simple)"
+                   },
+                   {
+                       "Description":  "Update product",
+                       "Tool":  "wc_update_product",
+                       "Response":  "Product updated: 168"
+                   },
+                   {
+                       "Description":  "Update stock quantity",
+                       "Tool":  "wc_update_stock",
+                       "Response":  "Stock updated for product #168: 100"
+                   },
+                   {
+                       "Description":  "Set stock status",
+                       "Tool":  "wc_set_stock_status",
+                       "Response":  "Stock status set to \"instock\" for product #168"
+                   },
+                   {
+                       "Description":  "Batch update products",
+                       "Tool":  "wc_batch_update_products",
+                       "Response":  "Updated 1 products: 145"
+                   },
+                   {
+                       "Description":  "List categories",
+                       "Tool":  "wc_get_product_categories",
+                       "Response":  "Found 3 categories: [\n    {\n        \"id\": 72,\n        \"name\": \"Sin categorizar\",\n        \"slug\": \"sin-categorizar\",\n        \"count\": 8,\n        \"parent\": 0\n    },\n    {\n        \"id\": 73,\n        \"name"
+                   },
+                   {
+                       "Description":  "Create category",
+                       "Tool":  "wc_create_product_category",
+                       "Response":  "Category created with ID: 83"
+                   },
+                   {
+                       "Description":  "Update category",
+                       "Tool":  "wc_update_product_category",
+                       "Response":  "Category updated: 83"
+                   },
+                   {
+                       "Description":  "List tags",
+                       "Tool":  "wc_get_product_tags",
+                       "Response":  "Found 2 tags: [\n    {\n        \"id\": 74,\n        \"name\": \"TestTag170533\",\n        \"slug\": \"testtag170533\",\n        \"count\": 0\n    },\n    {\n        \"id\": 76,\n        \"name\": \"TestTag173134\",\n        \"sl"
+                   },
+                   {
+                       "Description":  "Create tag",
+                       "Tool":  "wc_create_product_tag",
+                       "Response":  "Tag created with ID: 84"
+                   },
+                   {
+                       "Description":  "Update tag",
+                       "Tool":  "wc_update_product_tag",
+                       "Response":  "Tag updated: 84"
+                   },
+                   {
+                       "Description":  "List reviews",
+                       "Tool":  "wc_get_product_reviews",
+                       "Response":  "Found 0 reviews: []"
+                   },
+                   {
+                       "Description":  "Create review",
+                       "Tool":  "wc_create_product_review",
+                       "Response":  "Review created with ID: 9"
+                   },
+                   {
+                       "Description":  "Update review",
+                       "Tool":  "wc_update_product_review",
+                       "Response":  "Review updated: 9"
+                   },
+                   {
+                       "Description":  "Create variable product",
+                       "Tool":  "wc_create_product",
+                       "Response":  "Product created with ID: 169 (type: variable)"
+                   },
+                   {
+                       "Description":  "List orders",
+                       "Tool":  "wc_get_orders",
+                       "Response":  "Found 1 orders: [\n    {\n        \"id\": 160,\n        \"status\": \"pending\",\n        \"total\": \"0.00\",\n        \"currency\": \"EUR\",\n        \"date_created\": \"2026-01-31 18:09:18\",\n        \"customer_id\": 0,\n   "
+                   },
+                   {
+                       "Description":  "Create order",
+                       "Tool":  "wc_create_order",
+                       "Response":  "Order created with ID: 170"
+                   },
+                   {
+                       "Description":  "Update order status",
+                       "Tool":  "wc_update_order",
+                       "Response":  "Order updated: 170"
+                   },
+                   {
+                       "Description":  "Create order note",
+                       "Tool":  "wc_create_order_note",
+                       "Response":  "Order note created with ID: 11"
+                   },
+                   {
+                       "Description":  "Get order notes",
+                       "Tool":  "wc_get_order_notes",
+                       "Response":  "Found 2 notes: [\n    {\n        \"id\": 11,\n        \"content\": \"Test note added by automated script\",\n        \"date_created\": {\n            \"date\": \"2026-01-31 18:13:54.000000\",\n            \"timezone_typ"
+                   },
+                   {
+                       "Description":  "Batch update orders",
+                       "Tool":  "wc_batch_update_orders",
+                       "Response":  "Updated 1 orders: 170"
+                   },
+                   {
+                       "Description":  "List refunds",
+                       "Tool":  "wc_get_refunds",
+                       "Response":  "Found 0 refund(s)"
+                   },
+                   {
+                       "Description":  "List coupons",
+                       "Tool":  "wc_get_coupons",
+                       "Response":  "Found 0 coupons: []"
+                   },
+                   {
+                       "Description":  "Create coupon",
+                       "Tool":  "wc_create_coupon",
+                       "Response":  "Coupon created with ID: 171"
+                   },
+                   {
+                       "Description":  "Update coupon",
+                       "Tool":  "wc_update_coupon",
+                       "Response":  "Coupon updated: 171"
+                   },
+                   {
+                       "Description":  "List tax classes",
+                       "Tool":  "wc_get_tax_classes",
+                       "Response":  "Tax classes: [\n    \"Standard\",\n    \"Tasa cero\",\n    \"Tasa reducida\"\n]"
+                   },
+                   {
+                       "Description":  "List tax rates",
+                       "Tool":  "wc_get_tax_rates",
+                       "Response":  "Found 1 tax rates: [\n    {\n        \"id\": \"1\",\n        \"country\": \"ES\",\n        \"state\": \"B\",\n        \"rate\": \"21.00\",\n        \"name\": \"IVA Test\",\n        \"priority\": \"1\",\n        \"compound\": \"0\",\n    "
+                   },
+                   {
+                       "Description":  "Create tax rate",
+                       "Tool":  "wc_create_tax_rate",
+                       "Response":  "Tax rate created with ID: 3"
+                   },
+                   {
+                       "Description":  "Update tax rate",
+                       "Tool":  "wc_update_tax_rate",
+                       "Response":  "Tax rate updated: 3"
+                   },
+                   {
+                       "Description":  "List shipping zones",
+                       "Tool":  "wc_get_shipping_zones",
+                       "Response":  "Found 1 shipping zones: [\n    {\n        \"id\": 1,\n        \"zone_name\": \"Test Zone 180930\",\n        \"zone_order\": 0,\n        \"formatted_zone_location\": \"En todas partes\"\n    }\n]"
+                   },
+                   {
+                       "Description":  "Create shipping zone",
+                       "Tool":  "wc_create_shipping_zone",
+                       "Response":  "Shipping zone created with ID: 3"
+                   },
+                   {
+                       "Description":  "Update shipping zone",
+                       "Tool":  "wc_update_shipping_zone",
+                       "Response":  "Shipping zone updated: 3"
+                   },
+                   {
+                       "Description":  "Get zone methods",
+                       "Tool":  "wc_get_shipping_zone_methods",
+                       "Response":  "Found 0 shipping methods: []"
+                   },
+                   {
+                       "Description":  "List payment gateways",
+                       "Tool":  "wc_get_payment_gateways",
+                       "Response":  "Found 3 payment gateways: [\n    {\n        \"id\": \"bacs\",\n        \"title\": \"Transferencia bancaria directa\",\n        \"description\": \"Realiza tu pago directamente en nuestra cuenta bancaria. Por favor, u"
+                   },
+                   {
+                       "Description":  "Update payment gateway",
+                       "Tool":  "wc_update_payment_gateway",
+                       "Response":  "Payment gateway updated: cod"
+                   },
+                   {
+                       "Description":  "Get system status",
+                       "Tool":  "wc_get_system_status",
+                       "Response":  "System status: {\n    \"environment\": {\n        \"wp_version\": \"6.9\",\n        \"wc_version\": \"10.4.3\",\n        \"php_version\": \"8.2.27\",\n        \"server_info\": \"nginx\\/1.26.1\",\n        \"user_agent\": \"Mozil"
+                   },
+                   {
+                       "Description":  "Get sales report",
+                       "Tool":  "wc_get_sales_report",
+                       "Response":  "Sales report: {\n    \"total_sales\": 0,\n    \"order_count\": 0,\n    \"period\": {\n        \"start\": \"2026-01-01\",\n        \"end\": \"2026-01-31\"\n    }\n}"
+                   },
+                   {
+                       "Description":  "Get top sellers report",
+                       "Tool":  "wc_get_top_sellers_report",
+                       "Response":  "Top sellers: [\n    {\n        \"product_id\": 145,\n        \"name\": \"Camiseta Premium\",\n        \"quantity_sold\": 2\n    }\n]"
+                   },
+                   {
+                       "Description":  "Get settings",
+                       "Tool":  "wc_get_settings",
+                       "Response":  "Settings: {\n    \"store_address\": \"\",\n    \"store_city\": \"\",\n    \"default_country\": \"ES:CO\",\n    \"currency\": \"EUR\"\n}"
+                   },
+                   {
+                       "Description":  "Update setting",
+                       "Tool":  "wc_update_setting_option",
+                       "Response":  "Setting updated: woocommerce_store_city = Test City"
+                   },
+                   {
+                       "Description":  "List webhooks",
+                       "Tool":  "wc_get_webhooks",
+                       "Response":  "Found 0 webhooks: []"
+                   },
+                   {
+                       "Description":  "Create webhook",
+                       "Tool":  "wc_create_webhook",
+                       "Response":  "Webhook created with ID: 3"
+                   },
+                   {
+                       "Description":  "Update webhook",
+                       "Tool":  "wc_update_webhook",
+                       "Response":  "Webhook updated: 3"
+                   },
+                   {
+                       "Description":  "Delete webhook",
+                       "Tool":  "wc_delete_webhook",
+                       "Response":  "Webhook deleted: 3"
+                   },
+                   {
+                       "Description":  "Delete order note",
+                       "Tool":  "wc_delete_order_note",
+                       "Response":  "Order note deleted: 11"
+                   },
+                   {
+                       "Description":  "Delete order",
+                       "Tool":  "wc_delete_order",
+                       "Response":  "Order deleted: 170"
+                   },
+                   {
+                       "Description":  "Delete review",
+                       "Tool":  "wc_delete_product_review",
+                       "Response":  "Review deleted: 9"
+                   },
+                   {
+                       "Description":  "Delete product",
+                       "Tool":  "wc_delete_product",
+                       "Response":  "Product deleted: 168"
+                   },
+                   {
+                       "Description":  "Delete category",
+                       "Tool":  "wc_delete_product_category",
+                       "Response":  "Category deleted: 83"
+                   },
+                   {
+                       "Description":  "Delete tag",
+                       "Tool":  "wc_delete_product_tag",
+                       "Response":  "Tag deleted: 84"
+                   },
+                   {
+                       "Description":  "Delete coupon",
+                       "Tool":  "wc_delete_coupon",
+                       "Response":  "Coupon deleted: 171"
+                   },
+                   {
+                       "Description":  "Delete tax rate",
+                       "Tool":  "wc_delete_tax_rate",
+                       "Response":  "Tax rate deleted: 3"
+                   },
+                   {
+                       "Description":  "Delete shipping zone",
+                       "Tool":  "wc_delete_shipping_zone",
+                       "Response":  "Shipping zone deleted: 3"
+                   }
+               ]
+}

@@ -1,17 +1,163 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
-// Load WooCommerce modules if WooCommerce is active
-if ( class_exists( 'WooCommerce' ) ) {
-    require_once dirname(__FILE__) . '/woocommerce/wc-products.php';
-    require_once dirname(__FILE__) . '/woocommerce/wc-orders.php';
-    require_once dirname(__FILE__) . '/woocommerce/wc-customers-coupons.php';
-    require_once dirname(__FILE__) . '/woocommerce/wc-system.php';
-}
-
 // Model MCP con tools completas + intención/consentimiento
 class StifliFlexMcpModel {
     private $tools = false;
+
+    /**
+     * Dispatch a Custom Tool (Webhook/API call or WordPress Action)
+     */
+    private function dispatchCustomTool($toolName, $args, $rpcId, $response) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'sflmcp_custom_tools';
+        
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name safe, toolName is sanitized input.
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM `$table` WHERE tool_name = %s AND enabled = 1", $toolName));
+        
+        if (!$row) {
+             $response['error'] = array('code' => -32601, 'message' => 'Custom tool not found or disabled: ' . $toolName);
+             return $response;
+        }
+        
+        $method = strtoupper($row->method);
+        $endpoint = $row->endpoint;
+        
+        // =====================================================
+        // TYPE: ACTION - Execute WordPress do_action()
+        // Allows calling ANY WordPress/plugin action hook
+        // =====================================================
+        if ($method === 'ACTION') {
+            // The endpoint is the action name (sanitized)
+            $action_name = sanitize_key($endpoint);
+            
+            if (empty($action_name)) {
+                $response['error'] = array('code' => -32602, 'message' => 'Action name cannot be empty');
+                return $response;
+            }
+            
+            // Check if this action has any registered callbacks
+            $has_action = has_action($action_name);
+            
+            // If no handlers, check if it's a known plugin action and warn accordingly
+            $warning_msg = '';
+            if (!$has_action) {
+                $known_plugins = array(
+                    'woocommerce_' => array('WooCommerce', 'woocommerce/woocommerce.php'),
+                    'w3tc_' => array('W3 Total Cache', 'w3-total-cache/w3-total-cache.php'),
+                    'wp_super_cache_' => array('WP Super Cache', 'wp-super-cache/wp-cache.php'),
+                    'elementor_' => array('Elementor', 'elementor/elementor.php'),
+                    'wpcf7_' => array('Contact Form 7', 'contact-form-7/wp-contact-form-7.php'),
+                    'yoast_' => array('Yoast SEO', 'wordpress-seo/wp-seo.php'),
+                    'rank_math_' => array('Rank Math', 'seo-by-rank-math/rank-math.php'),
+                    'jetpack_' => array('Jetpack', 'jetpack/jetpack.php'),
+                    'wpml_' => array('WPML', 'sitepress-multilingual-cms/sitepress.php'),
+                );
+                
+                foreach ($known_plugins as $prefix => $plugin_info) {
+                    if (strpos($action_name, $prefix) === 0) {
+                        $plugin_name = $plugin_info[0];
+                        $plugin_file = $plugin_info[1];
+                        if (!is_plugin_active($plugin_file)) {
+                            $warning_msg = sprintf('Plugin "%s" is not active. ', $plugin_name);
+                        } else {
+                            $warning_msg = sprintf('Plugin "%s" is active but this hook has no handlers. The hook may only be available in specific contexts (admin, frontend, cron). ', $plugin_name);
+                        }
+                        break;
+                    }
+                }
+                
+                if (empty($warning_msg)) {
+                    $warning_msg = 'No handlers registered for this action. It may be a custom hook that requires your own handler. ';
+                }
+            }
+            
+            // Allow filter to capture/modify results from actions
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- sflmcp is the plugin prefix
+            $result = apply_filters( 'sflmcp_action_result', null, $action_name, $args );
+            
+            // Execute the WordPress action with args
+            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- intentionally calling dynamic action hooks as per Custom Tools feature
+            do_action( $action_name, $args );
+            
+            // Build response
+            if ($result !== null) {
+                $response['result'] = array('content' => array(array('type' => 'text', 'text' => is_string($result) ? $result : wp_json_encode($result))));
+            } else {
+                if ($has_action) {
+                    $status = 'Action executed successfully: ' . $action_name;
+                } else {
+                    $status = 'Warning: ' . $warning_msg . 'Action triggered: ' . $action_name;
+                }
+                $response['result'] = array('content' => array(array('type' => 'text', 'text' => $status)));
+            }
+            
+            return $response;
+        }
+        
+        // =====================================================
+        // TYPE: HTTP (GET/POST/PUT/DELETE) - Remote Request
+        // =====================================================
+        $url = $endpoint;
+        $headers_raw = $row->headers;
+        
+        // Parse headers from newline-separated format
+        $headers = array();
+        if (!empty($headers_raw)) {
+            $lines = explode("\n", $headers_raw);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if (strpos($line, ':') !== false) {
+                    list($key, $val) = explode(':', $line, 2);
+                    $headers[trim($key)] = trim($val);
+                }
+            }
+        }
+        
+        // Replace {placeholder} in URL with args
+        if (is_array($args)) {
+            foreach ($args as $key => $value) {
+                $url = str_replace('{' . $key . '}', rawurlencode((string) $value), $url);
+            }
+        }
+        
+        // Execute request
+        $request_args = array(
+            'method' => $method,
+            'headers' => $headers,
+            'timeout' => 30,
+            'user-agent' => 'StifLi-Flex-MCP/1.0.5; ' . get_bloginfo('url')
+        );
+        
+        if (in_array($method, array('POST', 'PUT', 'PATCH'), true)) {
+            $request_args['body'] = wp_json_encode($args);
+            if (!isset($headers['Content-Type'])) {
+                $request_args['headers']['Content-Type'] = 'application/json';
+            }
+        }
+        
+        $remote_response = wp_remote_request($url, $request_args);
+        
+        if (is_wp_error($remote_response)) {
+            $response['error'] = array('code' => -32000, 'message' => 'External tool error: ' . $remote_response->get_error_message());
+            return $response;
+        }
+        
+        $code = wp_remote_retrieve_response_code($remote_response);
+        $body = wp_remote_retrieve_body($remote_response);
+        
+        // Try to parse JSON response
+        $decoded = json_decode($body, true);
+        $final_content = ($decoded !== null) ? wp_json_encode($decoded, JSON_PRETTY_PRINT) : $body;
+        
+        if ($code >= 400) {
+             $response['result'] = array('content' => array( array('type' => 'text', 'text' => "Error $code: $final_content") ), 'isError' => true);
+        } else {
+             $response['result'] = array('content' => array( array('type' => 'text', 'text' => $final_content) ));
+        }
+        
+        return $response;
+    }
 
     /**
      * Clasificación de intención y confirmación por tool.
@@ -99,15 +245,15 @@ class StifliFlexMcpModel {
 
         // Check if table exists first.
         $like = $wpdb->esc_like($table);
-        $table_exists_query = 'SHOW TABLES LIKE %s';
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema introspection requires SHOW TABLES.
-        $table_exists = $wpdb->get_var($wpdb->prepare($table_exists_query, $like)) === $table;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema introspection requires SHOW TABLES with LIKE pattern.
+        $table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table;
         
         if ($table_exists) {
             $tools_query = StifliFlexMcpUtils::formatSqlWithTables(
                 'SELECT tool_name, token_estimate FROM %s WHERE enabled = %%d',
                 'sflmcp_tools'
             );
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- query is prepared via formatSqlWithTables helper.
             $results = $wpdb->get_results(
                 $wpdb->prepare($tools_query, 1),
                 ARRAY_A
@@ -965,7 +1111,13 @@ class StifliFlexMcpModel {
             );
 
             // Merge WooCommerce tools if available
+            // Lazy load modules ensures compatibility with all load orders
             if ( class_exists( 'WooCommerce' ) ) {
+                require_once dirname(__FILE__) . '/woocommerce/wc-products.php';
+                require_once dirname(__FILE__) . '/woocommerce/wc-orders.php';
+                require_once dirname(__FILE__) . '/woocommerce/wc-customers-coupons.php';
+                require_once dirname(__FILE__) . '/woocommerce/wc-system.php';
+
                 if ( class_exists( 'StifliFlexMcp_WC_Products' ) ) {
                     $tools = array_merge( $tools, StifliFlexMcp_WC_Products::getTools() );
                 }
@@ -985,7 +1137,61 @@ class StifliFlexMcpModel {
 
             $this->tools = $tools;
         }
+        
+        // Add Custom Tools
+        $custom_tools = $this->getCustomTools();
+        if (!empty($custom_tools)) {
+            foreach ($custom_tools as $tool) {
+                // Ensure proper structure
+                if (!isset($tool['name']) || !isset($tool['inputSchema'])) continue;
+                $this->tools[$tool['name']] = $tool;
+            }
+        }
+        
         return $this->tools;
+    }
+
+    /**
+     * Get defined custom tools from database
+     */
+    private function getCustomTools() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'sflmcp_custom_tools';
+        
+        // Check if table exists first (during updates it might not exist yet)
+        $like = $wpdb->esc_like($table);
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema check requires direct query.
+        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) !== $table ) {
+            return array();
+        }
+        
+        $tools = array();
+        
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- cache disabled for fresh tools, table name is safe.
+        $results = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM `$table` WHERE enabled = %d", 1 ) );
+        
+        if (!$results) return array();
+        
+        foreach ($results as $row) {
+            $schema = json_decode($row->arguments, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $schema = array('type' => 'object', 'properties' => (object) array(), 'required' => array());
+            }
+            
+            $tools[] = array(
+                'name' => $row->tool_name,
+                'description' => $row->tool_description,
+                'inputSchema' => $schema,
+                'method' => $row->method,
+                'endpoint' => $row->endpoint,
+                'headers' => $row->headers,
+                'category' => 'Custom',
+                'intent' => 'sensitive_read', // Default safe intent
+                'requires_confirmation' => true, // Always require confirmation for external calls
+            );
+        }
+        
+        return $tools;
     }
 
     /**
@@ -2337,13 +2543,17 @@ class StifliFlexMcpModel {
             default:
                 // Try to route to WooCommerce modules if tool starts with wc_
                 if ( strpos( $tool, 'wc_' ) === 0 && class_exists( 'WooCommerce' ) ) {
-                    $dispatched = false;
+                    // Lazy load WC modules if not already loaded
+                    require_once dirname(__FILE__) . '/woocommerce/wc-products.php';
+                    require_once dirname(__FILE__) . '/woocommerce/wc-orders.php';
+                    require_once dirname(__FILE__) . '/woocommerce/wc-customers-coupons.php';
+                    require_once dirname(__FILE__) . '/woocommerce/wc-system.php';
                     
                     // Try WC Products module
                     if ( class_exists( 'StifliFlexMcp_WC_Products' ) ) {
                         $result = StifliFlexMcp_WC_Products::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $result;
+                            return $r; // Return $r which was modified by reference
                         }
                     }
                     
@@ -2351,7 +2561,7 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Orders' ) ) {
                         $result = StifliFlexMcp_WC_Orders::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $result;
+                            return $r; // Return $r which was modified by reference
                         }
                     }
                     
@@ -2359,7 +2569,7 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Customers' ) ) {
                         $result = StifliFlexMcp_WC_Customers::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $result;
+                            return $r; // Return $r which was modified by reference
                         }
                     }
                     
@@ -2367,7 +2577,7 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Coupons' ) ) {
                         $result = StifliFlexMcp_WC_Coupons::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $result;
+                            return $r; // Return $r which was modified by reference
                         }
                     }
                     
@@ -2375,7 +2585,7 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_System' ) ) {
                         $result = StifliFlexMcp_WC_System::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $result;
+                            return $r; // Return $r which was modified by reference
                         }
                     }
                 }

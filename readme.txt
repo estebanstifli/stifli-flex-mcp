@@ -4,7 +4,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, automation, rest-api
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -131,6 +131,11 @@ Absolutely! The 55 WordPress tools work independently. WooCommerce tools are opt
 
 
 == Changelog ==
+= 1.0.5 =
+* Fix: Resolved object persistence issue in PHP 8.1+ causing 404 errors on API endpoints.
+* Fix: Deferred WooCommerce detection to ensure tools load correctly regardless of plugin load order.
+* New: Added "Demo & Installation Tutorial" video to description.
+
 = 1.0.4 =
 * New: Debug logging system with dedicated log file (wp-content/uploads/sflmcp-logs/)
 * New: Logs tab in admin UI to enable/disable logging and view debug logs

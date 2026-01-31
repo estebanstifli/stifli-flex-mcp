@@ -1,0 +1,118 @@
+ARCHIVO: models/model.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+248	55	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $table_exists_query	Ver en editor de código (abre en una nueva pestaña)
+256	32	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $tools_query	Ver en editor de código (abre en una nueva pestaña)
+1160	28	WARNING	WordPress.DB.PreparedSQL.InterpolatedNotPrepared	Use placeholders and $wpdb->prepare(); found interpolated variable $table at "SHOW TABLES LIKE '$table'"	Ver en editor de código (abre en una nueva pestaña)
+1167	39	WARNING	WordPress.DB.PreparedSQL.InterpolatedNotPrepared	Use placeholders and $wpdb->prepare(); found interpolated variable $table at "SELECT * FROM $table WHERE enabled = 1"	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: mod.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+543	19	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $queue_select	Ver en editor de código (abre en una nueva pestaña)
+615	19	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $profile_tools_query	Ver en editor de código (abre en una nueva pestaña)
+625	31	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $disable_tools_query	Ver en editor de código (abre en una nueva pestaña)
+633	6	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $enable_tools_query	Ver en editor de código (abre en una nueva pestaña)
+642	31	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $deactivate_profiles_query	Ver en editor de código (abre en una nueva pestaña)
+662	46	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $system_query	Ver en editor de código (abre en una nueva pestaña)
+693	45	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $profile_query	Ver en editor de código (abre en una nueva pestaña)
+703	40	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $profile_name_check	Ver en editor de código (abre en una nueva pestaña)
+728	42	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $tools_query	Ver en editor de código (abre en una nueva pestaña)
+762	44	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $profile_query	Ver en editor de código (abre en una nueva pestaña)
+769	42	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $tools_query	Ver en editor de código (abre en una nueva pestaña)
+776	48	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $categories_query	Ver en editor de código (abre en una nueva pestaña)
+843	40	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $profile_name_check	Ver en editor de código (abre en una nueva pestaña)
+850	51	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $existing_tools_query	Ver en editor de código (abre en una nueva pestaña)
+911	47	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $system_ids_query	Ver en editor de código (abre en una nueva pestaña)
+915	32	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $delete_relations_query	Ver en editor de código (abre en una nueva pestaña)
+917	32	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $delete_profiles_query	Ver en editor de código (abre en una nueva pestaña)
+1276	51	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $active_profile_query	Ver en editor de código (abre en una nueva pestaña)
+1290	46	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $tools_query	Ver en editor de código (abre en una nueva pestaña)
+1292	62	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $token_sum_query	Ver en editor de código (abre en una nueva pestaña)
+1405	51	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $active_profile_query	Ver en editor de código (abre en una nueva pestaña)
+1409	46	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $wc_tools_query	Ver en editor de código (abre en una nueva pestaña)
+1411	62	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $wc_token_sum_query	Ver en editor de código (abre en una nueva pestaña)
+1538	49	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $profiles_query	Ver en editor de código (abre en una nueva pestaña)
+1541	48	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $total_tools_query	Ver en editor de código (abre en una nueva pestaña)
+1605	63	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $system_tools_query	Ver en editor de código (abre en una nueva pestaña)
+1673	63	ERROR	WordPress.DB.PreparedSQL.NotPrepared	Use placeholders and $wpdb->prepare(); found $custom_tools_query	Ver en editor de código (abre en una nueva pestaña)
+1960	31	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['tool_name']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+1960	31	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['tool_name'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+1961	31	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['tool_description']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+1961	31	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['tool_description'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+1962	33	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['method']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+1962	33	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['method'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+1963	27	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['endpoint']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+1963	27	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['endpoint'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+1967	52	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotSanitized	Detected usage of a non-sanitized input variable: $_POST['headers']	Ver en editor de código (abre en una nueva pestaña)
+1973	56	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotSanitized	Detected usage of a non-sanitized input variable: $_POST['arguments']	Ver en editor de código (abre en una nueva pestaña)
+2008	16	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['id']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+2049	27	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['endpoint']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+2049	27	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['endpoint'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+2050	33	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotValidated	Detected usage of a possibly undefined superglobal array index: $_POST['method']. Check that the array index exists before using it.	Ver en editor de código (abre en una nueva pestaña)
+2050	33	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['method'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+2051	56	WARNING	WordPress.Security.ValidatedSanitizedInput.InputNotSanitized	Detected usage of a non-sanitized input variable: $_POST['headers']	Ver en editor de código (abre en una nueva pestaña)
+2171	69	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['bulk_action'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+2172	63	WARNING	WordPress.Security.ValidatedSanitizedInput.MissingUnslash	$_POST['category'] not unslashed before sanitization. Use wp_unslash() or similar	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: stifli-flex-mcp.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+875	41	WARNING	WordPress.DB.PreparedSQLPlaceholders.UnquotedComplexPlaceholder	Complex placeholders used for values in the query string in $wpdb->prepare() will NOT be quoted automagically. Found: %1s.	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/model.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+255	24	WARNING	WordPress.DB.DirectDatabaseQuery.DirectQuery	Use of a direct database call is discouraged.	Ver en editor de código (abre en una nueva pestaña)
+255	24	WARNING	WordPress.DB.DirectDatabaseQuery.NoCaching	Direct database call without caching detected. Consider using wp_cache_get() / wp_cache_set() or wp_cache_delete().	Ver en editor de código (abre en una nueva pestaña)
+1160	13	WARNING	WordPress.DB.DirectDatabaseQuery.DirectQuery	Use of a direct database call is discouraged.	Ver en editor de código (abre en una nueva pestaña)
+1160	13	WARNING	WordPress.DB.DirectDatabaseQuery.NoCaching	Direct database call without caching detected. Consider using wp_cache_get() / wp_cache_set() or wp_cache_delete().	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: stifli-flex-mcp.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+236	17	WARNING	WordPress.DB.DirectDatabaseQuery.SchemaChange	Attempting a database schema change is discouraged.	Ver en editor de código (abre en una nueva pestaña)
+850	20	WARNING	WordPress.DB.DirectDatabaseQuery.SchemaChange	Attempting a database schema change is discouraged.	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: uninstall.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+26	9	WARNING	WordPress.DB.DirectDatabaseQuery.NoCaching	Direct database call without caching detected. Consider using wp_cache_get() / wp_cache_set() or wp_cache_delete().	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/woocommerce/wc-customers-coupons.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+15	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound	Classes declared by a theme/plugin should start with the theme/plugin prefix. Found: "StifliFlexMcp_WC_Customers".	Ver en editor de código (abre en una nueva pestaña)
+40	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound	Classes declared by a theme/plugin should start with the theme/plugin prefix. Found: "StifliFlexMcp_WC_Coupons".	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/woocommerce/wc-orders.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+11	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound	Classes declared by a theme/plugin should start with the theme/plugin prefix. Found: "StifliFlexMcp_WC_Orders".	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/woocommerce/wc-products.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+11	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound	Classes declared by a theme/plugin should start with the theme/plugin prefix. Found: "StifliFlexMcp_WC_Products".	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/woocommerce/wc-system.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+11	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound	Classes declared by a theme/plugin should start with the theme/plugin prefix. Found: "StifliFlexMcp_WC_System".	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/model.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+76	37	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound	Hook names invoked by a theme/plugin should start with the theme/plugin prefix. Found: "sflmcp_action_result".	Ver en editor de código (abre en una nueva pestaña)
+79	23	WARNING	WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound	Hook names invoked by a theme/plugin should start with the theme/plugin prefix. Found: "$action_name".	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: uninstall.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+15	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound	Global variables defined by a theme/plugin should start with the theme/plugin prefix. Found: "$wrap_table".	Ver en editor de código (abre en una nueva pestaña)
+20	1	WARNING	WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound	Global variables defined by a theme/plugin should start with the theme/plugin prefix. Found: "$drop_tables".	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/model.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+255	31	ERROR	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $tools_query used in $wpdb->get_results($wpdb->prepare($tools_query, 1))\n$tools_query assigned unsafely at line 251:\n $tools_query = StifliFlexMcpUtils::formatSqlWithTables(\r\n 'SELECT tool_name, token_estimate FROM %s WHERE enabled = %%d',\r\n 'sflmcp_tools'\r\n )	Ver en editor de código (abre en una nueva pestaña)
+16	23	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_row($wpdb->prepare("SELECT * FROM `$table` WHERE tool_name = %s AND enabled = 1", $toolName))\n$table assigned unsafely at line 13:\n $table = $wpdb->prefix . 'sflmcp_custom_tools'\n$row assigned unsafely at line 16:\n $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM `$table` WHERE tool_name = %s AND enabled = 1", $toolName))\n$toolName used without escaping.	Ver en editor de código (abre en una nueva pestaña)
+248	32	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table_exists_query used in $wpdb->get_var($wpdb->prepare($table_exists_query, $like))\n$table_exists_query assigned unsafely at line 246:\n $table_exists_query = 'SHOW TABLES LIKE %s'\n$table_exists assigned unsafely at line 248:\n $table_exists = $wpdb->get_var($wpdb->prepare($table_exists_query, $like)) === $table\n$like assigned unsafely at line 245:\n $like = $wpdb->esc_like($table)\n$table assigned unsafely at line 241:\n $table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools', false)	Ver en editor de código (abre en una nueva pestaña)
+1160	20	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_var("SHOW TABLES LIKE '$table'")\n$table assigned unsafely at line 1157:\n $table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools')	Ver en editor de código (abre en una nueva pestaña)
+1167	27	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_results("SELECT * FROM $table WHERE enabled = 1")\n$table assigned unsafely at line 1157:\n $table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools')	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: uninstall.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+26	10	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $drop_sql used in $wpdb->query($drop_sql)\n$drop_sql assigned unsafely at line 24:\n $drop_sql = sprintf('DROP TABLE IF EXISTS %s', $table_sql)\n$table_sql assigned unsafely at line 23:\n $table_sql = $wrap_table($table_name)\n$wrap_table used without escaping.\n$table_name assigned unsafely at line 22:\n $table_name = $wpdb->prefix . $table_suffix\n$table_suffix used without escaping.	Ver en editor de código (abre en una nueva pestaña)
+
+ARCHIVO: models/dispatcher.php
+Línea	Columna	Tipo	Código	Mensaje	Enlace para editarlo
+0	0	ERROR	missing_direct_file_access_protection	El archivo PHP debe impedir el acceso directo. Añade una comprobación como: if ( ! defined( “ABSPATH” ) ) exit;
+Saber más (abre en una nueva pestaña)	Ver en editor de código (abre en una nueva pestaña)

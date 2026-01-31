@@ -8,6 +8,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- StifliFlexMcp is the plugin prefix
 class StifliFlexMcp_WC_Orders {
     
     public static function getTools() {
@@ -57,14 +58,14 @@ class StifliFlexMcp_WC_Orders {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'             => array('type' => 'integer'),
+                        'order_id'       => array('type' => 'integer'),
                         'status'         => array('type' => 'string'),
                         'billing'        => array('type' => 'object'),
                         'shipping'       => array('type' => 'object'),
                         'line_items'     => array('type' => 'array'),
                         'payment_method' => array('type' => 'string'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('order_id'),
                 ),
             ),
             'wc_delete_order' => array(
@@ -73,23 +74,24 @@ class StifliFlexMcp_WC_Orders {
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'id'    => array('type' => 'integer'),
-                        'force' => array('type' => 'boolean'),
+                        'order_id' => array('type' => 'integer'),
+                        'force'    => array('type' => 'boolean'),
                     ),
-                    'required' => array('id'),
+                    'required' => array('order_id'),
                 ),
             ),
             'wc_batch_update_orders' => array(
                 'name' => 'wc_batch_update_orders',
-                'description' => 'Batch update multiple orders at once. Pass arrays: create, update, delete.',
+                'description' => 'Batch update multiple orders at once. Each item in updates array requires order_id and optional status, meta_data, etc.',
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
-                        'create' => array('type' => 'array'),
-                        'update' => array('type' => 'array'),
-                        'delete' => array('type' => 'array'),
+                        'updates' => array(
+                            'type' => 'array',
+                            'description' => 'Array of order updates. Each item: { order_id: int, status?: string, meta_data?: array }',
+                        ),
                     ),
-                    'required' => array(),
+                    'required' => array('updates'),
                 ),
             ),
             
@@ -641,6 +643,6 @@ class StifliFlexMcp_WC_Orders {
                 return true;
         }
         
-        return false;
+        return null; // Tool not handled by this module
     }
 }

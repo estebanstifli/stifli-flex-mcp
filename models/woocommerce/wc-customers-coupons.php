@@ -12,6 +12,7 @@ if (!defined('ABSPATH')) {
  * Creating/managing users is not allowed per plugin guidelines.
  * See: https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/
  */
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- StifliFlexMcp is the plugin prefix
 class StifliFlexMcp_WC_Customers {
     
     public static function getTools() {
@@ -25,7 +26,7 @@ class StifliFlexMcp_WC_Customers {
     
     public static function dispatch($tool, $args, &$r, $addResultText, $utils) {
         // All customer dispatch removed for WordPress.org compliance
-        return false;
+        return null; // Tool not handled by this module
     }
 }
 
@@ -37,6 +38,7 @@ class StifliFlexMcp_WC_Customers {
  * - wc_delete_customer
  */
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- StifliFlexMcp is the plugin prefix
 class StifliFlexMcp_WC_Coupons {
     
     public static function getTools() {
@@ -252,6 +254,6 @@ class StifliFlexMcp_WC_Coupons {
                 return true;
         }
         
-        return false;
+        return null; // Tool not handled by this module
     }
 }

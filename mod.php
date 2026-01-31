@@ -40,6 +40,15 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_toggle_logging', array($this, 'ajax_toggle_logging'));
 			add_action('wp_ajax_sflmcp_clear_logs', array($this, 'ajax_clear_logs'));
 			add_action('wp_ajax_sflmcp_refresh_logs', array($this, 'ajax_refresh_logs'));
+			// AJAX handlers for custom tools
+			add_action('wp_ajax_sflmcp_get_custom_tools', array($this, 'ajax_get_custom_tools'));
+			add_action('wp_ajax_sflmcp_save_custom_tool', array($this, 'ajax_save_custom_tool'));
+			add_action('wp_ajax_sflmcp_delete_custom_tool', array($this, 'ajax_delete_custom_tool'));
+			add_action('wp_ajax_sflmcp_test_custom_tool', array($this, 'ajax_test_custom_tool'));
+			add_action('wp_ajax_sflmcp_toggle_custom_tool', array($this, 'ajax_toggle_custom_tool'));
+			// AJAX handlers for WordPress/WooCommerce tools
+			add_action('wp_ajax_sflmcp_toggle_tool', array($this, 'ajax_toggle_tool'));
+			add_action('wp_ajax_sflmcp_bulk_toggle_tools', array($this, 'ajax_bulk_toggle_tools'));
 		}
 	}
 
@@ -530,6 +539,7 @@ class StifliFlexMcp {
 			'SELECT id, payload FROM %s WHERE session_id = %%s AND expires_at >= %%s ORDER BY id ASC',
 			'sflmcp_queue'
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query is prepared via formatSqlWithTables helper.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare($queue_select, $sessionKey, $now),
 			ARRAY_A
@@ -602,6 +612,7 @@ class StifliFlexMcp {
 			'SELECT tool_name FROM %s WHERE profile_id = %%d',
 			$profile_tools_table_sql
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$profile_tools = $wpdb->get_col(
 			$wpdb->prepare($profile_tools_query, $profile_id)
 		);
@@ -612,13 +623,14 @@ class StifliFlexMcp {
 		
 		// Disable all tools first
 		$disable_tools_query = sprintf('UPDATE %s SET enabled = %%d', $tools_table_sql);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk toggle requires direct UPDATE.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$wpdb->query($wpdb->prepare($disable_tools_query, 0));
 		
 		// Enable profile tools
 		if (!empty($profile_tools)) {
 			$placeholders = implode(',', array_fill(0, count($profile_tools), '%s'));
 			$enable_tools_query = 'UPDATE ' . $tools_table_sql . ' SET enabled = 1 WHERE tool_name IN (' . $placeholders . ')';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses dynamic placeholders with prepare.
 			$wpdb->query(
 				$wpdb->prepare(
 					$enable_tools_query,
@@ -629,7 +641,7 @@ class StifliFlexMcp {
 		
 		// Mark profile as active
 		$deactivate_profiles_query = sprintf('UPDATE %s SET is_active = %%d', $profiles_table_sql);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk toggle requires direct UPDATE.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$wpdb->query($wpdb->prepare($deactivate_profiles_query, 0));
 		$wpdb->update($profiles_table, array('is_active' => 1), array('id' => $profile_id), array('%d'), array('%d'));
 		
@@ -650,6 +662,7 @@ class StifliFlexMcp {
 		
 		// Check if system profile
 		$system_query = sprintf('SELECT is_system FROM %s WHERE id = %%d', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$is_system = $wpdb->get_var($wpdb->prepare($system_query, $profile_id));
 		
 		if ($is_system === null) {
@@ -681,6 +694,7 @@ class StifliFlexMcp {
 		
 		// Get original profile
 		$profile_query = sprintf('SELECT * FROM %s WHERE id = %%d', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$original = $wpdb->get_row($wpdb->prepare($profile_query, $profile_id), ARRAY_A);
 		
 		if (!$original) {
@@ -691,6 +705,7 @@ class StifliFlexMcp {
 		$new_name = 'Copia de ' . $original['profile_name'];
 		$counter = 1;
 		$profile_name_check = sprintf('SELECT id FROM %s WHERE profile_name = %%s', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		while ($wpdb->get_var($wpdb->prepare($profile_name_check, $new_name))) {
 			$counter++;
 			$new_name = 'Copia de ' . $original['profile_name'] . ' (' . $counter . ')';
@@ -716,6 +731,7 @@ class StifliFlexMcp {
 		
 		// Copy tools
 		$tools_query = sprintf('SELECT tool_name FROM %s WHERE profile_id = %%d', $profile_tools_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$tools = $wpdb->get_col($wpdb->prepare($tools_query, $profile_id));
 		
 		foreach ($tools as $tool_name) {
@@ -750,6 +766,7 @@ class StifliFlexMcp {
 		$tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($tools_table);
 		
 		$profile_query = sprintf('SELECT * FROM %s WHERE id = %%d', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$profile = $wpdb->get_row($wpdb->prepare($profile_query, $profile_id), ARRAY_A);
 		
 		if (!$profile) {
@@ -757,6 +774,7 @@ class StifliFlexMcp {
 		}
 		
 		$tools_query = sprintf('SELECT tool_name FROM %s WHERE profile_id = %%d ORDER BY tool_name', $profile_tools_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$tools = $wpdb->get_col($wpdb->prepare($tools_query, $profile_id));
 		
 		// Get categories
@@ -764,6 +782,7 @@ class StifliFlexMcp {
 		if (!empty($tools)) {
 			$placeholders = implode(',', array_fill(0, count($tools), '%s'));
 			$categories_query = 'SELECT DISTINCT category FROM ' . $tools_table_sql . ' WHERE tool_name IN (' . $placeholders . ') ORDER BY category';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses dynamic placeholders with prepare.
 			$categories = $wpdb->get_col($wpdb->prepare($categories_query, ...$tools));
 		}
 		
@@ -831,6 +850,7 @@ class StifliFlexMcp {
 		$counter = 1;
 		$original_name = $name;
 		$profile_name_check = sprintf('SELECT id FROM %s WHERE profile_name = %%s', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		while ($wpdb->get_var($wpdb->prepare($profile_name_check, $name))) {
 			$counter++;
 			$name = $original_name . ' (' . $counter . ')';
@@ -838,6 +858,7 @@ class StifliFlexMcp {
 		
 		// Validate tools exist
 		$existing_tools_query = sprintf('SELECT tool_name FROM %s WHERE 1 = %%d', $tools_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$existing_tools = $wpdb->get_col($wpdb->prepare($existing_tools_query, 1));
 		$valid_tools = array_intersect($tools, $existing_tools);
 		
@@ -899,12 +920,15 @@ class StifliFlexMcp {
 		
 		// Delete existing system profiles
 		$system_ids_query = sprintf('SELECT id FROM %s WHERE is_system = %%d', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$system_ids = $wpdb->get_col($wpdb->prepare($system_ids_query, 1));
 		if (!empty($system_ids)) {
 			$placeholders = implode(',', array_fill(0, count($system_ids), '%d'));
 			$delete_relations_query = 'DELETE FROM ' . $profile_tools_table_sql . ' WHERE profile_id IN (' . $placeholders . ')';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses dynamic placeholders with prepare.
 			$wpdb->query($wpdb->prepare($delete_relations_query, ...$system_ids));
 			$delete_profiles_query = sprintf('DELETE FROM %s WHERE is_system = %%d', $profiles_table_sql);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 			$wpdb->query($wpdb->prepare($delete_profiles_query, 1));
 		}
 		
@@ -965,6 +989,9 @@ class StifliFlexMcp {
 			return;
 		}
 
+		// Get active tab early for conditional loading
+		$active_tab = isset($_GET['tab']) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'settings'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
 		// Enqueue Settings tab JavaScript
 		wp_enqueue_script(
 			'sflmcp-admin-settings',
@@ -1008,6 +1035,55 @@ class StifliFlexMcp {
 			array(),
 			'1.0.4'
 		);
+
+		// Enqueue Custom Tools Assets
+		if ($active_tab === 'custom') {
+			wp_enqueue_style(
+				'sflmcp-admin-custom-tools',
+				plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.css',
+				array(),
+				'1.0.5'
+			);
+			wp_enqueue_script(
+				'sflmcp-admin-custom-tools',
+				plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.js',
+				array('jquery'),
+				'1.0.5',
+				true
+			);
+			wp_localize_script('sflmcp-admin-custom-tools', 'sflmcpCustom', array(
+				'ajaxUrl' => admin_url('admin-ajax.php'),
+				'nonce' => wp_create_nonce('sflmcp_custom_tools'),
+				'i18n' => array(
+					'confirmDelete' => __('Are you sure you want to delete this tool?', 'stifli-flex-mcp'),
+					'errorSaving' => __('Error saving tool', 'stifli-flex-mcp'),
+					'saved' => __('Tool saved successfully', 'stifli-flex-mcp'),
+					'testing' => __('Testing...', 'stifli-flex-mcp'),
+					'success' => __('Success', 'stifli-flex-mcp'),
+					'failed' => __('Failed', 'stifli-flex-mcp'),
+				),
+			));
+		}
+
+		// Enqueue Tools tab JavaScript (WordPress and WooCommerce tools)
+		if ($active_tab === 'tools' || $active_tab === 'wc_tools') {
+			wp_enqueue_script(
+				'sflmcp-admin-tools',
+				plugin_dir_url(__FILE__) . 'assets/admin-tools.js',
+				array('jquery'),
+				'1.0.5',
+				true
+			);
+			wp_localize_script('sflmcp-admin-tools', 'sflmcpTools', array(
+				'ajaxUrl' => admin_url('admin-ajax.php'),
+				'nonce' => wp_create_nonce('sflmcp_tools'),
+				'i18n' => array(
+					'enabled' => __('Enabled', 'stifli-flex-mcp'),
+					'disabled' => __('Disabled', 'stifli-flex-mcp'),
+					'error' => __('Error updating tool', 'stifli-flex-mcp'),
+				),
+			));
+		}
 
 		// Enqueue Logs tab JavaScript
 		wp_enqueue_script(
@@ -1062,8 +1138,14 @@ class StifliFlexMcp {
 				<a href="?page=stifli-flex-mcp&tab=wc_tools" class="nav-tab <?php echo $active_tab === 'wc_tools' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('WooCommerce Tools', 'stifli-flex-mcp'); ?>
 				</a>
+				<a href="?page=stifli-flex-mcp&tab=custom" class="nav-tab <?php echo $active_tab === 'custom' ? 'nav-tab-active' : ''; ?>">
+					<?php echo esc_html__('Custom Tools', 'stifli-flex-mcp'); ?>
+				</a>
 				<a href="?page=stifli-flex-mcp&tab=logs" class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Logs', 'stifli-flex-mcp'); ?>
+				</a>
+				<a href="?page=stifli-flex-mcp&tab=help" class="nav-tab <?php echo $active_tab === 'help' ? 'nav-tab-active' : ''; ?>">
+					<?php echo esc_html__('📚 Help', 'stifli-flex-mcp'); ?>
 				</a>
 			</h2>
 			
@@ -1076,8 +1158,12 @@ class StifliFlexMcp {
 				$this->renderToolsTab();
 			} elseif ($active_tab === 'wc_tools') {
 				$this->renderWCToolsTab();
+			} elseif ($active_tab === 'custom') {
+				$this->renderCustomToolsTab();
 			} elseif ($active_tab === 'logs') {
 				$this->renderLogsTab();
+			} elseif ($active_tab === 'help') {
+				$this->renderHelpTab();
 			}
 			?>
 		</div>
@@ -1197,13 +1283,12 @@ class StifliFlexMcp {
 		global $wpdb;
 		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools', false);
 		$profiles_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_profiles', false);
-		$profile_tools_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_profile_tools', false);
 		$table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($table);
 		$profiles_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($profiles_table);
-		$profile_tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($profile_tools_table);
 		
 		// Check if there's an active profile
 		$active_profile_query = sprintf('SELECT * FROM %s WHERE is_active = %%d', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$active_profile = $wpdb->get_row($wpdb->prepare($active_profile_query, 1), ARRAY_A);
 		
 		// Handle re-seeding
@@ -1216,54 +1301,12 @@ class StifliFlexMcp {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools reset and reseeded successfully.', 'stifli-flex-mcp') . '</p></div>';
 		}
 		
-		// Handle tool enable/disable
-		$tools_nonce = isset($_POST['sflmcp_tools_nonce']) ? sanitize_text_field( wp_unslash( $_POST['sflmcp_tools_nonce'] ) ) : '';
-		if (!empty($tools_nonce) && wp_verify_nonce($tools_nonce, 'sflmcp_update_tools')) {
-			$tool_enabled = StifliFlexMcpUtils::sanitizeCheckboxMap(
-				isset($_POST['tool_enabled']) && is_array($_POST['tool_enabled'])
-					? map_deep( wp_unslash( $_POST['tool_enabled'] ), 'sanitize_text_field' )
-					: array()
-			);
-			if (!empty($tool_enabled)) {
-				foreach ($tool_enabled as $tool_id => $enabled) {
-					$wpdb->update(
-						$table,
-						array('enabled' => $enabled, 'updated_at' => current_time('mysql', true)),
-						array('id' => $tool_id),
-						array('%d', '%s'),
-						array('%d')
-					);
-				}
-				// Save current tools state to active profile
-				if ($active_profile) {
-					// Delete existing profile tools
-					$wpdb->delete($profile_tools_table, array('profile_id' => $active_profile['id']), array('%d'));
-					
-					// Get all currently enabled tools (WordPress + WooCommerce)
-					$enabled_tools_query = sprintf('SELECT tool_name FROM %s WHERE enabled = %%d', $table_sql);
-					$enabled_tools = $wpdb->get_col($wpdb->prepare($enabled_tools_query, 1));
-					
-					// Insert enabled tools into profile
-					if (!empty($enabled_tools)) {
-						foreach ($enabled_tools as $tool_name) {
-							$wpdb->insert(
-								$profile_tools_table,
-								array('profile_id' => $active_profile['id'], 'tool_name' => $tool_name),
-								array('%d', '%s')
-							);
-						}
-					}
-					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools updated and saved to active profile.', 'stifli-flex-mcp') . '</p></div>';
-				} else {
-					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools updated successfully.', 'stifli-flex-mcp') . '</p></div>';
-				}
-			}
-		}
-		
 		// Get all tools grouped by category (ONLY WordPress, excluding WooCommerce)
 		$tools_query = sprintf('SELECT * FROM %s WHERE category NOT LIKE %%s ORDER BY category, tool_name', $table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$tools = $wpdb->get_results($wpdb->prepare($tools_query, 'WooCommerce%'), ARRAY_A);
 		$token_sum_query = sprintf('SELECT COALESCE(SUM(token_estimate),0) FROM %s WHERE category NOT LIKE %%s AND enabled = %%d', $table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$enabled_token_total = (int) $wpdb->get_var($wpdb->prepare($token_sum_query, 'WooCommerce%', 1));
 		
 		$grouped_tools = array();
@@ -1276,8 +1319,18 @@ class StifliFlexMcp {
 		}
 		
 		?>
-		<p><?php echo esc_html__('Here you can manage which tools are available on the MCP server. Disabled tools will not appear in tools/list.', 'stifli-flex-mcp'); ?></p>
-		<p><strong><?php echo esc_html__('Total estimated tokens for enabled WordPress tools:', 'stifli-flex-mcp'); ?></strong> <?php echo esc_html(number_format_i18n($enabled_token_total)); ?></p>
+		<style>
+			.sflmcp-tool-toggle { cursor: pointer; min-width: 100px; }
+			.sflmcp-tool-toggle.status-enabled { color: #46b450; border-color: #46b450; }
+			.sflmcp-tool-toggle.status-disabled { color: #999; }
+			.sflmcp-tool-toggle.updating { opacity: 0.5; cursor: wait; }
+			.sflmcp-tool-toggle .dashicons { vertical-align: middle; margin-right: 3px; }
+			.sflmcp-bulk-actions { margin-bottom: 10px; }
+			.sflmcp-bulk-actions .button { margin-right: 5px; }
+		</style>
+		
+		<p><?php echo esc_html__('Here you can manage which tools are available on the MCP server. Click on the status button to toggle. Changes are saved automatically.', 'stifli-flex-mcp'); ?></p>
+		<p><strong><?php echo esc_html__('Total estimated tokens for enabled WordPress tools:', 'stifli-flex-mcp'); ?></strong> <span class="sflmcp-total-tokens"><?php echo esc_html(number_format_i18n($enabled_token_total)); ?></span></p>
 		<p class="description"><?php echo esc_html__('Token estimates are approximate (computed from tool name, description, and schema). Use them to compare profiles rather than as an exact billing value.', 'stifli-flex-mcp'); ?></p>
 		
 		<?php if ($active_profile): ?>
@@ -1312,13 +1365,14 @@ class StifliFlexMcp {
 					<span class="description"><?php echo esc_html__('Useful if you\'ve updated the plugin and new tools are available.', 'stifli-flex-mcp'); ?></span>
 				</p>
 			</form>
-		
-		<form method="post" action="">
-			<?php wp_nonce_field('sflmcp_update_tools', 'sflmcp_tools_nonce'); ?>
 			
 			<?php foreach ($grouped_tools as $category => $category_tools): ?>
 				<?php $category_token_total = 0; foreach ($category_tools as $tool_meta) { $category_token_total += intval($tool_meta['token_estimate']); } ?>
 				<h2><?php echo esc_html($category); ?> <small style="font-weight: normal;">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
+				<div class="sflmcp-bulk-actions">
+					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="enable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Enable All', 'stifli-flex-mcp'); ?></button>
+					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="disable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Disable All', 'stifli-flex-mcp'); ?></button>
+				</div>
 				<table class="wp-list-table widefat fixed striped">
 					<thead>
 						<tr>
@@ -1329,17 +1383,23 @@ class StifliFlexMcp {
 						</tr>
 					</thead>
 					<tbody>
-						<?php foreach ($category_tools as $tool): ?>
+						<?php foreach ($category_tools as $tool): 
+							$is_enabled = intval($tool['enabled']) === 1;
+							$status_class = $is_enabled ? 'status-enabled' : 'status-disabled';
+							$status_icon = $is_enabled ? 'dashicons-yes' : 'dashicons-no';
+							$status_text = $is_enabled ? __('Enabled', 'stifli-flex-mcp') : __('Disabled', 'stifli-flex-mcp');
+						?>
 							<tr>
 								<td><code><?php echo esc_html($tool['tool_name']); ?></code></td>
 								<td><?php echo esc_html($tool['tool_description']); ?></td>
 								<td><?php echo esc_html(number_format_i18n(intval($tool['token_estimate']))); ?></td>
 								<td>
-									<label>
-										<input type="hidden" name="tool_enabled[<?php echo intval($tool['id']); ?>]" value="0" />
-										<input type="checkbox" name="tool_enabled[<?php echo intval($tool['id']); ?>]" value="1" <?php checked(intval($tool['enabled']), 1); ?> />
-										<?php echo esc_html__('Enabled', 'stifli-flex-mcp'); ?>
-									</label>
+									<button type="button" class="button button-small sflmcp-tool-toggle <?php echo esc_attr($status_class); ?>" 
+										data-id="<?php echo intval($tool['id']); ?>" 
+										data-enabled="<?php echo $is_enabled ? '1' : '0'; ?>">
+										<span class="dashicons <?php echo esc_attr($status_icon); ?>"></span>
+										<span class="status-text"><?php echo esc_html($status_text); ?></span>
+									</button>
 								</td>
 							</tr>
 						<?php endforeach; ?>
@@ -1347,9 +1407,6 @@ class StifliFlexMcp {
 				</table>
 				<br/>
 			<?php endforeach; ?>
-			
-			<?php submit_button(__('Save Changes', 'stifli-flex-mcp')); ?>
-		</form>
 		<?php endif; ?>
 		<?php
 	}
@@ -1358,73 +1415,20 @@ class StifliFlexMcp {
 		global $wpdb;
 		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools', false);
 		$profiles_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_profiles', false);
-		$profile_tools_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_profile_tools', false);
 		$table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($table);
 		$profiles_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($profiles_table);
-		$profile_tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery($profile_tools_table);
 		
 		// Check if there's an active profile
 		$active_profile_query = sprintf('SELECT * FROM %s WHERE is_active = %%d', $profiles_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$active_profile = $wpdb->get_row($wpdb->prepare($active_profile_query, 1), ARRAY_A);
-		
-		// Handle re-seeding
-		$reseed_nonce = isset($_POST['sflmcp_reseed_nonce']) ? sanitize_text_field( wp_unslash( $_POST['sflmcp_reseed_nonce'] ) ) : '';
-		if (!empty($reseed_nonce) && wp_verify_nonce($reseed_nonce, 'sflmcp_reseed_tools')) {
-			$truncate_query = sprintf('TRUNCATE TABLE %s', $table_sql);
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared -- admin action intentionally resets plugin-managed table.
-			$wpdb->query($truncate_query);
-			stifli_flex_mcp_seed_initial_tools();
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools reset and reseeded successfully.', 'stifli-flex-mcp') . '</p></div>';
-		}
-		
-		// Handle tool enable/disable
-		$tools_nonce = isset($_POST['sflmcp_tools_nonce']) ? sanitize_text_field( wp_unslash( $_POST['sflmcp_tools_nonce'] ) ) : '';
-		if (!empty($tools_nonce) && wp_verify_nonce($tools_nonce, 'sflmcp_update_tools')) {
-			$tool_enabled = StifliFlexMcpUtils::sanitizeCheckboxMap(
-				isset($_POST['tool_enabled']) && is_array($_POST['tool_enabled'])
-					? map_deep( wp_unslash( $_POST['tool_enabled'] ), 'sanitize_text_field' )
-					: array()
-			);
-			if (!empty($tool_enabled)) {
-				foreach ($tool_enabled as $tool_id => $enabled) {
-					$wpdb->update(
-						$table,
-						array('enabled' => $enabled, 'updated_at' => current_time('mysql', true)),
-						array('id' => $tool_id),
-						array('%d', '%s'),
-						array('%d')
-					);
-				}
-				// Save current tools state to active profile
-				if ($active_profile) {
-					// Delete existing profile tools
-					$wpdb->delete($profile_tools_table, array('profile_id' => $active_profile['id']), array('%d'));
-					
-					// Get all currently enabled tools (WordPress + WooCommerce)
-					$enabled_tools_query = sprintf('SELECT tool_name FROM %s WHERE enabled = %%d', $table_sql);
-					$enabled_tools = $wpdb->get_col($wpdb->prepare($enabled_tools_query, 1));
-					
-					// Insert enabled tools into profile
-					if (!empty($enabled_tools)) {
-						foreach ($enabled_tools as $tool_name) {
-							$wpdb->insert(
-								$profile_tools_table,
-								array('profile_id' => $active_profile['id'], 'tool_name' => $tool_name),
-								array('%d', '%s')
-							);
-						}
-					}
-					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools updated and saved to active profile.', 'stifli-flex-mcp') . '</p></div>';
-				} else {
-					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools updated successfully.', 'stifli-flex-mcp') . '</p></div>';
-				}
-			}
-		}
 		
 		// Get all WooCommerce tools grouped by category
 		$wc_tools_query = sprintf("SELECT * FROM %s WHERE category LIKE %%s ORDER BY category, tool_name", $table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$tools = $wpdb->get_results($wpdb->prepare($wc_tools_query, 'WooCommerce%'), ARRAY_A);
 		$wc_token_sum_query = sprintf("SELECT COALESCE(SUM(token_estimate),0) FROM %s WHERE category LIKE %%s AND enabled = %%d", $table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$enabled_token_total = (int) $wpdb->get_var($wpdb->prepare($wc_token_sum_query, 'WooCommerce%', 1));
 		
 		$grouped_tools = array();
@@ -1437,8 +1441,18 @@ class StifliFlexMcp {
 		}
 		
 		?>
-		<p><?php echo esc_html__('Here you can manage which WooCommerce tools are available on the MCP server. Disabled tools will not appear in tools/list.', 'stifli-flex-mcp'); ?></p>
-		<p><strong><?php echo esc_html__('Total estimated tokens for enabled WooCommerce tools:', 'stifli-flex-mcp'); ?></strong> <?php echo esc_html(number_format_i18n($enabled_token_total)); ?></p>
+		<style>
+			.sflmcp-tool-toggle { cursor: pointer; min-width: 100px; }
+			.sflmcp-tool-toggle.status-enabled { color: #46b450; border-color: #46b450; }
+			.sflmcp-tool-toggle.status-disabled { color: #999; }
+			.sflmcp-tool-toggle.updating { opacity: 0.5; cursor: wait; }
+			.sflmcp-tool-toggle .dashicons { vertical-align: middle; margin-right: 3px; }
+			.sflmcp-bulk-actions { margin-bottom: 10px; }
+			.sflmcp-bulk-actions .button { margin-right: 5px; }
+		</style>
+		
+		<p><?php echo esc_html__('Here you can manage which WooCommerce tools are available on the MCP server. Click on the status button to toggle. Changes are saved automatically.', 'stifli-flex-mcp'); ?></p>
+		<p><strong><?php echo esc_html__('Total estimated tokens for enabled WooCommerce tools:', 'stifli-flex-mcp'); ?></strong> <span class="sflmcp-total-tokens"><?php echo esc_html(number_format_i18n($enabled_token_total)); ?></span></p>
 		<p class="description"><?php echo esc_html__('Token estimates are approximate (computed from tool name, description, and schema). Use them to compare profiles rather than as an exact billing value.', 'stifli-flex-mcp'); ?></p>
 		
 		<?php if ($active_profile): ?>
@@ -1452,35 +1466,36 @@ class StifliFlexMcp {
 						<?php echo esc_html__('View Profiles', 'stifli-flex-mcp'); ?>
 					</a>
 				</p>
-		</div>
-	<?php endif; ?>
-	
-	<?php 
-	// Check if WooCommerce is installed and active
-	$wc_installed = class_exists('WooCommerce');
-	?>
-	
-	<?php if (!$wc_installed): ?>
-		<div class="notice notice-warning">
-			<p>
-				<strong>⚠️ <?php echo esc_html__('WooCommerce is not installed or activated', 'stifli-flex-mcp'); ?></strong><br>
-				<?php echo esc_html__('WooCommerce tools are available to configure, but will not work until you install and activate the WooCommerce plugin.', 'stifli-flex-mcp'); ?>
-				<?php echo esc_html__('You can enable/disable them now and they will be ready when WooCommerce is active.', 'stifli-flex-mcp'); ?>
-			</p>
-		</div>
-	<?php endif; ?>
-	
-	<?php if (empty($grouped_tools)): ?>
-		<div class="notice notice-info">
-			<p><?php echo esc_html__('No WooCommerce tools found in the database. Use the "Reset and Reseed" button in the WordPress tab to load them.', 'stifli-flex-mcp'); ?></p>
-		</div>
-	<?php else: ?>
-		<form method="post" action="">
-			<?php wp_nonce_field('sflmcp_update_tools', 'sflmcp_tools_nonce'); ?>
-			
+			</div>
+		<?php endif; ?>
+		
+		<?php 
+		// Check if WooCommerce is installed and active
+		$wc_installed = class_exists('WooCommerce');
+		?>
+		
+		<?php if (!$wc_installed): ?>
+			<div class="notice notice-warning">
+				<p>
+					<strong>⚠️ <?php echo esc_html__('WooCommerce is not installed or activated', 'stifli-flex-mcp'); ?></strong><br>
+					<?php echo esc_html__('WooCommerce tools are available to configure, but will not work until you install and activate the WooCommerce plugin.', 'stifli-flex-mcp'); ?>
+					<?php echo esc_html__('You can enable/disable them now and they will be ready when WooCommerce is active.', 'stifli-flex-mcp'); ?>
+				</p>
+			</div>
+		<?php endif; ?>
+		
+		<?php if (empty($grouped_tools)): ?>
+			<div class="notice notice-info">
+				<p><?php echo esc_html__('No WooCommerce tools found in the database. Use the "Reset and Reseed" button in the WordPress tab to load them.', 'stifli-flex-mcp'); ?></p>
+			</div>
+		<?php else: ?>
 			<?php foreach ($grouped_tools as $category => $category_tools): ?>
 				<?php $category_token_total = 0; foreach ($category_tools as $tool_meta) { $category_token_total += intval($tool_meta['token_estimate']); } ?>
 				<h2><?php echo esc_html($category); ?> <small style="font-weight: normal;">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
+				<div class="sflmcp-bulk-actions">
+					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="enable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Enable All', 'stifli-flex-mcp'); ?></button>
+					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="disable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Disable All', 'stifli-flex-mcp'); ?></button>
+				</div>
 				<table class="wp-list-table widefat fixed striped">
 					<thead>
 						<tr>
@@ -1491,17 +1506,23 @@ class StifliFlexMcp {
 						</tr>
 					</thead>
 					<tbody>
-						<?php foreach ($category_tools as $tool): ?>
+						<?php foreach ($category_tools as $tool): 
+							$is_enabled = intval($tool['enabled']) === 1;
+							$status_class = $is_enabled ? 'status-enabled' : 'status-disabled';
+							$status_icon = $is_enabled ? 'dashicons-yes' : 'dashicons-no';
+							$status_text = $is_enabled ? __('Enabled', 'stifli-flex-mcp') : __('Disabled', 'stifli-flex-mcp');
+						?>
 							<tr>
 								<td><code><?php echo esc_html($tool['tool_name']); ?></code></td>
 								<td><?php echo esc_html($tool['tool_description']); ?></td>
 								<td><?php echo esc_html(number_format_i18n(intval($tool['token_estimate']))); ?></td>
 								<td>
-									<label>
-										<input type="hidden" name="tool_enabled[<?php echo intval($tool['id']); ?>]" value="0" />
-										<input type="checkbox" name="tool_enabled[<?php echo intval($tool['id']); ?>]" value="1" <?php checked(intval($tool['enabled']), 1); ?> />
-										<?php echo esc_html__('Enabled', 'stifli-flex-mcp'); ?>
-									</label>
+									<button type="button" class="button button-small sflmcp-tool-toggle <?php echo esc_attr($status_class); ?>" 
+										data-id="<?php echo intval($tool['id']); ?>" 
+										data-enabled="<?php echo $is_enabled ? '1' : '0'; ?>">
+										<span class="dashicons <?php echo esc_attr($status_icon); ?>"></span>
+										<span class="status-text"><?php echo esc_html($status_text); ?></span>
+									</button>
 								</td>
 							</tr>
 						<?php endforeach; ?>
@@ -1509,9 +1530,6 @@ class StifliFlexMcp {
 				</table>
 				<br/>
 			<?php endforeach; ?>
-			
-			<?php submit_button(__('Save Changes', 'stifli-flex-mcp')); ?>
-		</form>
 		<?php endif; ?>
 		<?php
 	}
@@ -1538,9 +1556,11 @@ class StifliFlexMcp {
 			$profile_tools_table_sql,
 			$tools_table_sql
 		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$profiles = $wpdb->get_results($wpdb->prepare($profiles_query, 1), ARRAY_A);
 
 		$total_tools_query = sprintf('SELECT COUNT(*) FROM %s WHERE 1 = %%d', $tools_table_sql);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$total_tools = $wpdb->get_var($wpdb->prepare($total_tools_query, 1));
 		
 		?>
@@ -1605,6 +1625,7 @@ class StifliFlexMcp {
 							$profile_tools_table_sql,
 							$tools_table_sql
 						);
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 						$profile_tools_rows = $wpdb->get_results($wpdb->prepare($system_tools_query, $profile['id']), ARRAY_A);
 						$profile_tools_list = array();
 						if (!empty($profile_tools_rows)) {
@@ -1673,6 +1694,7 @@ class StifliFlexMcp {
 							$profile_tools_table_sql,
 							$tools_table_sql
 						);
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 						$profile_tools_rows = $wpdb->get_results($wpdb->prepare($custom_tools_query, $profile['id']), ARRAY_A);
 						$profile_tools_list = array();
 						if (!empty($profile_tools_rows)) {
@@ -1800,6 +1822,461 @@ class StifliFlexMcp {
 	}
 
 	/**
+	 * Render Custom Tools Tab
+	 */
+	private function renderCustomToolsTab() {
+		?>
+		<h2><?php echo esc_html__('🔌 Custom Tools (Webhooks & Actions)', 'stifli-flex-mcp'); ?></h2>
+		<p>
+			<?php echo esc_html__('Create custom tools that connect to external services, call any WordPress/plugin action hook, or integrate with APIs. The AI will invoke these tools just like native functions.', 'stifli-flex-mcp'); ?>
+			<a href="?page=stifli-flex-mcp&tab=help" class="button button-link">
+				📚 <?php echo esc_html__('View Complete Guide', 'stifli-flex-mcp'); ?>
+			</a>
+		</p>
+		
+		<div class="sflmcp-custom-tools-container">
+			<!-- Tools List -->
+			<div class="sflmcp-tools-list-panel">
+				<div class="sflmcp-header-actions">
+					<h3><?php echo esc_html__('Your Custom Tools', 'stifli-flex-mcp'); ?></h3>
+					<button type="button" class="button button-primary" id="sflmcp_add_custom_tool">
+						<?php echo esc_html__('➕ Add New Tool', 'stifli-flex-mcp'); ?>
+					</button>
+				</div>
+				
+				<table class="wp-list-table widefat fixed striped" id="sflmcp_custom_tools_table">
+					<thead>
+						<tr>
+							<th width="20%"><?php echo esc_html__('Name', 'stifli-flex-mcp'); ?></th>
+							<th width="35%"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
+							<th width="10%"><?php echo esc_html__('Method', 'stifli-flex-mcp'); ?></th>
+							<th width="10%"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
+							<th width="25%"><?php echo esc_html__('Actions', 'stifli-flex-mcp'); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<!-- Rows loaded via AJAX -->
+						<tr class="sflmcp-loading-row">
+							<td colspan="5"><?php echo esc_html__('Loading tools...', 'stifli-flex-mcp'); ?></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			
+			<!-- Editor Modal (Hidden) -->
+			<div id="sflmcp_tool_editor_modal" class="sflmcp-modal" style="display:none;">
+				<div class="sflmcp-modal-content">
+					<div class="sflmcp-modal-header">
+						<h2 id="sflmcp_editor_title"><?php echo esc_html__('Edit Tool', 'stifli-flex-mcp'); ?></h2>
+						<span class="sflmcp-modal-close">&times;</span>
+					</div>
+					<div class="sflmcp-modal-body">
+						<form id="sflmcp_tool_form">
+							<input type="hidden" id="tool_id" name="id" value="">
+							
+							<div class="sflmcp-form-row">
+								<label><?php echo esc_html__('Internal Name (Unique)', 'stifli-flex-mcp'); ?></label>
+								<input type="text" id="tool_name" name="tool_name" required placeholder="custom_create_ticket">
+								<p class="description"><?php echo esc_html__('Must start with "custom_". Only lowercase letters, numbers, and underscores.', 'stifli-flex-mcp'); ?></p>
+							</div>
+							
+							<div class="sflmcp-form-row">
+								<label><?php echo esc_html__('Description (Instruction for AI)', 'stifli-flex-mcp'); ?></label>
+								<textarea id="tool_description" name="tool_description" rows="2" required placeholder="Creates a support ticket in Jira with title and priority."></textarea>
+							</div>
+							
+							<div class="sflmcp-form-group-inline">
+								<div class="sflmcp-form-row">
+									<label><?php echo esc_html__('Type', 'stifli-flex-mcp'); ?></label>
+									<select id="tool_method" name="method">
+										<option value="GET">GET (HTTP)</option>
+										<option value="POST">POST (HTTP)</option>
+										<option value="PUT">PUT (HTTP)</option>
+										<option value="DELETE">DELETE (HTTP)</option>
+										<option value="ACTION">ACTION (WordPress do_action)</option>
+									</select>
+									<p class="description"><?php echo esc_html__('HTTP calls external APIs. ACTION executes internal WordPress hooks.', 'stifli-flex-mcp'); ?></p>
+								</div>
+								<div class="sflmcp-form-row" style="flex-grow:2;">
+									<label id="endpoint_label"><?php echo esc_html__('Webhook URL / Endpoint', 'stifli-flex-mcp'); ?></label>
+									<input type="text" id="tool_endpoint" name="endpoint" required placeholder="https://hook.eu1.make.com/...">
+									<p class="description" id="endpoint_help"><?php echo esc_html__('For HTTP: full URL. For ACTION: any WordPress action hook name (e.g. flush_rewrite_rules, woocommerce_cancel_unpaid_orders)', 'stifli-flex-mcp'); ?></p>
+								</div>
+							</div>
+							
+							<!-- Interactive Schema Builder -->
+							<div class="sflmcp-form-row">
+								<label><?php echo esc_html__('Parameters (What does the AI ask for?)', 'stifli-flex-mcp'); ?></label>
+								<div id="sflmcp_args_builder">
+									<table class="widefat" id="sflmcp_args_table">
+										<thead>
+											<tr>
+												<th><?php echo esc_html__('Param Name', 'stifli-flex-mcp'); ?></th>
+												<th><?php echo esc_html__('Type', 'stifli-flex-mcp'); ?></th>
+												<th><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
+												<th><?php echo esc_html__('Required', 'stifli-flex-mcp'); ?></th>
+												<th width="50"></th>
+											</tr>
+										</thead>
+										<tbody><!-- JS populates this --></tbody>
+										<tfoot>
+											<tr>
+												<td colspan="5">
+													<button type="button" class="button button-small" id="sflmcp_add_arg_row"><?php echo esc_html__('+ Add Parameter', 'stifli-flex-mcp'); ?></button>
+												</td>
+											</tr>
+										</tfoot>
+									</table>
+								</div>
+							</div>
+							
+							<div class="sflmcp-advanced-toggle">
+								<a href="#" id="sflmcp_toggle_advanced"><?php echo esc_html__('Advanced Settings (Headers)', 'stifli-flex-mcp'); ?></a>
+							</div>
+							
+							<div id="sflmcp_advanced_settings" style="display:none;">
+								<div class="sflmcp-form-row">
+									<label><?php echo esc_html__('HTTP Headers (JSON)', 'stifli-flex-mcp'); ?></label>
+									<textarea id="tool_headers" name="headers" rows="3" placeholder='{"Authorization": "Bearer token"}'></textarea>
+								</div>
+							</div>
+
+							<div class="sflmcp-form-row">
+								<label>
+									<input type="checkbox" id="tool_enabled" name="enabled" value="1" checked>
+									<?php echo esc_html__('Enable this tool', 'stifli-flex-mcp'); ?>
+								</label>
+							</div>
+						</form>
+					</div>
+					<div class="sflmcp-modal-footer">
+						<button type="button" class="button button-secondary" id="sflmcp_test_tool"><?php echo esc_html__('Test Connection', 'stifli-flex-mcp'); ?></button>
+						<div style="flex-grow:1;"></div>
+						<button type="button" class="button button-primary" id="sflmcp_save_tool"><?php echo esc_html__('Save Tool', 'stifli-flex-mcp'); ?></button>
+					</div>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	// AJAX Handlers for Custom Tools
+
+	public function ajax_get_custom_tools() {
+		check_ajax_referer('sflmcp_custom_tools', 'nonce');
+		if (!current_user_can('manage_options')) wp_send_json_error();
+		
+		global $wpdb;
+		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools');
+		// phpcs:ignore
+		$tools = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC");
+		
+		wp_send_json_success($tools);
+	}
+
+	public function ajax_save_custom_tool() {
+		check_ajax_referer('sflmcp_custom_tools', 'nonce');
+		if (!current_user_can('manage_options')) wp_send_json_error();
+		
+		global $wpdb;
+		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools');
+		
+		$id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+		$name = isset($_POST['tool_name']) ? sanitize_text_field( wp_unslash( $_POST['tool_name'] ) ) : '';
+		$desc = isset($_POST['tool_description']) ? sanitize_text_field( wp_unslash( $_POST['tool_description'] ) ) : '';
+		$method = isset($_POST['method']) ? sanitize_text_field( wp_unslash( $_POST['method'] ) ) : 'GET';
+		$endpoint = isset($_POST['endpoint']) ? esc_url_raw( wp_unslash( $_POST['endpoint'] ) ) : '';
+		$enabled = isset($_POST['enabled']) ? 1 : 0;
+		
+		// Handle headers JSON
+		$headers = isset($_POST['headers']) ? sanitize_textarea_field( wp_unslash( $_POST['headers'] ) ) : '';
+		if (!empty($headers) && null === json_decode($headers)) {
+			wp_send_json_error(array('message' => 'Invalid JSON in headers'));
+		}
+
+		// Handle Arguments Builder -> JSON Schema
+		$args_json = isset($_POST['arguments']) ? sanitize_textarea_field( wp_unslash( $_POST['arguments'] ) ) : '{}';
+		// Validate that it's valid JSON
+		if (null === json_decode($args_json)) {
+			wp_send_json_error(array('message' => 'Invalid JSON in arguments'));
+		}
+		
+		$data = array(
+			'tool_name' => $name,
+			'tool_description' => $desc,
+			'method' => $method,
+			'endpoint' => $endpoint,
+			'headers' => $headers,
+			'arguments' => $args_json,
+			'enabled' => $enabled
+		);
+		
+		if ($id > 0) {
+			$wpdb->update($table, $data, array('id' => $id));
+		} else {
+			// Ensure unique name
+			if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $table WHERE tool_name = %s", $name))) {
+				wp_send_json_error(array('message' => 'Tool name already exists'));
+			}
+			$wpdb->insert($table, $data);
+		}
+		
+		wp_send_json_success();
+	}
+
+	public function ajax_delete_custom_tool() {
+		check_ajax_referer('sflmcp_custom_tools', 'nonce');
+		if (!current_user_can('manage_options')) wp_send_json_error();
+		
+		global $wpdb;
+		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools');
+		$id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+		
+		if (!$id) {
+			wp_send_json_error(array('message' => __('Invalid tool ID', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$wpdb->delete($table, array('id' => $id));
+		wp_send_json_success();
+	}
+
+	public function ajax_toggle_custom_tool() {
+		check_ajax_referer('sflmcp_custom_tools', 'nonce');
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_custom_tools';
+		$id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+		
+		if (!$id) {
+			wp_send_json_error(array('message' => __('Invalid tool ID', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		// Get current status
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Plugin-managed table with parameterized query.
+		$current = $wpdb->get_var($wpdb->prepare("SELECT enabled FROM $table WHERE id = %d", $id));
+		if ($current === null) {
+			wp_send_json_error(array('message' => __('Tool not found', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$new_status = ($current == 1) ? 0 : 1;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->update($table, array('enabled' => $new_status), array('id' => $id));
+		
+		wp_send_json_success(array('enabled' => $new_status));
+	}
+
+	public function ajax_test_custom_tool() {
+		check_ajax_referer('sflmcp_custom_tools', 'nonce');
+		if (!current_user_can('manage_options')) wp_send_json_error();
+		
+		$endpoint = isset($_POST['endpoint']) ? esc_url_raw( wp_unslash( $_POST['endpoint'] ) ) : '';
+		$method = isset($_POST['method']) ? sanitize_text_field( wp_unslash( $_POST['method'] ) ) : 'GET';
+		$headers_raw = isset($_POST['headers']) ? sanitize_textarea_field( wp_unslash( $_POST['headers'] ) ) : '';
+		$test_args = array(
+			'test' => true,
+			'timestamp' => time(),
+			'source' => 'StifLi Flex MCP Test'
+		);
+		
+		$args = array(
+			'method' => $method,
+			'timeout' => 15,
+			'user-agent' => 'StifLi-Flex-MCP/Tester'
+		);
+		
+		if (!empty($headers_raw)) {
+			$h = json_decode($headers_raw, true);
+			if (is_array($h)) {
+				$args['headers'] = $h;
+			}
+		}
+		
+		if ($method === 'GET') {
+			$endpoint = add_query_arg($test_args, $endpoint);
+		} else {
+			$args['body'] = wp_json_encode($test_args);
+			if (!isset($args['headers']['Content-Type'])) {
+				$args['headers']['Content-Type'] = 'application/json';
+			}
+		}
+		
+		$response = wp_remote_request($endpoint, $args);
+		
+		if (is_wp_error($response)) {
+			wp_send_json_error(array('message' => $response->get_error_message()));
+		} else {
+			$code = wp_remote_retrieve_response_code($response);
+			$body = wp_remote_retrieve_body($response);
+			wp_send_json_success(array('code' => $code, 'body' => substr($body, 0, 500))); // Truncate for preview
+		}
+	}
+
+	/**
+	 * AJAX handler to toggle a single WordPress/WooCommerce tool
+	 */
+	public function ajax_toggle_tool() {
+		check_ajax_referer('sflmcp_tools', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_tools';
+		$tool_id = isset($_POST['tool_id']) ? intval($_POST['tool_id']) : 0;
+		
+		if (!$tool_id) {
+			wp_send_json_error(array('message' => __('Invalid tool ID', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		// Get current status
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$tool = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $tool_id), ARRAY_A);
+		
+		if (!$tool) {
+			wp_send_json_error(array('message' => __('Tool not found', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$new_status = ($tool['enabled'] == 1) ? 0 : 1;
+		
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->update(
+			$table,
+			array('enabled' => $new_status, 'updated_at' => current_time('mysql', true)),
+			array('id' => $tool_id),
+			array('%d', '%s'),
+			array('%d')
+		);
+		
+		// Sync to active profile if exists
+		$this->syncToolToActiveProfile($tool['tool_name'], $new_status);
+		
+		// Calculate new token totals
+		$is_wc = strpos($tool['category'], 'WooCommerce') === 0;
+		$like_pattern = $is_wc ? 'WooCommerce%' : '';
+		
+		if ($is_wc) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$total_tokens = $wpdb->get_var($wpdb->prepare(
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category LIKE %s AND enabled = %d",
+				'WooCommerce%', 1
+			));
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$total_tokens = $wpdb->get_var($wpdb->prepare(
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND enabled = %d",
+				'WooCommerce%', 1
+			));
+		}
+		
+		wp_send_json_success(array(
+			'enabled' => $new_status,
+			'total_tokens' => number_format_i18n(intval($total_tokens))
+		));
+	}
+
+	/**
+	 * AJAX handler to bulk toggle tools in a category
+	 */
+	public function ajax_bulk_toggle_tools() {
+		check_ajax_referer('sflmcp_tools', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_tools';
+		$bulk_action = isset($_POST['bulk_action']) ? sanitize_text_field( wp_unslash( $_POST['bulk_action'] ) ) : '';
+		$category = isset($_POST['category']) ? sanitize_text_field( wp_unslash( $_POST['category'] ) ) : '';
+		
+		if (!in_array($bulk_action, array('enable', 'disable'))) {
+			wp_send_json_error(array('message' => __('Invalid action', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		$new_status = ($bulk_action === 'enable') ? 1 : 0;
+		
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query($wpdb->prepare(
+			"UPDATE $table SET enabled = %d, updated_at = %s WHERE category = %s",
+			$new_status, current_time('mysql', true), $category
+		));
+		
+		// Get affected tools and sync to active profile
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$affected_tools = $wpdb->get_col($wpdb->prepare(
+			"SELECT tool_name FROM $table WHERE category = %s",
+			$category
+		));
+		
+		foreach ($affected_tools as $tool_name) {
+			$this->syncToolToActiveProfile($tool_name, $new_status);
+		}
+		
+		wp_send_json_success();
+	}
+
+	/**
+	 * Sync a tool's enabled status to the active profile
+	 */
+	private function syncToolToActiveProfile($tool_name, $enabled) {
+		global $wpdb;
+		$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+		$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+		
+		// Get active profile
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$active_profile = $wpdb->get_row($wpdb->prepare(
+			"SELECT id FROM $profiles_table WHERE is_active = %d",
+			1
+		), ARRAY_A);
+		
+		if (!$active_profile) {
+			return;
+		}
+		
+		$profile_id = $active_profile['id'];
+		
+		if ($enabled) {
+			// Check if already exists
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$exists = $wpdb->get_var($wpdb->prepare(
+				"SELECT id FROM $profile_tools_table WHERE profile_id = %d AND tool_name = %s",
+				$profile_id, $tool_name
+			));
+			
+			if (!$exists) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$wpdb->insert(
+					$profile_tools_table,
+					array('profile_id' => $profile_id, 'tool_name' => $tool_name),
+					array('%d', '%s')
+				);
+			}
+		} else {
+			// Remove from profile
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->delete(
+				$profile_tools_table,
+				array('profile_id' => $profile_id, 'tool_name' => $tool_name),
+				array('%d', '%s')
+			);
+		}
+	}
+
+	/**
 	 * AJAX handler to toggle logging
 	 */
 	public function ajax_toggle_logging() {
@@ -1851,6 +2328,334 @@ class StifliFlexMcp {
 		$contents = stifli_flex_mcp_get_log_contents(500);
 		
 		wp_send_json_success(array('contents' => $contents));
+	}
+
+	/**
+	 * Render Help Tab - Complete documentation
+	 */
+	private function renderHelpTab() {
+		$site_url = site_url();
+		$endpoint = rest_url($this->namespace . '/messages');
+		?>
+		<style>
+			.sflmcp-help { max-width: 900px; }
+			.sflmcp-help h2 { border-bottom: 2px solid #2271b1; padding-bottom: 10px; margin-top: 30px; }
+			.sflmcp-help h3 { color: #1d2327; margin-top: 25px; }
+			.sflmcp-help .card { background: #fff; border: 1px solid #c3c4c7; padding: 20px; margin: 15px 0; border-left: 4px solid #2271b1; }
+			.sflmcp-help .card.warning { border-left-color: #dba617; background: #fcf9e8; }
+			.sflmcp-help .card.success { border-left-color: #00a32a; background: #edfaef; }
+			.sflmcp-help .card.example { border-left-color: #9b59b6; background: #f9f5fc; }
+			.sflmcp-help code { background: #f0f0f1; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+			.sflmcp-help pre { background: #1d2327; color: #f0f0f1; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+			.sflmcp-help pre code { background: transparent; color: inherit; }
+			.sflmcp-help table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+			.sflmcp-help th, .sflmcp-help td { border: 1px solid #c3c4c7; padding: 10px; text-align: left; }
+			.sflmcp-help th { background: #f0f0f1; }
+			.sflmcp-help .toc { background: #f6f7f7; padding: 20px; border-radius: 4px; }
+			.sflmcp-help .toc ul { columns: 2; }
+			.sflmcp-help .toc a { text-decoration: none; }
+			.sflmcp-help .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
+			.sflmcp-help .badge-http { background: #3498db; color: #fff; }
+			.sflmcp-help .badge-action { background: #9b59b6; color: #fff; }
+		</style>
+		
+		<div class="sflmcp-help">
+			<h1>📚 <?php esc_html_e('StifLi Flex MCP - Complete Guide', 'stifli-flex-mcp'); ?></h1>
+			
+			<div class="card toc">
+				<h3 style="margin-top:0;">📑 <?php esc_html_e('Table of Contents', 'stifli-flex-mcp'); ?></h3>
+				<ul>
+					<li><a href="#overview">🎯 <?php esc_html_e('What is MCP?', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#builtin-tools">🔧 <?php esc_html_e('Built-in Tools (117+)', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#custom-tools">🔌 <?php esc_html_e('Custom Tools Overview', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#action-hooks">⚡ <?php esc_html_e('WordPress Action Hooks', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#find-actions">🔍 <?php esc_html_e('Finding Plugin Actions', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#webhooks">🌐 <?php esc_html_e('Webhooks & External APIs', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#internal-api">🏠 <?php esc_html_e('Internal WordPress REST API', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#use-cases">💡 <?php esc_html_e('Use Cases & Examples', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#security">🔐 <?php esc_html_e('Security Considerations', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#troubleshooting">🔧 <?php esc_html_e('Troubleshooting', 'stifli-flex-mcp'); ?></a></li>
+				</ul>
+			</div>
+
+			<!-- SECTION: Overview -->
+			<h2 id="overview">🎯 <?php esc_html_e('What is MCP (Model Context Protocol)?', 'stifli-flex-mcp'); ?></h2>
+			<p><?php esc_html_e('MCP is an open standard that allows AI assistants (like ChatGPT, Claude, LibreChat) to interact with external tools and services. StifLi Flex MCP transforms your WordPress site into an MCP server, giving AI the ability to:', 'stifli-flex-mcp'); ?></p>
+			<ul>
+				<li>✅ <?php esc_html_e('Create, edit, and delete posts, pages, and custom content', 'stifli-flex-mcp'); ?></li>
+				<li>✅ <?php esc_html_e('Manage WooCommerce products, orders, and customers', 'stifli-flex-mcp'); ?></li>
+				<li>✅ <?php esc_html_e('Upload images (including AI-generated images)', 'stifli-flex-mcp'); ?></li>
+				<li>✅ <?php esc_html_e('Execute any WordPress action hook', 'stifli-flex-mcp'); ?></li>
+				<li>✅ <?php esc_html_e('Connect to external APIs and webhooks', 'stifli-flex-mcp'); ?></li>
+			</ul>
+
+			<!-- SECTION: Built-in Tools -->
+			<h2 id="builtin-tools">🔧 <?php esc_html_e('Built-in Tools', 'stifli-flex-mcp'); ?></h2>
+			<p><?php esc_html_e('This plugin comes with 117+ ready-to-use tools:', 'stifli-flex-mcp'); ?></p>
+			<table>
+				<tr><th><?php esc_html_e('Category', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Examples', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td><strong>Posts & Pages</strong></td><td>wp_get_posts, wp_create_post, wp_update_post, wp_delete_post</td></tr>
+				<tr><td><strong>Media</strong></td><td>wp_upload_image, wp_upload_image_from_url, wp_get_media</td></tr>
+				<tr><td><strong>Taxonomies</strong></td><td>wp_get_categories, wp_create_tag, wp_get_terms</td></tr>
+				<tr><td><strong>Users</strong></td><td>wp_get_users, wp_get_user_meta, wp_update_user_meta</td></tr>
+				<tr><td><strong>WooCommerce</strong></td><td>wc_get_products, wc_create_order, wc_update_stock</td></tr>
+				<tr><td><strong>System</strong></td><td>wp_get_site_health, wp_get_settings, mcp_ping</td></tr>
+			</table>
+			<p><?php esc_html_e('Manage these tools in the "WordPress Tools" and "WooCommerce Tools" tabs.', 'stifli-flex-mcp'); ?></p>
+
+			<!-- SECTION: Custom Tools Overview -->
+			<h2 id="custom-tools">🔌 <?php esc_html_e('Custom Tools Overview', 'stifli-flex-mcp'); ?></h2>
+			<p><?php esc_html_e('Custom Tools extend the AI\'s capabilities beyond the built-in functions. There are two types:', 'stifli-flex-mcp'); ?></p>
+			
+			<table>
+				<tr>
+					<th><?php esc_html_e('Type', 'stifli-flex-mcp'); ?></th>
+					<th><?php esc_html_e('Badge', 'stifli-flex-mcp'); ?></th>
+					<th><?php esc_html_e('Use Case', 'stifli-flex-mcp'); ?></th>
+				</tr>
+				<tr>
+					<td><strong>HTTP</strong> (GET/POST/PUT/DELETE)</td>
+					<td><span class="badge badge-http">HTTP</span></td>
+					<td><?php esc_html_e('Call external APIs, webhooks (Zapier, Make, n8n), or your site\'s own REST API', 'stifli-flex-mcp'); ?></td>
+				</tr>
+				<tr>
+					<td><strong>ACTION</strong></td>
+					<td><span class="badge badge-action">ACTION</span></td>
+					<td><?php esc_html_e('Execute any WordPress do_action() hook - from core, themes, or any plugin', 'stifli-flex-mcp'); ?></td>
+				</tr>
+			</table>
+
+			<!-- SECTION: WordPress Action Hooks -->
+			<h2 id="action-hooks">⚡ <?php esc_html_e('WordPress Action Hooks (Make Tools from ANY Plugin)', 'stifli-flex-mcp'); ?></h2>
+			
+			<div class="card success">
+				<strong>💡 <?php esc_html_e('Key Concept', 'stifli-flex-mcp'); ?>:</strong>
+				<?php esc_html_e('WordPress plugins communicate through "action hooks" (do_action). With Custom Tools, you can expose ANY of these hooks to the AI!', 'stifli-flex-mcp'); ?>
+			</div>
+
+			<h3><?php esc_html_e('How It Works', 'stifli-flex-mcp'); ?></h3>
+			<ol>
+				<li><?php esc_html_e('You create a Custom Tool with Type = ACTION', 'stifli-flex-mcp'); ?></li>
+				<li><?php esc_html_e('In "Action Hook Name", you put the hook name (e.g., flush_rewrite_rules)', 'stifli-flex-mcp'); ?></li>
+				<li><?php esc_html_e('When the AI calls your tool, the plugin executes: do_action(\'hook_name\', $args)', 'stifli-flex-mcp'); ?></li>
+			</ol>
+
+			<h3><?php esc_html_e('Example: WordPress Core Actions', 'stifli-flex-mcp'); ?></h3>
+			<table>
+				<tr><th><?php esc_html_e('Action Hook', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('What It Does', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td><code>flush_rewrite_rules</code></td><td><?php esc_html_e('Regenerate permalink structure', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code>wp_cron</code></td><td><?php esc_html_e('Manually run scheduled tasks', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code>wp_cache_flush</code></td><td><?php esc_html_e('Clear object cache', 'stifli-flex-mcp'); ?></td></tr>
+			</table>
+
+			<h3><?php esc_html_e('Example: WooCommerce Actions', 'stifli-flex-mcp'); ?></h3>
+			<table>
+				<tr><th><?php esc_html_e('Action Hook', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('What It Does', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td><code>woocommerce_cancel_unpaid_orders</code></td><td><?php esc_html_e('Cancel orders not paid within hold time', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code>woocommerce_cleanup_sessions</code></td><td><?php esc_html_e('Remove expired customer sessions', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code>woocommerce_scheduled_sales</code></td><td><?php esc_html_e('Process scheduled sale prices', 'stifli-flex-mcp'); ?></td></tr>
+			</table>
+
+			<h3><?php esc_html_e('Example: Popular Plugin Actions', 'stifli-flex-mcp'); ?></h3>
+			<table>
+				<tr><th><?php esc_html_e('Plugin', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Action Hook', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Effect', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td>Yoast SEO</td><td><code>wpseo_reindex</code></td><td><?php esc_html_e('Rebuild SEO index', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td>WP Super Cache</td><td><code>wp_cache_clear_cache</code></td><td><?php esc_html_e('Clear all cache', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td>W3 Total Cache</td><td><code>w3tc_flush_all</code></td><td><?php esc_html_e('Flush all caches', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td>WP Rocket</td><td><code>rocket_clean_domain</code></td><td><?php esc_html_e('Purge site cache', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td>Elementor</td><td><code>elementor/core/files/clear_cache</code></td><td><?php esc_html_e('Clear CSS cache', 'stifli-flex-mcp'); ?></td></tr>
+			</table>
+
+			<!-- SECTION: Finding Plugin Actions -->
+			<h2 id="find-actions">🔍 <?php esc_html_e('How to Find Plugin Action Hooks', 'stifli-flex-mcp'); ?></h2>
+			
+			<div class="card">
+				<h4><?php esc_html_e('Method 1: Plugin Documentation', 'stifli-flex-mcp'); ?></h4>
+				<p><?php esc_html_e('Most quality plugins document their hooks. Search for:', 'stifli-flex-mcp'); ?></p>
+				<ul>
+					<li><code>"[plugin name] action hooks"</code></li>
+					<li><code>"[plugin name] do_action"</code></li>
+					<li><code>"[plugin name] developer documentation"</code></li>
+				</ul>
+			</div>
+
+			<div class="card">
+				<h4><?php esc_html_e('Method 2: Search Plugin Code', 'stifli-flex-mcp'); ?></h4>
+				<p><?php esc_html_e('Search for do_action in the plugin files:', 'stifli-flex-mcp'); ?></p>
+				<pre><code># In your plugin folder, search for hooks:
+grep -r "do_action(" wp-content/plugins/your-plugin/
+
+# Common patterns:
+do_action('plugin_prefix_event_name');
+do_action('plugin_prefix_before_save', $data);
+do_action('plugin_prefix_after_delete', $id);</code></pre>
+			</div>
+
+			<div class="card">
+				<h4><?php esc_html_e('Method 3: Use a Hook Discovery Plugin', 'stifli-flex-mcp'); ?></h4>
+				<p><?php esc_html_e('Install "Query Monitor" or "Debug Bar Actions and Filters" to see all hooks executed on any page.', 'stifli-flex-mcp'); ?></p>
+			</div>
+
+			<div class="card example">
+				<h4>📋 <?php esc_html_e('Step-by-Step Example: Creating an Action Tool', 'stifli-flex-mcp'); ?></h4>
+				<p><?php esc_html_e('Let\'s create a tool that clears WP Rocket cache:', 'stifli-flex-mcp'); ?></p>
+				<ol>
+					<li><?php esc_html_e('Go to Custom Tools → Add New Tool', 'stifli-flex-mcp'); ?></li>
+					<li><strong><?php esc_html_e('Name', 'stifli-flex-mcp'); ?>:</strong> <code>custom_clear_rocket_cache</code></li>
+					<li><strong><?php esc_html_e('Description', 'stifli-flex-mcp'); ?>:</strong> "Clear WP Rocket cache. Use when site shows outdated content."</li>
+					<li><strong><?php esc_html_e('Type', 'stifli-flex-mcp'); ?>:</strong> ACTION (WordPress do_action)</li>
+					<li><strong><?php esc_html_e('Action Hook Name', 'stifli-flex-mcp'); ?>:</strong> <code>rocket_clean_domain</code></li>
+					<li><strong><?php esc_html_e('Parameters', 'stifli-flex-mcp'); ?>:</strong> (none needed)</li>
+					<li><?php esc_html_e('Enable and Save!', 'stifli-flex-mcp'); ?></li>
+				</ol>
+				<p><?php esc_html_e('Now the AI can say: "Clear the cache" and it will work!', 'stifli-flex-mcp'); ?></p>
+			</div>
+
+			<!-- SECTION: Webhooks -->
+			<h2 id="webhooks">🌐 <?php esc_html_e('Webhooks & External APIs', 'stifli-flex-mcp'); ?></h2>
+			
+			<p><?php esc_html_e('Connect your AI to ANY external service using HTTP methods:', 'stifli-flex-mcp'); ?></p>
+
+			<h3><?php esc_html_e('Automation Platforms', 'stifli-flex-mcp'); ?></h3>
+			<table>
+				<tr><th><?php esc_html_e('Platform', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Webhook URL Pattern', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td>Zapier</td><td><code>https://hooks.zapier.com/hooks/catch/...</code></td></tr>
+				<tr><td>Make (Integromat)</td><td><code>https://hook.eu1.make.com/...</code></td></tr>
+				<tr><td>n8n</td><td><code>https://your-n8n.com/webhook/...</code></td></tr>
+				<tr><td>IFTTT</td><td><code>https://maker.ifttt.com/trigger/...</code></td></tr>
+			</table>
+
+			<div class="card example">
+				<h4>📋 <?php esc_html_e('Example: Create a Jira Ticket via Zapier', 'stifli-flex-mcp'); ?></h4>
+				<ol>
+					<li><?php esc_html_e('In Zapier: Create a Zap with "Webhooks by Zapier" trigger → "Jira" action', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('Copy the Zapier webhook URL', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('In Custom Tools:', 'stifli-flex-mcp'); ?>
+						<ul>
+							<li><strong>Name:</strong> <code>custom_create_jira_ticket</code></li>
+							<li><strong>Type:</strong> POST</li>
+							<li><strong>Endpoint:</strong> (your Zapier URL)</li>
+							<li><strong>Parameters:</strong> title (string, required), description (string), priority (string)</li>
+						</ul>
+					</li>
+				</ol>
+				<p><?php esc_html_e('Now the AI can say: "Create a Jira ticket about the login bug"!', 'stifli-flex-mcp'); ?></p>
+			</div>
+
+			<h3><?php esc_html_e('Public APIs', 'stifli-flex-mcp'); ?></h3>
+			<table>
+				<tr><th><?php esc_html_e('API', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Example Endpoint', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Use Case', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td>wttr.in</td><td><code>https://wttr.in/{city}?format=j1</code></td><td><?php esc_html_e('Weather data', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td>ipapi.co</td><td><code>https://ipapi.co/{ip}/json/</code></td><td><?php esc_html_e('IP geolocation', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td>OpenAI</td><td><code>https://api.openai.com/v1/...</code></td><td><?php esc_html_e('AI completions', 'stifli-flex-mcp'); ?></td></tr>
+			</table>
+
+			<!-- SECTION: Internal API -->
+			<h2 id="internal-api">🏠 <?php esc_html_e('Internal WordPress REST API', 'stifli-flex-mcp'); ?></h2>
+			
+			<p><?php esc_html_e('Your WordPress site already has a powerful REST API. Use Custom Tools to expose specific endpoints:', 'stifli-flex-mcp'); ?></p>
+
+			<table>
+				<tr><th><?php esc_html_e('Endpoint', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('What It Returns', 'stifli-flex-mcp'); ?></th></tr>
+				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/wp/v2/posts</code></td><td><?php esc_html_e('List of posts', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/wp/v2/pages/{id}</code></td><td><?php esc_html_e('Single page (with Yoast/RankMath SEO data if installed)', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/wc/v3/products</code></td><td><?php esc_html_e('WooCommerce products', 'stifli-flex-mcp'); ?></td></tr>
+				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/contact-form-7/v1/contact-forms</code></td><td><?php esc_html_e('Contact Form 7 forms', 'stifli-flex-mcp'); ?></td></tr>
+			</table>
+
+			<div class="card warning">
+				<strong>⚠️ <?php esc_html_e('Note on Plugin APIs:', 'stifli-flex-mcp'); ?></strong>
+				<?php esc_html_e('Many plugins add their own REST endpoints. Check their documentation for available endpoints. You can also visit', 'stifli-flex-mcp'); ?> 
+				<code><?php echo esc_html($site_url); ?>/wp-json/</code>
+				<?php esc_html_e('to see all registered namespaces.', 'stifli-flex-mcp'); ?>
+			</div>
+
+			<!-- SECTION: Use Cases -->
+			<h2 id="use-cases">💡 <?php esc_html_e('Real-World Use Cases', 'stifli-flex-mcp'); ?></h2>
+
+			<div class="card">
+				<h4>🛒 <?php esc_html_e('E-commerce Operations', 'stifli-flex-mcp'); ?></h4>
+				<ul>
+					<li><?php esc_html_e('"Cancel all unpaid orders older than 24 hours"', 'stifli-flex-mcp'); ?> → <code>woocommerce_cancel_unpaid_orders</code></li>
+					<li><?php esc_html_e('"Update stock for product SKU-123 to 50 units"', 'stifli-flex-mcp'); ?> → built-in <code>wc_update_stock</code></li>
+					<li><?php esc_html_e('"Create a 20% discount coupon"', 'stifli-flex-mcp'); ?> → built-in <code>wc_create_coupon</code></li>
+				</ul>
+			</div>
+
+			<div class="card">
+				<h4>🔧 <?php esc_html_e('Site Maintenance', 'stifli-flex-mcp'); ?></h4>
+				<ul>
+					<li><?php esc_html_e('"Clear all caches"', 'stifli-flex-mcp'); ?> → <code>w3tc_flush_all</code> / <code>rocket_clean_domain</code></li>
+					<li><?php esc_html_e('"Enable maintenance mode"', 'stifli-flex-mcp'); ?> → <code>sflmcp_maintenance_mode</code></li>
+					<li><?php esc_html_e('"Rebuild permalinks"', 'stifli-flex-mcp'); ?> → <code>flush_rewrite_rules</code></li>
+				</ul>
+			</div>
+
+			<div class="card">
+				<h4>📊 <?php esc_html_e('Business Integrations', 'stifli-flex-mcp'); ?></h4>
+				<ul>
+					<li><?php esc_html_e('"Log this conversation to Notion"', 'stifli-flex-mcp'); ?> → Notion API webhook</li>
+					<li><?php esc_html_e('"Create a support ticket in Jira"', 'stifli-flex-mcp'); ?> → Zapier/Make webhook</li>
+					<li><?php esc_html_e('"Send SMS notification"', 'stifli-flex-mcp'); ?> → Twilio API</li>
+				</ul>
+			</div>
+
+			<!-- SECTION: Security -->
+			<h2 id="security">🔐 <?php esc_html_e('Security Considerations', 'stifli-flex-mcp'); ?></h2>
+
+			<div class="card warning">
+				<h4><?php esc_html_e('Important Security Notes', 'stifli-flex-mcp'); ?></h4>
+				<ul>
+					<li><?php esc_html_e('All MCP requests require authentication (WordPress Application Passwords)', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('The AI operates with the permissions of the authenticated user', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('Custom Tools marked as "write" operations require confirmation', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('Disable tools you don\'t need in the Tools tabs', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('Use Profiles to limit available tools for specific use cases', 'stifli-flex-mcp'); ?></li>
+				</ul>
+			</div>
+
+			<h3><?php esc_html_e('Headers for Authenticated APIs', 'stifli-flex-mcp'); ?></h3>
+			<p><?php esc_html_e('For external APIs requiring authentication, add headers in the Advanced Settings:', 'stifli-flex-mcp'); ?></p>
+			<pre><code>Authorization: Bearer your-api-token
+Content-Type: application/json
+X-Custom-Header: value</code></pre>
+
+			<!-- SECTION: Troubleshooting -->
+			<h2 id="troubleshooting">🔧 <?php esc_html_e('Troubleshooting', 'stifli-flex-mcp'); ?></h2>
+
+			<table>
+				<tr><th><?php esc_html_e('Problem', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Solution', 'stifli-flex-mcp'); ?></th></tr>
+				<tr>
+					<td><?php esc_html_e('Tool not appearing for AI', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('Check that the tool is enabled (green checkmark in table)', 'stifli-flex-mcp'); ?></td>
+				</tr>
+				<tr>
+					<td><?php esc_html_e('ACTION returns "no handlers registered"', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('The hook name might be wrong, or the plugin that registers it is not active', 'stifli-flex-mcp'); ?></td>
+				</tr>
+				<tr>
+					<td><?php esc_html_e('HTTP webhook returns error', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('Use the "Test Tool" button to debug. Check URL, headers, and method', 'stifli-flex-mcp'); ?></td>
+				</tr>
+				<tr>
+					<td><?php esc_html_e('Parameters not passed correctly', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('For GET: use {param} in URL. For POST: they\'re sent as JSON body', 'stifli-flex-mcp'); ?></td>
+				</tr>
+			</table>
+
+			<div class="card">
+				<h4>📝 <?php esc_html_e('Enable Logging', 'stifli-flex-mcp'); ?></h4>
+				<p><?php esc_html_e('Go to the Logs tab and enable logging to see all MCP requests and responses. This helps debug issues with tools.', 'stifli-flex-mcp'); ?></p>
+			</div>
+
+			<hr style="margin: 40px 0;">
+			<p style="text-align: center; color: #666;">
+				<strong>StifLi Flex MCP</strong> - 
+				<a href="https://github.com/estebanstifli/stifli-flex-mcp" target="_blank">GitHub</a> | 
+				<a href="https://wordpress.org/plugins/stifli-flex-mcp/" target="_blank">WordPress.org</a>
+			</p>
+		</div>
+		<?php
 	}
 	/* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 }

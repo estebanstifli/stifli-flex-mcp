@@ -1,0 +1,204 @@
+﻿{
+    "summary":  {
+                    "failed":  9,
+                    "passRate":  76.3,
+                    "total":  38,
+                    "passed":  29
+                },
+    "endpoint":  "http://pruebaswp.local/wp-json/stifli-flex-mcp/v1/messages",
+    "timestamp":  "2026-01-31 17:31:38",
+    "failed":  [
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: id",
+                       "Description":  "Update product",
+                       "Tool":  "wc_update_product"
+                   },
+                   {
+                       "Error":  "updates array is required",
+                       "Description":  "Batch update products",
+                       "Tool":  "wc_batch_update_products"
+                   },
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: id",
+                       "Description":  "Update category",
+                       "Tool":  "wc_update_product_category"
+                   },
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: id",
+                       "Description":  "Update tag",
+                       "Tool":  "wc_update_product_tag"
+                   },
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: review",
+                       "Description":  "Create review",
+                       "Tool":  "wc_create_product_review"
+                   },
+                   {
+                       "Error":  "Product is not a variable product",
+                       "Description":  "Get variations (needs variable product)",
+                       "Tool":  "wc_get_product_variations"
+                   },
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: id",
+                       "Description":  "Delete product",
+                       "Tool":  "wc_delete_product"
+                   },
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: id",
+                       "Description":  "Delete category",
+                       "Tool":  "wc_delete_product_category"
+                   },
+                   {
+                       "Error":  "Invalid arguments: Missing required parameter: id",
+                       "Description":  "Delete tag",
+                       "Tool":  "wc_delete_product_tag"
+                   }
+               ],
+    "passed":  [
+                   {
+                       "Description":  "List products",
+                       "Tool":  "wc_get_products",
+                       "Response":  "Found 5 products: [\n    {\n        \"id\": 150,\n        \"name\": \"Test Product 170531\",\n        \"slug\": \"test-product-170531\",\n        \"type\": \"simple\",\n        \"status\": \"publish\",\n        \"price\": \"99.9"
+                   },
+                   {
+                       "Description":  "Create product",
+                       "Tool":  "wc_create_product",
+                       "Response":  "Product created with ID: 151"
+                   },
+                   {
+                       "Description":  "Update stock quantity",
+                       "Tool":  "wc_update_stock",
+                       "Response":  "Stock updated for product #151: 100"
+                   },
+                   {
+                       "Description":  "Set stock status",
+                       "Tool":  "wc_set_stock_status",
+                       "Response":  "Stock status set to \"instock\" for product #151"
+                   },
+                   {
+                       "Description":  "List categories",
+                       "Tool":  "wc_get_product_categories",
+                       "Response":  "Found 2 categories: [\n    {\n        \"id\": 72,\n        \"name\": \"Sin categorizar\",\n        \"slug\": \"sin-categorizar\",\n        \"count\": 6,\n        \"parent\": 0\n    },\n    {\n        \"id\": 73,\n        \"name"
+                   },
+                   {
+                       "Description":  "Create category",
+                       "Tool":  "wc_create_product_category",
+                       "Response":  "Category created with ID: 75"
+                   },
+                   {
+                       "Description":  "List tags",
+                       "Tool":  "wc_get_product_tags",
+                       "Response":  "Found 1 tags: [\n    {\n        \"id\": 74,\n        \"name\": \"TestTag170533\",\n        \"slug\": \"testtag170533\",\n        \"count\": 0\n    }\n]"
+                   },
+                   {
+                       "Description":  "Create tag",
+                       "Tool":  "wc_create_product_tag",
+                       "Response":  "Tag created with ID: 76"
+                   },
+                   {
+                       "Description":  "List reviews",
+                       "Tool":  "wc_get_product_reviews",
+                       "Response":  "Found 0 reviews: []"
+                   },
+                   {
+                       "Description":  "List orders",
+                       "Tool":  "wc_get_orders",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create order",
+                       "Tool":  "wc_create_order",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Batch update orders",
+                       "Tool":  "wc_batch_update_orders",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List refunds",
+                       "Tool":  "wc_get_refunds",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List coupons",
+                       "Tool":  "wc_get_coupons",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create coupon",
+                       "Tool":  "wc_create_coupon",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List tax classes",
+                       "Tool":  "wc_get_tax_classes",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List tax rates",
+                       "Tool":  "wc_get_tax_rates",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create tax rate",
+                       "Tool":  "wc_create_tax_rate",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List shipping zones",
+                       "Tool":  "wc_get_shipping_zones",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create shipping zone",
+                       "Tool":  "wc_create_shipping_zone",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List payment gateways",
+                       "Tool":  "wc_get_payment_gateways",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Update payment gateway",
+                       "Tool":  "wc_update_payment_gateway",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get system status",
+                       "Tool":  "wc_get_system_status",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get sales report",
+                       "Tool":  "wc_get_sales_report",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get top sellers report",
+                       "Tool":  "wc_get_top_sellers_report",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Get settings",
+                       "Tool":  "wc_get_settings",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Update setting",
+                       "Tool":  "wc_update_setting_option",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "List webhooks",
+                       "Tool":  "wc_get_webhooks",
+                       "Response":  ""
+                   },
+                   {
+                       "Description":  "Create webhook",
+                       "Tool":  "wc_create_webhook",
+                       "Response":  ""
+                   }
+               ]
+}
