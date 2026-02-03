@@ -351,6 +351,7 @@
      */
     function renderToolFromHistory(item) {
         const displayMode = state.advanced.tool_display || 'full';
+        const description = getToolDescription(item.name);
         const $msg = $('<div class="sflmcp-tool-message sflmcp-tool-' + item.status + '"></div>');
         const $header = $('<div class="sflmcp-tool-header"></div>');
         const $body = $('<div class="sflmcp-tool-body"></div>');
@@ -360,12 +361,19 @@
         let bodyHtml = '';
         
         if (displayMode === 'full') {
+            if (description) {
+                bodyHtml += '<div class="sflmcp-tool-description">' + escapeHtml(description) + '</div>';
+            }
             bodyHtml += '<div class="sflmcp-tool-status">' + (item.status === 'success' ? sflmcpClient.i18n.toolResult : sflmcpClient.i18n.toolDenied) + '</div>';
-            bodyHtml += '<div class="sflmcp-tool-section"><strong>Input:</strong><pre class="sflmcp-tool-args">' + JSON.stringify(item.input, null, 2) + '</pre></div>';
+            bodyHtml += '<div class="sflmcp-tool-section"><strong>Input:</strong></div><pre class="sflmcp-tool-args">' + JSON.stringify(item.input, null, 2) + '</pre>';
             if (item.output) {
-                bodyHtml += '<div class="sflmcp-tool-section"><strong>Output:</strong><pre class="sflmcp-tool-result">' + formatToolOutput(item.output) + '</pre></div>';
+                bodyHtml += '<div class="sflmcp-tool-section"><strong>Output:</strong></div><pre class="sflmcp-tool-result">' + formatToolOutput(item.output) + '</pre>';
             }
         } else if (displayMode === 'compact') {
+            if (description) {
+                const shortDesc = description.length > 80 ? description.substring(0, 80) + '...' : description;
+                bodyHtml += '<div class="sflmcp-tool-description sflmcp-tool-description-short">' + escapeHtml(shortDesc) + '</div>';
+            }
             bodyHtml += '<div class="sflmcp-tool-status">' + (item.status === 'success' ? '✓' : '✗') + ' ' + item.name + '</div>';
         } else if (displayMode === 'name_only') {
             bodyHtml += '<span class="sflmcp-tool-badge">' + item.name + '</span>';
@@ -373,6 +381,9 @@
             $msg.addClass('sflmcp-tool-collapsed');
             $header.append('<span class="sflmcp-tool-toggle dashicons dashicons-arrow-down"></span>');
             bodyHtml += '<div class="sflmcp-tool-details" style="display:none;">';
+            if (description) {
+                bodyHtml += '<div class="sflmcp-tool-description">' + escapeHtml(description) + '</div>';
+            }
             bodyHtml += '<pre class="sflmcp-tool-args">' + JSON.stringify(item.input, null, 2) + '</pre>';
             if (item.output) {
                 bodyHtml += '<pre class="sflmcp-tool-result">' + formatToolOutput(item.output) + '</pre>';
@@ -726,10 +737,21 @@
     }
 
     /**
+     * Get tool description from tools list
+     */
+    function getToolDescription(toolName) {
+        if (sflmcpClient.tools && sflmcpClient.tools[toolName]) {
+            return sflmcpClient.tools[toolName].description || '';
+        }
+        return '';
+    }
+
+    /**
      * Add a tool execution message
      */
     function addToolMessage(toolName, status, type, args) {
         const displayMode = state.advanced.tool_display || 'full';
+        const description = getToolDescription(toolName);
         const $msg = $('<div class="sflmcp-tool-message sflmcp-tool-' + type + '"></div>');
         const $header = $('<div class="sflmcp-tool-header"></div>');
         const $body = $('<div class="sflmcp-tool-body"></div>');
@@ -738,19 +760,34 @@
         
         let bodyHtml = '';
         
-        if (displayMode === 'full' || displayMode === 'compact') {
-            bodyHtml = '<div class="sflmcp-tool-status">' + status + '</div>';
-            if (displayMode === 'full' && args) {
+        if (displayMode === 'full') {
+            if (description) {
+                bodyHtml = '<div class="sflmcp-tool-description">' + escapeHtml(description) + '</div>';
+            }
+            bodyHtml += '<div class="sflmcp-tool-status">' + status + '</div>';
+            if (args) {
+                bodyHtml += '<div class="sflmcp-tool-section"><strong>Parameters:</strong></div>';
                 bodyHtml += '<pre class="sflmcp-tool-args">' + JSON.stringify(args, null, 2) + '</pre>';
             }
+        } else if (displayMode === 'compact') {
+            if (description) {
+                // Show shortened description (first 80 chars)
+                const shortDesc = description.length > 80 ? description.substring(0, 80) + '...' : description;
+                bodyHtml = '<div class="sflmcp-tool-description sflmcp-tool-description-short">' + escapeHtml(shortDesc) + '</div>';
+            }
+            bodyHtml += '<div class="sflmcp-tool-status">' + status + '</div>';
         } else if (displayMode === 'name_only') {
             bodyHtml = '<span class="sflmcp-tool-badge">' + escapeHtml(toolName) + ': ' + status + '</span>';
         } else if (displayMode === 'hidden') {
             $msg.addClass('sflmcp-tool-collapsed');
             $header.append('<span class="sflmcp-tool-toggle dashicons dashicons-arrow-down"></span>');
             bodyHtml = '<div class="sflmcp-tool-details" style="display:none;">';
+            if (description) {
+                bodyHtml += '<div class="sflmcp-tool-description">' + escapeHtml(description) + '</div>';
+            }
             bodyHtml += '<div class="sflmcp-tool-status">' + status + '</div>';
             if (args) {
+                bodyHtml += '<div class="sflmcp-tool-section"><strong>Parameters:</strong></div>';
                 bodyHtml += '<pre class="sflmcp-tool-args">' + JSON.stringify(args, null, 2) + '</pre>';
             }
             bodyHtml += '</div>';

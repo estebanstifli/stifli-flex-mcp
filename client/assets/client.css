@@ -253,6 +253,28 @@
     margin-bottom: 10px;
 }
 
+.sflmcp-tool-description {
+    font-size: 13px;
+    color: #50575e;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: #f0f6fc;
+    border-left: 3px solid #2271b1;
+    border-radius: 0 4px 4px 0;
+    line-height: 1.5;
+}
+
+.sflmcp-tool-description-short {
+    font-size: 12px;
+    padding: 6px 8px;
+}
+
+.sflmcp-tool-section {
+    font-size: 12px;
+    color: #646970;
+    margin-bottom: 5px;
+}
+
 .sflmcp-tool-args,
 .sflmcp-tool-result {
     background: #f6f7f7;

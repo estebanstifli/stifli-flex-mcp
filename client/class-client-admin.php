@@ -99,6 +99,7 @@ class StifliFlexMcp_Client_Admin {
 			),
 			'advanced' => $advanced,
 			'models'   => $this->get_available_models(),
+			'tools'    => $this->get_tools_info(), // Tools with name and description for display
 			'i18n'     => array(
 				'send'              => __( 'Send', 'stifli-flex-mcp' ),
 				'thinking'          => __( 'Thinking...', 'stifli-flex-mcp' ),
@@ -717,6 +718,31 @@ class StifliFlexMcp_Client_Admin {
 		}
 
 		return $formatted;
+	}
+
+	/**
+	 * Get tools info for JavaScript (name + description only, for display purposes)
+	 *
+	 * @return array Associative array keyed by tool name
+	 */
+	private function get_tools_info() {
+		global $stifliFlexMcp;
+		
+		if ( ! isset( $stifliFlexMcp ) || ! isset( $stifliFlexMcp->model ) ) {
+			return array();
+		}
+
+		$all_tools = $stifliFlexMcp->model->getToolsList();
+		$tools_info = array();
+
+		foreach ( $all_tools as $tool ) {
+			$tools_info[ $tool['name'] ] = array(
+				'name'        => $tool['name'],
+				'description' => $tool['description'] ?? '',
+			);
+		}
+
+		return $tools_info;
 	}
 
 	/**
