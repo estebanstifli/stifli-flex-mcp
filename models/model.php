@@ -274,11 +274,18 @@ class StifliFlexMcpModel {
             if ('' === $name) {
                 continue;
             }
-            // If table doesn't exist or tool is in enabled list, include it
-            if (!$table_exists || array_key_exists($name, $enabled_tools)) {
+            
+            // Custom tools are already filtered by enabled=1 in getCustomTools()
+            // So if the tool starts with 'custom_', it's already enabled
+            $is_custom_tool = strpos($name, 'custom_') === 0;
+            
+            // If table doesn't exist, tool is in enabled list, or it's a custom tool, include it
+            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_custom_tool) {
                 // Categoría
                 if (in_array($name, array('search', 'fetch'), true)) {
                     $tool['category'] = 'Core: OpenAI';
+                } elseif ($is_custom_tool) {
+                    $tool['category'] = 'Custom';
                 } else {
                     $tool['category'] = 'Core';
                 }
@@ -286,7 +293,7 @@ class StifliFlexMcpModel {
                 $meta = $this->getIntentForTool($name);
                 $tool['intent'] = $meta['intent']; // read | sensitive_read | write
                 $tool['requires_confirmation'] = $meta['requires_confirmation']; // bool
-                if ($table_exists) {
+                if ($table_exists && !$is_custom_tool) {
                     $tool['tokenEstimate'] = isset($enabled_tools[$name]) ? (int) $enabled_tools[$name] : StifliFlexMcpUtils::estimateToolTokenUsage($tool);
                 } else {
                     $tool['tokenEstimate'] = StifliFlexMcpUtils::estimateToolTokenUsage($tool);
@@ -2588,6 +2595,11 @@ class StifliFlexMcpModel {
                             return $r; // Return $r which was modified by reference
                         }
                     }
+                }
+                
+                // Try Custom Tools (from sflmcp_custom_tools table)
+                if ( strpos( $tool, 'custom_' ) === 0 ) {
+                    return $this->dispatchCustomTool( $tool, $args, $rpcId, $r );
                 }
                 
                 // If not handled by any WooCommerce module or unknown tool

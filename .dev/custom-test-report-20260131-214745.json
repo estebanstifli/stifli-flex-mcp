@@ -1,0 +1,60 @@
+﻿{
+    "Skipped":  [
+
+                ],
+    "Failed":  [
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Get weather from wttr.in",
+                       "Name":  "custom_get_weather"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Get IP geolocation",
+                       "Name":  "custom_get_ip_info"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Search WordPress posts",
+                       "Name":  "custom_wp_search"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Get page SEO data",
+                       "Name":  "custom_get_page_seo"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Get WordPress site info",
+                       "Name":  "custom_get_site_info"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Flush WordPress rewrite rules",
+                       "Name":  "custom_flush_rewrites"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Run WordPress cron tasks",
+                       "Name":  "custom_run_cron"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Send admin email notification",
+                       "Name":  "custom_admin_notify"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Enable maintenance mode",
+                       "Name":  "custom_maintenance_mode"
+                   },
+                   {
+                       "Error":  "Unknown tool",
+                       "Description":  "Disable maintenance mode",
+                       "Name":  "custom_maintenance_mode"
+                   }
+               ],
+    "Passed":  [
+
+               ]
+}

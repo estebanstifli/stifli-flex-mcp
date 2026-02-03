@@ -1,0 +1,50 @@
+﻿{
+    "Skipped":  [
+
+                ],
+    "Failed":  [
+                   {
+                       "Error":  "The remote server returned an error: (503) Server Unavailable.",
+                       "Description":  "Disable maintenance mode",
+                       "Name":  "custom_maintenance_mode"
+                   }
+               ],
+    "Passed":  [
+                   {
+                       "Name":  "custom_get_weather",
+                       "Description":  "Get weather from wttr.in"
+                   },
+                   {
+                       "Name":  "custom_get_ip_info",
+                       "Description":  "Get IP geolocation"
+                   },
+                   {
+                       "Name":  "custom_wp_search",
+                       "Description":  "Search WordPress posts"
+                   },
+                   {
+                       "Name":  "custom_get_page_seo",
+                       "Description":  "Get page SEO data"
+                   },
+                   {
+                       "Name":  "custom_get_site_info",
+                       "Description":  "Get WordPress site info"
+                   },
+                   {
+                       "Name":  "custom_flush_rewrites",
+                       "Description":  "Flush WordPress rewrite rules"
+                   },
+                   {
+                       "Name":  "custom_run_cron",
+                       "Description":  "Run WordPress cron tasks"
+                   },
+                   {
+                       "Name":  "custom_admin_notify",
+                       "Description":  "Send admin email notification"
+                   },
+                   {
+                       "Name":  "custom_maintenance_mode",
+                       "Description":  "Enable maintenance mode"
+                   }
+               ]
+}

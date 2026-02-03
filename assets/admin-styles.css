@@ -1,0 +1,153 @@
+/**
+ * StifLi Flex MCP - Admin Styles
+ *
+ * @package StifliFlexMcp
+ */
+
+/* =============================================================================
+   TOOLS PAGE (WordPress & WooCommerce tabs)
+   ============================================================================= */
+
+.sflmcp-tool-toggle {
+    cursor: pointer;
+    min-width: 100px;
+}
+
+.sflmcp-tool-toggle.status-enabled {
+    color: #46b450;
+    border-color: #46b450;
+}
+
+.sflmcp-tool-toggle.status-disabled {
+    color: #999;
+}
+
+.sflmcp-tool-toggle.updating {
+    opacity: 0.5;
+    cursor: wait;
+}
+
+.sflmcp-tool-toggle .dashicons {
+    vertical-align: middle;
+    margin-right: 3px;
+}
+
+.sflmcp-bulk-actions {
+    margin-bottom: 10px;
+}
+
+.sflmcp-bulk-actions .button {
+    margin-right: 5px;
+}
+
+/* =============================================================================
+   HELP PAGE
+   ============================================================================= */
+
+.sflmcp-help {
+    max-width: 900px;
+}
+
+.sflmcp-help h2 {
+    border-bottom: 2px solid #2271b1;
+    padding-bottom: 10px;
+    margin-top: 30px;
+}
+
+.sflmcp-help h3 {
+    color: #1d2327;
+    margin-top: 25px;
+}
+
+.sflmcp-help .card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    padding: 20px;
+    margin: 15px 0;
+    border-left: 4px solid #2271b1;
+}
+
+.sflmcp-help .card.warning {
+    border-left-color: #dba617;
+    background: #fcf9e8;
+}
+
+.sflmcp-help .card.success {
+    border-left-color: #00a32a;
+    background: #edfaef;
+}
+
+.sflmcp-help .card.example {
+    border-left-color: #9b59b6;
+    background: #f9f5fc;
+}
+
+.sflmcp-help code {
+    background: #f0f0f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+.sflmcp-help pre {
+    background: #1d2327;
+    color: #f0f0f1;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12px;
+}
+
+.sflmcp-help pre code {
+    background: transparent;
+    color: inherit;
+}
+
+.sflmcp-help table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+}
+
+.sflmcp-help th,
+.sflmcp-help td {
+    border: 1px solid #c3c4c7;
+    padding: 10px;
+    text-align: left;
+}
+
+.sflmcp-help th {
+    background: #f0f0f1;
+}
+
+.sflmcp-help .toc {
+    background: #f6f7f7;
+    padding: 20px;
+    border-radius: 4px;
+}
+
+.sflmcp-help .toc ul {
+    columns: 2;
+}
+
+.sflmcp-help .toc a {
+    text-decoration: none;
+}
+
+.sflmcp-help .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.sflmcp-help .badge-http {
+    background: #3498db;
+    color: #fff;
+}
+
+.sflmcp-help .badge-action {
+    background: #9b59b6;
+    color: #fff;
+}

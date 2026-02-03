@@ -1036,6 +1036,14 @@ class StifliFlexMcp {
 			'1.0.4'
 		);
 
+		// Enqueue main admin styles (tools, help page)
+		wp_enqueue_style(
+			'sflmcp-admin-styles',
+			plugin_dir_url(__FILE__) . 'assets/admin-styles.css',
+			array(),
+			'1.0.5'
+		);
+
 		// Enqueue Custom Tools Assets
 		if ($active_tab === 'custom') {
 			wp_enqueue_style(
@@ -1319,15 +1327,6 @@ class StifliFlexMcp {
 		}
 		
 		?>
-		<style>
-			.sflmcp-tool-toggle { cursor: pointer; min-width: 100px; }
-			.sflmcp-tool-toggle.status-enabled { color: #46b450; border-color: #46b450; }
-			.sflmcp-tool-toggle.status-disabled { color: #999; }
-			.sflmcp-tool-toggle.updating { opacity: 0.5; cursor: wait; }
-			.sflmcp-tool-toggle .dashicons { vertical-align: middle; margin-right: 3px; }
-			.sflmcp-bulk-actions { margin-bottom: 10px; }
-			.sflmcp-bulk-actions .button { margin-right: 5px; }
-		</style>
 		
 		<p><?php echo esc_html__('Here you can manage which tools are available on the MCP server. Click on the status button to toggle. Changes are saved automatically.', 'stifli-flex-mcp'); ?></p>
 		<p><strong><?php echo esc_html__('Total estimated tokens for enabled WordPress tools:', 'stifli-flex-mcp'); ?></strong> <span class="sflmcp-total-tokens"><?php echo esc_html(number_format_i18n($enabled_token_total)); ?></span></p>
@@ -1441,15 +1440,6 @@ class StifliFlexMcp {
 		}
 		
 		?>
-		<style>
-			.sflmcp-tool-toggle { cursor: pointer; min-width: 100px; }
-			.sflmcp-tool-toggle.status-enabled { color: #46b450; border-color: #46b450; }
-			.sflmcp-tool-toggle.status-disabled { color: #999; }
-			.sflmcp-tool-toggle.updating { opacity: 0.5; cursor: wait; }
-			.sflmcp-tool-toggle .dashicons { vertical-align: middle; margin-right: 3px; }
-			.sflmcp-bulk-actions { margin-bottom: 10px; }
-			.sflmcp-bulk-actions .button { margin-right: 5px; }
-		</style>
 		
 		<p><?php echo esc_html__('Here you can manage which WooCommerce tools are available on the MCP server. Click on the status button to toggle. Changes are saved automatically.', 'stifli-flex-mcp'); ?></p>
 		<p><strong><?php echo esc_html__('Total estimated tokens for enabled WooCommerce tools:', 'stifli-flex-mcp'); ?></strong> <span class="sflmcp-total-tokens"><?php echo esc_html(number_format_i18n($enabled_token_total)); ?></span></p>
@@ -2337,27 +2327,6 @@ class StifliFlexMcp {
 		$site_url = site_url();
 		$endpoint = rest_url($this->namespace . '/messages');
 		?>
-		<style>
-			.sflmcp-help { max-width: 900px; }
-			.sflmcp-help h2 { border-bottom: 2px solid #2271b1; padding-bottom: 10px; margin-top: 30px; }
-			.sflmcp-help h3 { color: #1d2327; margin-top: 25px; }
-			.sflmcp-help .card { background: #fff; border: 1px solid #c3c4c7; padding: 20px; margin: 15px 0; border-left: 4px solid #2271b1; }
-			.sflmcp-help .card.warning { border-left-color: #dba617; background: #fcf9e8; }
-			.sflmcp-help .card.success { border-left-color: #00a32a; background: #edfaef; }
-			.sflmcp-help .card.example { border-left-color: #9b59b6; background: #f9f5fc; }
-			.sflmcp-help code { background: #f0f0f1; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
-			.sflmcp-help pre { background: #1d2327; color: #f0f0f1; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
-			.sflmcp-help pre code { background: transparent; color: inherit; }
-			.sflmcp-help table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-			.sflmcp-help th, .sflmcp-help td { border: 1px solid #c3c4c7; padding: 10px; text-align: left; }
-			.sflmcp-help th { background: #f0f0f1; }
-			.sflmcp-help .toc { background: #f6f7f7; padding: 20px; border-radius: 4px; }
-			.sflmcp-help .toc ul { columns: 2; }
-			.sflmcp-help .toc a { text-decoration: none; }
-			.sflmcp-help .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
-			.sflmcp-help .badge-http { background: #3498db; color: #fff; }
-			.sflmcp-help .badge-action { background: #9b59b6; color: #fff; }
-		</style>
 		
 		<div class="sflmcp-help">
 			<h1>📚 <?php esc_html_e('StifLi Flex MCP - Complete Guide', 'stifli-flex-mcp'); ?></h1>

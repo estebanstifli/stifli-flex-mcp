@@ -1,0 +1,74 @@
+﻿{
+    "Skipped":  [
+                    {
+                        "Error":  "Would lock out API",
+                        "Description":  "Maintenance mode",
+                        "Name":  "custom_maintenance_mode"
+                    }
+                ],
+    "Failed":  [
+
+               ],
+    "Passed":  [
+                   {
+                       "Name":  "custom_get_weather",
+                       "Description":  "Get weather from wttr.in"
+                   },
+                   {
+                       "Name":  "custom_get_ip_info",
+                       "Description":  "Get IP geolocation"
+                   },
+                   {
+                       "Name":  "custom_wp_search",
+                       "Description":  "Search WordPress posts"
+                   },
+                   {
+                       "Name":  "custom_get_page_seo",
+                       "Description":  "Get page SEO data"
+                   },
+                   {
+                       "Name":  "custom_get_site_info",
+                       "Description":  "Get WordPress site info"
+                   },
+                   {
+                       "Name":  "custom_flush_rewrites",
+                       "Description":  "Flush WordPress rewrite rules"
+                   },
+                   {
+                       "Name":  "custom_run_cron",
+                       "Description":  "Run WordPress cron tasks"
+                   },
+                   {
+                       "Name":  "custom_admin_notify",
+                       "Description":  "Send admin email notification"
+                   },
+                   {
+                       "Name":  "custom_wc_product_by_sku",
+                       "Description":  "Search WC product by SKU"
+                   },
+                   {
+                       "Name":  "custom_wc_cancel_unpaid",
+                       "Description":  "Cancel unpaid WC orders"
+                   },
+                   {
+                       "Name":  "custom_wc_cleanup_sessions",
+                       "Description":  "Cleanup WC sessions"
+                   },
+                   {
+                       "Name":  "custom_cf7_forms",
+                       "Description":  "List CF7 forms"
+                   },
+                   {
+                       "Name":  "custom_yoast_reindex",
+                       "Description":  "Trigger Yoast SEO reindex"
+                   },
+                   {
+                       "Name":  "custom_wpsc_clear",
+                       "Description":  "Clear WP Super Cache"
+                   },
+                   {
+                       "Name":  "custom_w3tc_flush",
+                       "Description":  "Flush W3 Total Cache"
+                   }
+               ]
+}

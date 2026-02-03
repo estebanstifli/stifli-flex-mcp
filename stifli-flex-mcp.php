@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // define debug constant
 if ( ! defined( 'SFLMCP_DEBUG' ) ) {
-	define( 'SFLMCP_DEBUG', true );
+	define( 'SFLMCP_DEBUG', false );
 }
 
 // Debug logging function
@@ -152,6 +152,13 @@ require_once __DIR__ . '/models/req.php';
 require_once __DIR__ . '/models/model.php';
 require_once __DIR__ . '/controller.php';
 require_once __DIR__ . '/mod.php';
+
+// Load AI Chat Client
+require_once __DIR__ . '/client/providers/class-provider-base.php';
+require_once __DIR__ . '/client/providers/class-provider-openai.php';
+require_once __DIR__ . '/client/providers/class-provider-claude.php';
+require_once __DIR__ . '/client/providers/class-provider-gemini.php';
+require_once __DIR__ . '/client/class-client-admin.php';
 
 /*
  * Custom data layer for plugin tables.
@@ -1055,44 +1062,9 @@ function stifli_flex_mcp_seed_custom_tools_examples() {
 		),
 		
 		// ============================================================
-		// TYPE 4: WooCommerce REST API (if installed)
+		// TYPE 4: Plugin-Specific REST APIs
+		// Note: These require plugin-specific authentication or permissions
 		// ============================================================
-		
-		// WooCommerce: Get Product by SKU
-		array(
-			'tool_name' => 'custom_wc_product_by_sku',
-			'tool_description' => 'Search WooCommerce product by SKU code. Requires WooCommerce and REST API keys.',
-			'method' => 'GET',
-			'endpoint' => $site_url . '/wp-json/wc/v3/products?sku={sku}',
-			'headers' => "Authorization: Basic YOUR_BASE64_CONSUMER_KEY_SECRET",
-			'arguments' => json_encode(array(
-				'type' => 'object',
-				'properties' => array(
-					'sku' => array('type' => 'string', 'description' => 'Product SKU code')
-				),
-				'required' => array('sku')
-			)),
-			'enabled' => 0
-		),
-		
-		// ============================================================
-		// TYPE 5: Plugin-Specific REST APIs
-		// ============================================================
-		
-		// Contact Form 7: Get Forms List
-		array(
-			'tool_name' => 'custom_cf7_forms',
-			'tool_description' => 'List all Contact Form 7 forms. Requires CF7 plugin with REST API enabled.',
-			'method' => 'GET',
-			'endpoint' => $site_url . '/wp-json/contact-form-7/v1/contact-forms',
-			'headers' => '',
-			'arguments' => json_encode(array(
-				'type' => 'object',
-				'properties' => array(),
-				'required' => array()
-			)),
-			'enabled' => 0
-		),
 		
 		// Jetpack: Get Site Stats (if Jetpack connected)
 		array(
@@ -1325,6 +1297,10 @@ function stifli_flex_mcp_clean_queue() {
 
 /**
  * Maintenance mode toggle
+ * 
+ * LIMITATION: Once maintenance mode is enabled, the MCP API becomes inaccessible (WordPress
+ * returns 503 before plugins load). You must disable maintenance mode manually by deleting
+ * the .maintenance file in WordPress root, or via wp-cli: wp maintenance-mode deactivate
  */
 add_action('sflmcp_maintenance_mode', function($args) {
     $enable = isset($args['enable']) ? (bool) $args['enable'] : false;
@@ -1345,7 +1321,7 @@ add_action('sflmcp_maintenance_mode', function($args) {
 add_filter('sflmcp_action_result', function($result, $action, $args) {
     if ($action === 'sflmcp_maintenance_mode') {
         $enable = isset($args['enable']) ? (bool) $args['enable'] : false;
-        return $enable ? 'Maintenance mode ENABLED. Site now shows maintenance message to visitors.' : 'Maintenance mode DISABLED. Site is now accessible.';
+        return $enable ? 'Maintenance mode ENABLED. Site now shows maintenance message to visitors. WARNING: MCP API will be inaccessible until maintenance mode is disabled manually.' : 'Maintenance mode DISABLED. Site is now accessible.';
     }
     return $result;
 }, 10, 3);
@@ -1404,10 +1380,12 @@ add_filter('sflmcp_action_result', function($result, $action, $args) {
 
 // Global instance variable to prevent garbage collection
 global $stifli_flex_mcp_instance;
+global $stifliFlexMcp;
 
 // Plugin initialization
 add_action('plugins_loaded', function() {
 	global $stifli_flex_mcp_instance;
+	global $stifliFlexMcp;
 	
 	stifli_flex_mcp_maybe_create_queue_table();
 	stifli_flex_mcp_maybe_create_tools_table();
@@ -1423,5 +1401,14 @@ add_action('plugins_loaded', function() {
 	if (class_exists('StifliFlexMcp')) {
 		$stifli_flex_mcp_instance = new StifliFlexMcp();
 		$stifli_flex_mcp_instance->init();
+		
+		// Create global reference with model for client
+		$stifliFlexMcp = new stdClass();
+		$stifliFlexMcp->model = new StifliFlexMcpModel();
+	}
+	
+	// Initialize AI Chat Client admin
+	if (class_exists('StifliFlexMcp_Client_Admin') && is_admin()) {
+		new StifliFlexMcp_Client_Admin();
 	}
 });

@@ -19,12 +19,25 @@ StifLi Flex MCP transforms your WordPress site into a powerful Model Context Pro
 
 * 55 WordPress tools (posts, pages, comments, media, taxonomies, options)
 * 61 WooCommerce tools (products, orders, coupons, shipping, taxes, webhooks)
+* **Custom Tools** - Turn any WordPress plugin into an AI tool in minutes, no coding expertise required
 * JSON-RPC 2.0 compliant REST endpoint
 * Server-Sent Events (SSE) support for real-time streaming
 * Profile-based tool management (8 predefined profiles + custom profiles)
 * WordPress Application Passwords authentication (recommended by WordPress.org)
 * Compatible with ChatGPT Custom Connectors, Claude Desktop, LibreChat
 * Granular permissions control
+
+**🚀 NEW: Custom Tools - Unlimited AI Capabilities**
+
+Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simple PHP snippets that expose plugin functionality to AI agents. Examples:
+
+* Query Contact Form 7 submissions through AI conversations
+* Get Yoast SEO scores and recommendations via ChatGPT
+* Control WP Super Cache settings with natural language
+* Access Advanced Custom Fields data through AI agents
+* Build custom WooCommerce reports for AI analysis
+
+No coding experience required for basic tools - use our examples as templates. Advanced users can create sophisticated integrations with full WordPress/plugin API access.
 
 **Demo & Installation Tutorial:**
 
@@ -122,6 +135,22 @@ Yes! The plugin includes 61 WooCommerce-specific tools. WooCommerce tools will o
 
 Absolutely! The 55 WordPress tools work independently. WooCommerce tools are optional.
 
+= What are Custom Tools? =
+
+Custom Tools is a powerful feature that lets you create your own AI tools using PHP code. This means you can expose ANY plugin's functionality to AI agents - from querying Contact Form 7 submissions to controlling cache plugins. Each Custom Tool has a name, description, optional input schema, and PHP code that executes when called.
+
+= How do I create a Custom Tool? =
+
+1. Go to StifLi Flex MCP → Custom Tools
+2. Click "Add New Tool"
+3. Enter a name (e.g., "custom_my_feature")
+4. Write a description that helps AI understand when to use the tool
+5. Add your PHP code (the code receives `$args` with any input parameters)
+6. Optionally define an input schema for structured parameters
+7. Save and enable the tool
+
+The plugin includes several examples to get you started!
+
 == Screenshots ==
 
 1. Settings tab - Setup instructions and endpoint URLs
@@ -132,9 +161,15 @@ Absolutely! The 55 WordPress tools work independently. WooCommerce tools are opt
 
 == Changelog ==
 = 1.0.5 =
-* Fix: Resolved object persistence issue in PHP 8.1+ causing 404 errors on API endpoints.
-* Fix: Deferred WooCommerce detection to ensure tools load correctly regardless of plugin load order.
-* New: Added "Demo & Installation Tutorial" video to description.
+* **New: Custom Tools** - Turn any WordPress plugin into an AI tool! Copy-paste examples included, no coding expertise required.
+* New: Custom Tools management tab with code editor, enable/disable toggle, and built-in examples
+* New: Pre-built Custom Tool examples (WooCommerce product lookup, CF7 forms, Yoast SEO, WP Super Cache)
+* New: Custom Tools support input schemas for structured AI interactions
+* Improved: All admin styles externalized for WordPress.org compliance
+* Fix: Resolved object persistence issue in PHP 8.1+ causing 404 errors on API endpoints
+* Fix: Deferred WooCommerce detection to ensure tools load correctly regardless of plugin load order
+* Fix: WooCommerce module dispatch now correctly handles tool routing
+
 
 = 1.0.4 =
 * New: Debug logging system with dedicated log file (wp-content/uploads/sflmcp-logs/)
