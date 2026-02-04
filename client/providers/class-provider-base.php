@@ -94,6 +94,7 @@ abstract class StifliFlexMcp_Client_Provider_Base {
 				? $body_json['error']['message'] 
 				: ( isset( $body_json['error'] ) && is_string( $body_json['error'] ) 
 					? $body_json['error'] 
+					/* translators: %d is the HTTP status code */
 					: sprintf( __( 'API error: %d', 'stifli-flex-mcp' ), $status_code ) );
 			
 			return new WP_Error( 'api_error', $error_msg );
@@ -122,6 +123,7 @@ abstract class StifliFlexMcp_Client_Provider_Base {
 		
 		// Base context about the WordPress site
 		$base_context = sprintf(
+			/* translators: %1$s is the site name, %2$s is the site URL */
 			__( 'You are connected to the WordPress site "%1$s" (%2$s). You have access to MCP (Model Context Protocol) tools that can read and modify WordPress content, WooCommerce data, and more.', 'stifli-flex-mcp' ),
 			$site_name,
 			$site_url

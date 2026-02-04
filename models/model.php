@@ -279,13 +279,19 @@ class StifliFlexMcpModel {
             // So if the tool starts with 'custom_', it's already enabled
             $is_custom_tool = strpos($name, 'custom_') === 0;
             
-            // If table doesn't exist, tool is in enabled list, or it's a custom tool, include it
-            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_custom_tool) {
+            // Abilities are already filtered by enabled=1 in getImportedAbilities()
+            // So if the tool starts with 'ability_', it's already enabled
+            $is_ability = strpos($name, 'ability_') === 0;
+            
+            // If table doesn't exist, tool is in enabled list, or it's a custom tool/ability, include it
+            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_custom_tool || $is_ability) {
                 // Categoría
                 if (in_array($name, array('search', 'fetch'), true)) {
                     $tool['category'] = 'Core: OpenAI';
                 } elseif ($is_custom_tool) {
                     $tool['category'] = 'Custom';
+                } elseif ($is_ability) {
+                    $tool['category'] = isset($tool['category']) ? $tool['category'] : 'Abilities';
                 } else {
                     $tool['category'] = 'Core';
                 }
@@ -293,7 +299,7 @@ class StifliFlexMcpModel {
                 $meta = $this->getIntentForTool($name);
                 $tool['intent'] = $meta['intent']; // read | sensitive_read | write
                 $tool['requires_confirmation'] = $meta['requires_confirmation']; // bool
-                if ($table_exists && !$is_custom_tool) {
+                if ($table_exists && !$is_custom_tool && !$is_ability) {
                     $tool['tokenEstimate'] = isset($enabled_tools[$name]) ? (int) $enabled_tools[$name] : StifliFlexMcpUtils::estimateToolTokenUsage($tool);
                 } else {
                     $tool['tokenEstimate'] = StifliFlexMcpUtils::estimateToolTokenUsage($tool);
@@ -1155,6 +1161,15 @@ class StifliFlexMcpModel {
             }
         }
         
+        // Add WordPress Abilities (WordPress 6.9+)
+        $abilities = $this->getImportedAbilities();
+        if (!empty($abilities)) {
+            foreach ($abilities as $tool) {
+                if (!isset($tool['name']) || !isset($tool['inputSchema'])) continue;
+                $this->tools[$tool['name']] = $tool;
+            }
+        }
+        
         return $this->tools;
     }
 
@@ -1195,6 +1210,55 @@ class StifliFlexMcpModel {
                 'category' => 'Custom',
                 'intent' => 'sensitive_read', // Default safe intent
                 'requires_confirmation' => true, // Always require confirmation for external calls
+            );
+        }
+        
+        return $tools;
+    }
+
+    /**
+     * Get imported WordPress Abilities from database (WordPress 6.9+)
+     * These are abilities from other plugins that have been imported via the admin UI.
+     */
+    private function getImportedAbilities() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'sflmcp_abilities';
+        
+        // Check if table exists first
+        $like = $wpdb->esc_like($table);
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
+        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) !== $table) {
+            return array();
+        }
+        
+        $tools = array();
+        
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- fresh data needed.
+        $results = $wpdb->get_results($wpdb->prepare("SELECT * FROM `$table` WHERE enabled = %d", 1));
+        
+        if (!$results) {
+            return array();
+        }
+        
+        foreach ($results as $row) {
+            $input_schema = json_decode($row->input_schema, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($input_schema)) {
+                $input_schema = array('type' => 'object', 'properties' => (object) array(), 'required' => array());
+            }
+            
+            // Convert ability name to tool name: "allsi/search-image" -> "ability_allsi_search_image"
+            $tool_name = 'ability_' . str_replace(array('/', '-'), '_', $row->ability_name);
+            
+            $tools[] = array(
+                'name' => $tool_name,
+                'description' => $row->ability_description ?: $row->ability_label,
+                'inputSchema' => $input_schema,
+                'category' => 'Abilities - ' . $row->ability_category,
+                'intent' => 'sensitive_read', // Abilities may have side effects
+                'requires_confirmation' => true,
+                // Store original ability name for execution
+                '_ability_name' => $row->ability_name,
+                '_is_ability' => true,
             );
         }
         
@@ -2602,9 +2666,85 @@ class StifliFlexMcpModel {
                     return $this->dispatchCustomTool( $tool, $args, $rpcId, $r );
                 }
                 
+                // Try WordPress Abilities (ability_* tools from sflmcp_abilities table)
+                if ( strpos( $tool, 'ability_' ) === 0 ) {
+                    return $this->dispatchAbility( $tool, $args, $rpcId, $r );
+                }
+                
                 // If not handled by any WooCommerce module or unknown tool
                 $r['error'] = array('code' => -42609, 'message' => 'Unknown tool');
         }
+        return $r;
+    }
+
+    /**
+     * Dispatch a WordPress Ability (WordPress 6.9+)
+     * 
+     * @param string $tool The tool name (ability_*).
+     * @param array $args The tool arguments.
+     * @param mixed $rpcId The JSON-RPC request ID.
+     * @param array $r The result array (passed by reference).
+     * @return array The result array.
+     */
+    private function dispatchAbility( $tool, $args, $rpcId, $r ) {
+        // Check if WordPress Abilities API is available
+        if ( ! function_exists( 'wp_get_ability' ) ) {
+            $r['error'] = array(
+                'code' => -32603,
+                'message' => 'WordPress Abilities API not available. Requires WordPress 6.9+',
+            );
+            return $r;
+        }
+
+        // Get the original ability name from the tool definition
+        $tools = $this->getTools();
+        if ( ! isset( $tools[ $tool ] ) || ! isset( $tools[ $tool ]['_ability_name'] ) ) {
+            $r['error'] = array(
+                'code' => -32602,
+                'message' => 'Ability not found or not properly configured',
+            );
+            return $r;
+        }
+
+        $ability_name = $tools[ $tool ]['_ability_name'];
+        
+        // Use wp_get_ability() to get the specific ability
+        $ability = wp_get_ability( $ability_name );
+        if ( ! $ability ) {
+            $r['error'] = array(
+                'code' => -32602,
+                'message' => sprintf( 'Ability "%s" not found in registry. The plugin may have been deactivated.', $ability_name ),
+            );
+            return $r;
+        }
+
+        // Check permission - abilities have their own permission_callback
+        // The check_permission method may not exist on all ability implementations
+        // so we'll let execute() handle permission checking internally
+
+        // Execute the ability with input arguments
+        $result = $ability->execute( $args );
+
+        if ( is_wp_error( $result ) ) {
+            $r['error'] = array(
+                'code' => -32603,
+                'message' => $result->get_error_message(),
+            );
+            return $r;
+        }
+
+        // Format successful result
+        $result_text = is_array( $result ) ? wp_json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) : (string) $result;
+        
+        $r['result'] = array(
+            'content' => array(
+                array(
+                    'type' => 'text',
+                    'text' => $result_text,
+                ),
+            ),
+        );
+
         return $r;
     }
 }

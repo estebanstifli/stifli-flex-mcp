@@ -49,6 +49,12 @@ class StifliFlexMcp {
 			// AJAX handlers for WordPress/WooCommerce tools
 			add_action('wp_ajax_sflmcp_toggle_tool', array($this, 'ajax_toggle_tool'));
 			add_action('wp_ajax_sflmcp_bulk_toggle_tools', array($this, 'ajax_bulk_toggle_tools'));
+			// AJAX handlers for WordPress Abilities API (WordPress 6.9+)
+			add_action('wp_ajax_sflmcp_discover_abilities', array($this, 'ajax_discover_abilities'));
+			add_action('wp_ajax_sflmcp_import_ability', array($this, 'ajax_import_ability'));
+			add_action('wp_ajax_sflmcp_toggle_ability', array($this, 'ajax_toggle_ability'));
+			add_action('wp_ajax_sflmcp_delete_ability', array($this, 'ajax_delete_ability'));
+			add_action('wp_ajax_sflmcp_get_imported_abilities', array($this, 'ajax_get_imported_abilities'));
 		}
 	}
 
@@ -1073,6 +1079,37 @@ class StifliFlexMcp {
 			));
 		}
 
+		// Enqueue Abilities tab assets (WordPress 6.9+)
+		if ($active_tab === 'abilities' && stifli_flex_mcp_abilities_available()) {
+			wp_enqueue_style(
+				'sflmcp-admin-abilities',
+				plugin_dir_url(__FILE__) . 'assets/admin-abilities.css',
+				array(),
+				'1.0.0'
+			);
+			wp_enqueue_script(
+				'sflmcp-admin-abilities',
+				plugin_dir_url(__FILE__) . 'assets/admin-abilities.js',
+				array('jquery'),
+				'1.0.0',
+				true
+			);
+			wp_localize_script('sflmcp-admin-abilities', 'sflmcpAbilities', array(
+				'ajaxUrl' => admin_url('admin-ajax.php'),
+				'nonce' => wp_create_nonce('sflmcp_abilities'),
+				'i18n' => array(
+					'discovering' => __('Discovering abilities...', 'stifli-flex-mcp'),
+					'noAbilities' => __('No abilities found. Install plugins that register WordPress Abilities.', 'stifli-flex-mcp'),
+					'confirmDelete' => __('Are you sure you want to remove this ability?', 'stifli-flex-mcp'),
+					'imported' => __('Ability imported successfully', 'stifli-flex-mcp'),
+					'deleted' => __('Ability removed', 'stifli-flex-mcp'),
+					'error' => __('An error occurred', 'stifli-flex-mcp'),
+					'alreadyImported' => __('Already imported', 'stifli-flex-mcp'),
+					'import' => __('Import', 'stifli-flex-mcp'),
+				),
+			));
+		}
+
 		// Enqueue Tools tab JavaScript (WordPress and WooCommerce tools)
 		if ($active_tab === 'tools' || $active_tab === 'wc_tools') {
 			wp_enqueue_script(
@@ -1146,6 +1183,11 @@ class StifliFlexMcp {
 				<a href="?page=stifli-flex-mcp&tab=wc_tools" class="nav-tab <?php echo $active_tab === 'wc_tools' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('WooCommerce Tools', 'stifli-flex-mcp'); ?>
 				</a>
+				<?php if ( stifli_flex_mcp_abilities_available() ) : ?>
+				<a href="?page=stifli-flex-mcp&tab=abilities" class="nav-tab <?php echo $active_tab === 'abilities' ? 'nav-tab-active' : ''; ?>">
+					<?php echo esc_html__('Abilities', 'stifli-flex-mcp'); ?>
+				</a>
+				<?php endif; ?>
 				<a href="?page=stifli-flex-mcp&tab=custom" class="nav-tab <?php echo $active_tab === 'custom' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Custom Tools', 'stifli-flex-mcp'); ?>
 				</a>
@@ -1166,6 +1208,8 @@ class StifliFlexMcp {
 				$this->renderToolsTab();
 			} elseif ($active_tab === 'wc_tools') {
 				$this->renderWCToolsTab();
+			} elseif ($active_tab === 'abilities' && stifli_flex_mcp_abilities_available()) {
+				$this->renderAbilitiesTab();
 			} elseif ($active_tab === 'custom') {
 				$this->renderCustomToolsTab();
 			} elseif ($active_tab === 'logs') {
@@ -2318,6 +2362,338 @@ class StifliFlexMcp {
 		$contents = stifli_flex_mcp_get_log_contents(500);
 		
 		wp_send_json_success(array('contents' => $contents));
+	}
+
+	/**
+	 * Render Abilities Tab - WordPress 6.9+ Abilities API Integration
+	 */
+	private function renderAbilitiesTab() {
+		?>
+		<h2><?php echo esc_html__('🔮 WordPress Abilities (6.9+)', 'stifli-flex-mcp'); ?></h2>
+		<p class="description">
+			<?php echo esc_html__('Discover and import abilities from other WordPress plugins. Imported abilities are exposed as MCP tools for AI agents.', 'stifli-flex-mcp'); ?>
+		</p>
+
+		<div class="sflmcp-abilities-container" style="display: flex; gap: 20px; margin-top: 20px;">
+			<!-- Left Panel: Discover Abilities -->
+			<div class="sflmcp-abilities-discover" style="flex: 1; background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px;">
+				<h3 style="margin-top: 0;">
+					<?php echo esc_html__('🔍 Discover Available Abilities', 'stifli-flex-mcp'); ?>
+				</h3>
+				<p class="description">
+					<?php echo esc_html__('Scan your WordPress installation for registered abilities from other plugins.', 'stifli-flex-mcp'); ?>
+				</p>
+				<button type="button" id="sflmcp-discover-abilities" class="button button-primary">
+					<?php echo esc_html__('Discover Abilities', 'stifli-flex-mcp'); ?>
+				</button>
+				
+				<div id="sflmcp-discovered-abilities" style="margin-top: 20px;">
+					<!-- Discovered abilities will be loaded here via AJAX -->
+				</div>
+			</div>
+
+			<!-- Right Panel: Imported Abilities -->
+			<div class="sflmcp-abilities-imported" style="flex: 1; background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px;">
+				<h3 style="margin-top: 0;">
+					<?php echo esc_html__('✅ Imported Abilities', 'stifli-flex-mcp'); ?>
+				</h3>
+				<p class="description">
+					<?php echo esc_html__('These abilities are exposed as MCP tools and available to AI agents.', 'stifli-flex-mcp'); ?>
+				</p>
+				
+				<div id="sflmcp-imported-abilities">
+					<?php $this->renderImportedAbilitiesList(); ?>
+				</div>
+			</div>
+		</div>
+
+		<div class="sflmcp-abilities-info" style="margin-top: 20px; padding: 15px; background: #f0f6fc; border-left: 4px solid #0073aa; border-radius: 4px;">
+			<strong><?php echo esc_html__('How it works:', 'stifli-flex-mcp'); ?></strong>
+			<ol style="margin: 10px 0 0 20px;">
+				<li><?php echo esc_html__('Install plugins that register WordPress Abilities (e.g., All Sources Images)', 'stifli-flex-mcp'); ?></li>
+				<li><?php echo esc_html__('Click "Discover Abilities" to find available abilities', 'stifli-flex-mcp'); ?></li>
+				<li><?php echo esc_html__('Import the abilities you want to expose to AI agents', 'stifli-flex-mcp'); ?></li>
+				<li><?php echo esc_html__('AI agents can now use these abilities via MCP', 'stifli-flex-mcp'); ?></li>
+			</ol>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the list of imported abilities
+	 */
+	private function renderImportedAbilitiesList() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_abilities';
+		
+		// Check if table exists
+		$like = $wpdb->esc_like($table);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
+		if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) !== $table) {
+			echo '<p>' . esc_html__('Abilities table not initialized. Please deactivate and reactivate the plugin.', 'stifli-flex-mcp') . '</p>';
+			return;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- fresh data needed.
+		$abilities = $wpdb->get_results("SELECT * FROM {$table} ORDER BY ability_category, ability_label");
+		
+		if (empty($abilities)) {
+			echo '<p style="color: #666; font-style: italic;">' . esc_html__('No abilities imported yet. Use the Discover button to find and import abilities.', 'stifli-flex-mcp') . '</p>';
+			return;
+		}
+
+		echo '<table class="widefat striped" style="margin-top: 10px;">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__('Ability', 'stifli-flex-mcp') . '</th>';
+		echo '<th>' . esc_html__('Category', 'stifli-flex-mcp') . '</th>';
+		echo '<th style="width: 80px; text-align: center;">' . esc_html__('Enabled', 'stifli-flex-mcp') . '</th>';
+		echo '<th style="width: 80px; text-align: center;">' . esc_html__('Actions', 'stifli-flex-mcp') . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ($abilities as $ability) {
+			$enabled_class = $ability->enabled ? 'dashicons-yes-alt' : 'dashicons-marker';
+			$enabled_color = $ability->enabled ? '#46b450' : '#dc3232';
+			$tool_name = 'ability_' . str_replace(array('/', '-'), '_', $ability->ability_name);
+			
+			echo '<tr data-ability-id="' . esc_attr($ability->id) . '">';
+			echo '<td>';
+			echo '<strong>' . esc_html($ability->ability_label) . '</strong>';
+			echo '<br><code style="font-size: 11px; color: #666;">' . esc_html($tool_name) . '</code>';
+			if (!empty($ability->ability_description)) {
+				echo '<br><small style="color: #666;">' . esc_html(wp_trim_words($ability->ability_description, 15)) . '</small>';
+			}
+			echo '</td>';
+			echo '<td>' . esc_html($ability->ability_category) . '</td>';
+			echo '<td style="text-align: center;">';
+			echo '<button type="button" class="button-link sflmcp-toggle-ability" data-id="' . esc_attr($ability->id) . '" data-enabled="' . esc_attr($ability->enabled) . '" title="' . esc_attr__('Toggle enabled', 'stifli-flex-mcp') . '">';
+			echo '<span class="dashicons ' . esc_attr($enabled_class) . '" style="color: ' . esc_attr($enabled_color) . '; font-size: 20px;"></span>';
+			echo '</button>';
+			echo '</td>';
+			echo '<td style="text-align: center;">';
+			echo '<button type="button" class="button-link sflmcp-delete-ability" data-id="' . esc_attr($ability->id) . '" title="' . esc_attr__('Remove ability', 'stifli-flex-mcp') . '">';
+			echo '<span class="dashicons dashicons-trash" style="color: #dc3232;"></span>';
+			echo '</button>';
+			echo '</td>';
+			echo '</tr>';
+		}
+
+		echo '</tbody></table>';
+	}
+
+	/**
+	 * AJAX handler: Discover available WordPress Abilities
+	 */
+	public function ajax_discover_abilities() {
+		check_ajax_referer('sflmcp_abilities', 'nonce');
+
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+		}
+
+		if (!stifli_flex_mcp_abilities_available()) {
+			wp_send_json_error(array('message' => __('WordPress Abilities API not available. Requires WordPress 6.9+', 'stifli-flex-mcp')));
+		}
+
+		// Get all registered abilities using wp_get_abilities()
+		$all_abilities = wp_get_abilities();
+		if (empty($all_abilities)) {
+			wp_send_json_success(array(
+				'abilities' => array(),
+				'message' => __('No abilities found. Install plugins that register WordPress Abilities.', 'stifli-flex-mcp'),
+			));
+			return;
+		}
+
+		// Get already imported abilities
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_abilities';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$imported = $wpdb->get_col("SELECT ability_name FROM {$table}");
+		$imported_map = array_flip($imported);
+
+		$abilities_list = array();
+		foreach ($all_abilities as $ability) {
+			$name = $ability->get_name();
+			
+			// Skip our own abilities if we ever register any
+			if (strpos($name, 'sflmcp/') === 0) {
+				continue;
+			}
+
+			// Get category - may be a string or null
+			$category = method_exists($ability, 'get_category') ? $ability->get_category() : '';
+			if (is_object($category) && method_exists($category, 'get_label')) {
+				$category = $category->get_label();
+			}
+
+			$abilities_list[] = array(
+				'name' => $name,
+				'label' => $ability->get_label(),
+				'description' => $ability->get_description(),
+				'category' => $category ?: 'Uncategorized',
+				'input_schema' => $ability->get_input_schema(),
+				'output_schema' => method_exists($ability, 'get_output_schema') ? $ability->get_output_schema() : null,
+				'imported' => isset($imported_map[$name]),
+			);
+		}
+
+		wp_send_json_success(array(
+			'abilities' => $abilities_list,
+			'count' => count($abilities_list),
+		));
+	}
+
+	/**
+	 * AJAX handler: Import an ability
+	 */
+	public function ajax_import_ability() {
+		check_ajax_referer('sflmcp_abilities', 'nonce');
+
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+		}
+
+		$ability_name = isset($_POST['ability_name']) ? sanitize_text_field(wp_unslash($_POST['ability_name'])) : '';
+		if (empty($ability_name)) {
+			wp_send_json_error(array('message' => __('Ability name is required', 'stifli-flex-mcp')));
+		}
+
+		if (!stifli_flex_mcp_abilities_available()) {
+			wp_send_json_error(array('message' => __('WordPress Abilities API not available', 'stifli-flex-mcp')));
+		}
+
+		// Use wp_get_ability() to get a specific ability
+		$ability = wp_get_ability($ability_name);
+		
+		if (!$ability) {
+			wp_send_json_error(array('message' => __('Ability not found', 'stifli-flex-mcp')));
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_abilities';
+
+		// Check if already imported
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE ability_name = %s", $ability_name));
+		if ($exists) {
+			wp_send_json_error(array('message' => __('Ability already imported', 'stifli-flex-mcp')));
+		}
+
+		$input_schema = $ability->get_input_schema();
+		$output_schema = $ability->get_output_schema();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$result = $wpdb->insert(
+			$table,
+			array(
+				'ability_name' => $ability_name,
+				'ability_label' => $ability->get_label(),
+				'ability_description' => $ability->get_description(),
+				'ability_category' => $ability->get_category(),
+				'input_schema' => is_array($input_schema) ? wp_json_encode($input_schema) : null,
+				'output_schema' => is_array($output_schema) ? wp_json_encode($output_schema) : null,
+				'enabled' => 1,
+				'created_at' => current_time('mysql', true),
+				'updated_at' => current_time('mysql', true),
+			),
+			array('%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s')
+		);
+
+		if ($result === false) {
+			wp_send_json_error(array('message' => __('Failed to import ability', 'stifli-flex-mcp')));
+		}
+
+		wp_send_json_success(array(
+			'message' => __('Ability imported successfully', 'stifli-flex-mcp'),
+			'id' => $wpdb->insert_id,
+		));
+	}
+
+	/**
+	 * AJAX handler: Toggle ability enabled state
+	 */
+	public function ajax_toggle_ability() {
+		check_ajax_referer('sflmcp_abilities', 'nonce');
+
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+		}
+
+		$ability_id = isset($_POST['ability_id']) ? intval($_POST['ability_id']) : 0;
+		if ($ability_id <= 0) {
+			wp_send_json_error(array('message' => __('Invalid ability ID', 'stifli-flex-mcp')));
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_abilities';
+
+		// Get current state
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$current = $wpdb->get_var($wpdb->prepare("SELECT enabled FROM {$table} WHERE id = %d", $ability_id));
+		if ($current === null) {
+			wp_send_json_error(array('message' => __('Ability not found', 'stifli-flex-mcp')));
+		}
+
+		$new_state = $current ? 0 : 1;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->update(
+			$table,
+			array('enabled' => $new_state, 'updated_at' => current_time('mysql', true)),
+			array('id' => $ability_id),
+			array('%d', '%s'),
+			array('%d')
+		);
+
+		wp_send_json_success(array(
+			'enabled' => $new_state,
+			'message' => $new_state ? __('Ability enabled', 'stifli-flex-mcp') : __('Ability disabled', 'stifli-flex-mcp'),
+		));
+	}
+
+	/**
+	 * AJAX handler: Delete an imported ability
+	 */
+	public function ajax_delete_ability() {
+		check_ajax_referer('sflmcp_abilities', 'nonce');
+
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+		}
+
+		$ability_id = isset($_POST['ability_id']) ? intval($_POST['ability_id']) : 0;
+		if ($ability_id <= 0) {
+			wp_send_json_error(array('message' => __('Invalid ability ID', 'stifli-flex-mcp')));
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_abilities';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$result = $wpdb->delete($table, array('id' => $ability_id), array('%d'));
+
+		if ($result === false) {
+			wp_send_json_error(array('message' => __('Failed to delete ability', 'stifli-flex-mcp')));
+		}
+
+		wp_send_json_success(array('message' => __('Ability removed', 'stifli-flex-mcp')));
+	}
+
+	/**
+	 * AJAX handler: Get imported abilities list (for refresh)
+	 */
+	public function ajax_get_imported_abilities() {
+		check_ajax_referer('sflmcp_abilities', 'nonce');
+
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+		}
+
+		ob_start();
+		$this->renderImportedAbilitiesList();
+		$html = ob_get_clean();
+
+		wp_send_json_success(array('html' => $html));
 	}
 
 	/**

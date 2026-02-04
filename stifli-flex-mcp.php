@@ -2,8 +2,8 @@
 /*
 Plugin Name: StifLi Flex MCP
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
-Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117 tools (55 WordPress, 61 WooCommerce, 1 Core) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 1.0.5
+Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
+Version: 2.0.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // define debug constant
 if ( ! defined( 'SFLMCP_DEBUG' ) ) {
-	define( 'SFLMCP_DEBUG', false );
+	define( 'SFLMCP_DEBUG', true );
 }
 
 // Debug logging function
@@ -1251,6 +1251,49 @@ function stifli_flex_mcp_ensure_clean_queue_event() {
 	}
 }
 
+/**
+ * Create abilities table for WordPress 6.9+ Abilities API integration.
+ * This table stores abilities imported from other plugins.
+ */
+function stifli_flex_mcp_maybe_create_abilities_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_abilities';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
+	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		ability_name varchar(191) NOT NULL,
+		ability_label varchar(255) NOT NULL,
+		ability_description text,
+		ability_category varchar(100) DEFAULT 'abilities',
+		input_schema longtext,
+		output_schema longtext,
+		enabled tinyint(1) DEFAULT 1 NOT NULL,
+		created_at datetime DEFAULT CURRENT_TIMESTAMP,
+		updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		UNIQUE KEY ability_name (ability_name),
+		KEY enabled (enabled),
+		KEY ability_category (ability_category)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Check if WordPress Abilities API is available (WordPress 6.9+)
+ */
+function stifli_flex_mcp_abilities_available() {
+	return function_exists('wp_get_abilities');
+}
+
 register_activation_hook(__FILE__, 'stifli_flex_mcp_activate');
 register_deactivation_hook(__FILE__, 'stifli_flex_mcp_deactivate');
 
@@ -1258,6 +1301,7 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_maybe_create_queue_table();
 	stifli_flex_mcp_maybe_create_tools_table();
 	stifli_flex_mcp_maybe_create_custom_tools_table();
+	stifli_flex_mcp_maybe_create_abilities_table();
 	stifli_flex_mcp_maybe_add_tools_token_column();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
@@ -1390,6 +1434,7 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_maybe_create_queue_table();
 	stifli_flex_mcp_maybe_create_tools_table();
 	stifli_flex_mcp_maybe_create_custom_tools_table();
+	stifli_flex_mcp_maybe_create_abilities_table();
 	stifli_flex_mcp_maybe_add_tools_token_column();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();

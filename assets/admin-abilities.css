@@ -1,0 +1,178 @@
+/**
+ * StifLi Flex MCP - Abilities Tab Styles
+ * WordPress 6.9+ Abilities API Integration
+ */
+
+.sflmcp-abilities-container {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.sflmcp-abilities-discover,
+.sflmcp-abilities-imported {
+    flex: 1;
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+}
+
+.sflmcp-abilities-discover h3,
+.sflmcp-abilities-imported h3 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+/* Discovered abilities list */
+.sflmcp-discovered-list {
+    margin-top: 15px;
+}
+
+.sflmcp-discovered-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #f8f9fa;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.sflmcp-discovered-item:hover {
+    background: #f0f6fc;
+    border-color: #0073aa;
+}
+
+.sflmcp-discovered-item.imported {
+    opacity: 0.7;
+    background: #f0f0f0;
+}
+
+.sflmcp-discovered-item-info {
+    flex: 1;
+}
+
+.sflmcp-discovered-item-name {
+    font-weight: 600;
+    color: #1e1e1e;
+    margin-bottom: 2px;
+}
+
+.sflmcp-discovered-item-ability-name {
+    font-family: monospace;
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.sflmcp-discovered-item-description {
+    font-size: 13px;
+    color: #50575e;
+    line-height: 1.4;
+}
+
+.sflmcp-discovered-item-category {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    background: #e7e8ea;
+    border-radius: 3px;
+    color: #50575e;
+    margin-top: 5px;
+}
+
+.sflmcp-discovered-item-actions {
+    margin-left: 15px;
+}
+
+.sflmcp-discovered-item-actions .button {
+    min-width: 80px;
+}
+
+/* Loading state */
+.sflmcp-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    color: #666;
+}
+
+.sflmcp-loading .spinner {
+    float: none;
+    margin: 0 10px 0 0;
+}
+
+/* Empty state */
+.sflmcp-empty-state {
+    text-align: center;
+    padding: 30px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Info box */
+.sflmcp-abilities-info {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f0f6fc;
+    border-left: 4px solid #0073aa;
+    border-radius: 4px;
+}
+
+.sflmcp-abilities-info ol {
+    margin: 10px 0 0 20px;
+}
+
+.sflmcp-abilities-info li {
+    margin-bottom: 5px;
+}
+
+/* Imported abilities table */
+#sflmcp-imported-abilities table {
+    margin-top: 10px;
+}
+
+#sflmcp-imported-abilities .button-link {
+    padding: 0;
+    cursor: pointer;
+}
+
+#sflmcp-imported-abilities .button-link:hover {
+    opacity: 0.8;
+}
+
+#sflmcp-imported-abilities .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+/* Responsive */
+@media screen and (max-width: 1200px) {
+    .sflmcp-abilities-container {
+        flex-direction: column;
+    }
+}
+
+/* Notice styles */
+.sflmcp-notice {
+    padding: 10px 15px;
+    margin: 10px 0;
+    border-radius: 4px;
+}
+
+.sflmcp-notice-success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.sflmcp-notice-error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}

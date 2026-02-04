@@ -43,14 +43,35 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 		// Build contents array
 		$contents = array();
 
-		// Add system instruction as first user message if conversation is empty
-		if ( empty( $conversation ) ) {
-			// Gemini uses systemInstruction separately
-		}
-
-		// Add conversation history
+		// Add conversation history - convert from OpenAI/Claude format to Gemini format
 		foreach ( $conversation as $msg ) {
-			$contents[] = $msg;
+			// Skip empty messages
+			if ( empty( $msg ) ) {
+				continue;
+			}
+
+			// If already in Gemini format (has 'parts'), use as-is
+			if ( isset( $msg['parts'] ) ) {
+				$contents[] = $msg;
+				continue;
+			}
+
+			// Convert from OpenAI/Claude format { role, content } to Gemini format { role, parts }
+			$role = $msg['role'] ?? 'user';
+			// Gemini uses 'model' instead of 'assistant'
+			if ( $role === 'assistant' ) {
+				$role = 'model';
+			}
+
+			$content = $msg['content'] ?? '';
+			if ( ! empty( $content ) ) {
+				$contents[] = array(
+					'role'  => $role,
+					'parts' => array(
+						array( 'text' => $content ),
+					),
+				);
+			}
 		}
 
 		// If we have a tool result, add it as a function response
@@ -105,6 +126,10 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 		// Build URL with API key
 		$url = sprintf( self::API_URL_TEMPLATE, $model ) . '?key=' . $api_key;
 
+		stifli_flex_mcp_log( '[Gemini] Sending request to model: ' . $model );
+		stifli_flex_mcp_log( '[Gemini] Tools count: ' . count( $tools ) );
+		stifli_flex_mcp_log( '[Gemini] Request body: ' . wp_json_encode( $body ) );
+
 		// Make request
 		$response = $this->make_request(
 			$url,
@@ -115,8 +140,11 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			stifli_flex_mcp_log( '[Gemini] Request error: ' . $response->get_error_message() );
 			return $response;
 		}
+
+		stifli_flex_mcp_log( '[Gemini] Raw response: ' . wp_json_encode( $response ) );
 
 		return $this->parse_response( $response, $contents );
 	}
@@ -189,12 +217,17 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 
 		// Parse parts
 		if ( isset( $content['parts'] ) && is_array( $content['parts'] ) ) {
+			stifli_flex_mcp_log( '[Gemini] Parsing ' . count( $content['parts'] ) . ' parts' );
+
 			foreach ( $content['parts'] as $part ) {
+				stifli_flex_mcp_log( '[Gemini] Part keys: ' . implode( ', ', array_keys( $part ) ) );
+
 				if ( isset( $part['text'] ) ) {
 					$result['text'] .= $part['text'];
 				} elseif ( isset( $part['functionCall'] ) ) {
 					// Tool call detected
 					$fc = $part['functionCall'];
+					stifli_flex_mcp_log( '[Gemini] Function call detected: ' . wp_json_encode( $fc ) );
 					$result['tool_calls'][] = array(
 						'id'        => uniqid( 'fc_' ), // Gemini doesn't provide IDs
 						'name'      => $fc['name'] ?? '',
@@ -204,6 +237,8 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 				}
 			}
 		}
+
+		stifli_flex_mcp_log( '[Gemini] Final result - text length: ' . strlen( $result['text'] ) . ', tool_calls: ' . count( $result['tool_calls'] ) );
 
 		return $result;
 	}

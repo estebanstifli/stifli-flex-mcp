@@ -4,7 +4,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, automation, rest-api
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 1.0.5
+Stable tag: 2.0.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -17,6 +17,8 @@ StifLi Flex MCP transforms your WordPress site into a powerful Model Context Pro
 
 **Key Features:**
 
+* **🆕 Built-in AI Chat Client** - Chat directly with AI from your WordPress admin. No external connections needed!
+* **🆕 WordPress Abilities Integration** (6.9+) - Auto-discover and import abilities from other plugins!
 * 55 WordPress tools (posts, pages, comments, media, taxonomies, options)
 * 61 WooCommerce tools (products, orders, coupons, shipping, taxes, webhooks)
 * **Custom Tools** - Turn any WordPress plugin into an AI tool in minutes, no coding expertise required
@@ -38,6 +40,19 @@ Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simp
 * Build custom WooCommerce reports for AI analysis
 
 No coding experience required for basic tools - use our examples as templates. Advanced users can create sophisticated integrations with full WordPress/plugin API access.
+
+**🆕 Built-in AI Chat Client - A World of Possibilities**
+
+The new AI Chat Client opens up a whole new world of possibilities without needing to connect from external tools! Chat directly with AI from your WordPress admin panel:
+
+* **Multi-provider support** - OpenAI (GPT-4o, GPT-4.5), Claude (Claude 4, Haiku), Google Gemini (2.0 Flash, 2.5 Pro)
+* **Direct tool execution** - AI can manage your WordPress/WooCommerce directly through conversation
+* **Smart suggestions** - Get contextual follow-up suggestions after each response
+* **Conversation history** - Auto-saved across sessions with tab support
+* **Tool confirmations** - Choose "Always Allow" or "Ask User" for tool execution
+* **Advanced settings** - Control temperature, max tokens, top_p, and system prompts
+
+No API keys to configure externally, no complex setup - just add your API key and start chatting!
 
 **Demo & Installation Tutorial:**
 
@@ -153,13 +168,42 @@ The plugin includes several examples to get you started!
 
 == Screenshots ==
 
-1. Settings tab - Setup instructions and endpoint URLs
-2. Profiles tab - Manage tool configurations
-3. WordPress Tools tab - Enable/disable WordPress tools
-4. WooCommerce Tools tab - Manage WooCommerce tools
+1. AI Chat Client - Chat with AI directly from WordPress admin
+2. Settings tab - Setup instructions and endpoint URLs
+3. Profiles tab - Manage tool configurations
+4. WordPress Tools tab - Enable/disable WordPress tools
+5. WooCommerce Tools tab - Manage WooCommerce tools
 
 
 == Changelog ==
+= 2.0.2 =
+* **🆕 WordPress Abilities Integration** (WordPress 6.9+) - Auto-discover and import abilities from other plugins!
+* New: Abilities tab in admin (appears only on WordPress 6.9+)
+* New: Discover button to scan all registered abilities from themes/plugins
+* New: Import, enable/disable, and delete individual abilities
+* New: Abilities exposed as MCP tools (ability_* prefix) for AI agents
+* New: Database table wp_sflmcp_abilities for persistent ability storage
+* Improved: Plugin description updated to reflect 117+ tools
+* Technical: Uses wp_get_abilities(), wp_get_ability(), $ability->execute() APIs
+
+= 2.0.1 =
+* **🆕 Built-in AI Chat Client** - Chat with AI directly from your WordPress admin panel!
+* New: Multi-provider support - OpenAI, Claude (Anthropic), and Google Gemini
+* New: Support for latest models including GPT-4.5, Claude 4 Opus/Sonnet, Gemini 2.5 Pro/Flash
+* New: Smart suggestion chips that appear after AI responses
+* New: Conversation history auto-saved per user (7-day retention)
+* New: Stop button to cancel AI responses mid-generation
+* New: Tool permission modes - "Always Allow" or "Ask User" for confirmations
+* New: Advanced settings tab with temperature, max tokens, top_p, frequency/presence penalty
+* New: Customizable system prompt for AI behavior
+* New: Tool display options (Full details, Compact, or Hidden)
+* New: Multilingual suggestions - AI responds in the same language you use
+* Improved: Sequential tool execution for better reliability across all providers
+* Improved: Claude 4.5 model compatibility (temperature/top_p handling)
+* Improved: Gemini API message format conversion
+* Fixed: Claude multiple tool_use error handling
+* Fixed: Gemini "content" vs "parts" API format issue
+
 = 1.0.5 =
 * **New: Custom Tools** - Turn any WordPress plugin into an AI tool! Copy-paste examples included, no coding expertise required.
 * New: Custom Tools management tab with code editor, enable/disable toggle, and built-in examples
@@ -201,6 +245,12 @@ The plugin includes several examples to get you started!
 * Compatible with ChatGPT Custom Connectors, Claude Desktop, LibreChat
 
 == Upgrade Notice ==
+
+= 2.0.2 =
+New WordPress Abilities integration! Auto-discover and import abilities from other plugins (WordPress 6.9+ required).
+
+= 2.0.1 =
+Major update! New built-in AI Chat Client - chat with GPT-4.5, Claude 4, or Gemini directly from WordPress admin. No external tools needed!
 
 = 1.0.0 =
 Initial release. Install and configure your MCP server to start automating WordPress with AI agents.

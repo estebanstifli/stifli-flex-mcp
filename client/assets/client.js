@@ -15,6 +15,7 @@
         conversation: [],
         chatHistory: [], // Full history with tool details
         isProcessing: false,
+        isStopped: false, // User clicked Stop
         pendingToolCalls: [],
         currentToolIndex: 0,
         settings: sflmcpClient.settings || {},
@@ -36,6 +37,7 @@
     let $frequencyPenalty, $frequencyPenaltyValue;
     let $presencePenalty, $presencePenaltyValue;
     let $advancedSaveIndicator;
+    let $enableSuggestions, $suggestionsCount;
 
     /**
      * Initialize the chat client
@@ -95,6 +97,8 @@
         $presencePenalty = $('#sflmcp-presence-penalty');
         $presencePenaltyValue = $('#sflmcp-presence-penalty-value');
         $advancedSaveIndicator = $('#sflmcp-advanced-save-indicator');
+        $enableSuggestions = $('#sflmcp-enable-suggestions');
+        $suggestionsCount = $('#sflmcp-suggestions-count');
     }
 
     /**
@@ -103,11 +107,13 @@
     function bindEvents() {
         // Chat tab events
         if ($sendBtn && $sendBtn.length) {
-            $sendBtn.on('click', sendMessage);
+            $sendBtn.on('click', handleSendButtonClick);
             $chatInput.on('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    sendMessage();
+                    if (!state.isProcessing) {
+                        sendMessage();
+                    }
                 }
             });
             $clearBtn.on('click', clearChat);
@@ -143,6 +149,16 @@
             $toolDisplay.on('change', triggerAdvancedAutoSave);
             $maxTools.on('input', triggerAdvancedAutoSave);
             $maxTokens.on('input', triggerAdvancedAutoSave);
+            
+            // Suggestions fields
+            $enableSuggestions.on('change', function() {
+                state.advanced.enable_suggestions = $(this).is(':checked');
+                triggerAdvancedAutoSave();
+            });
+            $suggestionsCount.on('input', function() {
+                state.advanced.suggestions_count = parseInt($(this).val()) || 3;
+                triggerAdvancedAutoSave();
+            });
             
             // Range sliders with value display
             $temperature.on('input', function() {
@@ -246,6 +262,8 @@
                 top_p: $topP.val(),
                 frequency_penalty: $frequencyPenalty.val(),
                 presence_penalty: $presencePenalty.val(),
+                enable_suggestions: $enableSuggestions.is(':checked') ? 1 : 0,
+                suggestions_count: $suggestionsCount.val(),
                 adv_provider: $advProviderSelect.val(),
                 adv_model: $advModelSelect.val()
             },
@@ -419,6 +437,19 @@
     }
 
     /**
+     * Handle Send/Stop button click
+     */
+    function handleSendButtonClick() {
+        if (state.isProcessing) {
+            // Stop mode - user wants to stop
+            handleStopClick();
+        } else {
+            // Send mode - send message
+            sendMessage();
+        }
+    }
+
+    /**
      * Send a message to the AI
      */
     function sendMessage() {
@@ -437,11 +468,15 @@
         }
 
         state.isProcessing = true;
-        $sendBtn.prop('disabled', true);
+        state.isStopped = false;
+        setButtonStopMode();
         $chatInput.val('');
 
         // Remove welcome message if present
         $('.sflmcp-welcome-message').remove();
+        
+        // Remove any existing suggestion chips
+        $('.sflmcp-suggestions').remove();
 
         // Add user message to chat
         addMessage('user', message);
@@ -461,13 +496,14 @@
         sendToAI(message, null)
             .then(response => {
                 $thinking.remove();
-                handleAIResponse(response);
+                if (!state.isStopped) {
+                    handleAIResponse(response);
+                }
             })
             .catch(error => {
                 $thinking.remove();
                 showError(error.message || sflmcpClient.i18n.error);
-                state.isProcessing = false;
-                $sendBtn.prop('disabled', false);
+                finishProcessing();
             });
     }
 
@@ -514,41 +550,91 @@
 
         // Add text response if any
         if (response.text) {
-            addMessage('assistant', response.text);
+            // Parse suggestions from text if enabled
+            const { cleanText, suggestions } = parseSuggestions(response.text);
             
-            // Add to history
+            addMessage('assistant', cleanText);
+            
+            // Add to history (store clean text)
             state.chatHistory.push({
                 type: 'assistant',
-                content: response.text,
+                content: cleanText,
                 timestamp: new Date().toISOString()
             });
             saveHistory();
+            
+            // Render suggestion chips if enabled and available
+            if (state.advanced.enable_suggestions && suggestions.length > 0) {
+                renderSuggestionChips(suggestions);
+            }
         }
 
-        // Check for tool calls
+        // Check for tool calls - process ONE at a time sequentially
         if (response.tool_calls && response.tool_calls.length > 0) {
-            // Limit tool calls based on max_tools_per_turn
-            const maxTools = state.advanced.max_tools_per_turn || 10;
-            state.pendingToolCalls = response.tool_calls.slice(0, maxTools);
+            // Take only the FIRST tool call for sequential processing
+            // The AI is instructed to call one tool at a time, but we enforce it here too
+            state.pendingToolCalls = [response.tool_calls[0]];
             state.currentToolIndex = 0;
+            state.isStopped = false;
             processNextToolCall();
         } else {
             // Finished
-            state.isProcessing = false;
-            $sendBtn.prop('disabled', false);
+            finishProcessing();
         }
     }
 
     /**
-     * Process next tool call in queue
+     * Finish processing and reset button state
+     */
+    function finishProcessing() {
+        state.isProcessing = false;
+        state.isStopped = false;
+        state.pendingToolCalls = [];
+        state.currentToolIndex = 0;
+        setButtonSendMode();
+    }
+
+    /**
+     * Set button to Send mode
+     */
+    function setButtonSendMode() {
+        $sendBtn.removeClass('sflmcp-btn-stop').addClass('button-primary');
+        $sendBtn.html('<span class="dashicons dashicons-arrow-right-alt"></span> ' + sflmcpClient.i18n.send);
+        $sendBtn.prop('disabled', false);
+    }
+
+    /**
+     * Set button to Stop mode
+     */
+    function setButtonStopMode() {
+        $sendBtn.removeClass('button-primary').addClass('sflmcp-btn-stop');
+        $sendBtn.html('<span class="dashicons dashicons-controls-pause"></span> ' + sflmcpClient.i18n.stop);
+        $sendBtn.prop('disabled', false);
+    }
+
+    /**
+     * Handle Stop button click
+     */
+    function handleStopClick() {
+        state.isStopped = true;
+        $('.sflmcp-thinking').remove();
+        $toolModal.hide();
+        showNotice(sflmcpClient.i18n.stopped, 'warning');
+        finishProcessing();
+    }
+
+    /**
+     * Process next tool call in queue (sequential: one at a time)
      */
     function processNextToolCall() {
+        // Check if user stopped
+        if (state.isStopped) {
+            return;
+        }
+
         if (state.currentToolIndex >= state.pendingToolCalls.length) {
-            // All tools processed, continue conversation
-            state.pendingToolCalls = [];
-            state.currentToolIndex = 0;
-            state.isProcessing = false;
-            $sendBtn.prop('disabled', false);
+            // No more tools to process
+            finishProcessing();
             return;
         }
 
@@ -557,7 +643,7 @@
 
         if (permission === 'always') {
             // Execute immediately
-            processToolCall(true);
+            executeToolCallSequential(toolCall);
         } else {
             // Ask user
             showToolModal(toolCall);
@@ -565,48 +651,17 @@
     }
 
     /**
-     * Show tool execution modal
+     * Execute a single tool and send result immediately to AI (sequential flow)
      */
-    function showToolModal(toolCall) {
-        $toolModal.find('.sflmcp-tool-name').text(toolCall.name);
-        $toolModal.find('.sflmcp-tool-args').html(
-            '<pre>' + JSON.stringify(toolCall.arguments, null, 2) + '</pre>'
-        );
-        $toolModal.show();
-    }
-
-    /**
-     * Process a tool call (execute or deny)
-     */
-    function processToolCall(allowed) {
-        const toolCall = state.pendingToolCalls[state.currentToolIndex];
-
-        if (!allowed) {
-            // Add denied message
-            addToolMessage(toolCall.name, sflmcpClient.i18n.toolDenied, 'denied', toolCall.arguments);
-            
-            // Add to history
-            state.chatHistory.push({
-                type: 'tool',
-                name: toolCall.name,
-                input: toolCall.arguments,
-                output: null,
-                status: 'denied',
-                timestamp: new Date().toISOString()
-            });
-            saveHistory();
-            
-            state.currentToolIndex++;
-            processNextToolCall();
-            return;
-        }
-
+    function executeToolCallSequential(toolCall) {
         // Show executing message
         addToolMessage(toolCall.name, sflmcpClient.i18n.executingTool, 'executing', toolCall.arguments);
 
         // Execute tool via AJAX
         executeToolViaAjax(toolCall)
             .then(result => {
+                if (state.isStopped) return;
+                
                 // Update the tool message with result
                 updateLastToolMessage(toolCall.name, result, 'success');
 
@@ -621,23 +676,27 @@
                 });
                 saveHistory();
 
-                // Build tool result for the AI
+                // Build tool result and send immediately to AI
                 const toolResult = buildToolResult(toolCall, result);
-
+                
                 // Show thinking indicator
                 const $thinking = addThinkingIndicator();
-
-                // Send result back to AI
+                
+                // Send result back to AI immediately
                 return sendToAI('', toolResult);
             })
             .then(response => {
+                if (state.isStopped) return;
+                
                 $('.sflmcp-thinking').remove();
-                state.currentToolIndex++;
                 
                 // Handle new response (may have more tool calls)
                 handleAIResponse(response);
             })
             .catch(error => {
+                if (state.isStopped) return;
+                
+                $('.sflmcp-thinking').remove();
                 updateLastToolMessage(toolCall.name, { error: error.message }, 'error');
                 
                 // Add to history
@@ -650,10 +709,77 @@
                     timestamp: new Date().toISOString()
                 });
                 saveHistory();
+
+                // Send error result to AI so it knows what happened
+                const toolResult = buildToolResult(toolCall, { error: error.message });
+                const $thinking = addThinkingIndicator();
                 
-                state.currentToolIndex++;
-                processNextToolCall();
+                sendToAI('', toolResult)
+                    .then(response => {
+                        $('.sflmcp-thinking').remove();
+                        if (!state.isStopped) {
+                            handleAIResponse(response);
+                        }
+                    })
+                    .catch(() => {
+                        $('.sflmcp-thinking').remove();
+                        finishProcessing();
+                    });
             });
+    }
+
+    /**
+     * Show tool execution modal
+     */
+    function showToolModal(toolCall) {
+        $toolModal.find('.sflmcp-tool-name').text(toolCall.name);
+        $toolModal.find('.sflmcp-tool-args').html(
+            '<pre>' + JSON.stringify(toolCall.arguments, null, 2) + '</pre>'
+        );
+        $toolModal.show();
+    }
+
+    /**
+     * Process a tool call from modal (execute or deny)
+     */
+    function processToolCall(allowed) {
+        const toolCall = state.pendingToolCalls[state.currentToolIndex];
+
+        if (!allowed) {
+            // Add denied message
+            addToolMessage(toolCall.name, sflmcpClient.i18n.toolDenied, 'denied', toolCall.arguments);
+            
+            // Add to history
+            state.chatHistory.push({
+                type: 'tool',
+                name: toolCall.name,
+                input: toolCall.arguments,
+                output: { denied: true },
+                status: 'denied',
+                timestamp: new Date().toISOString()
+            });
+            saveHistory();
+            
+            // Send denied result to AI so it knows and can continue
+            const toolResult = buildToolResult(toolCall, { error: 'Tool execution denied by user' });
+            const $thinking = addThinkingIndicator();
+            
+            sendToAI('', toolResult)
+                .then(response => {
+                    $('.sflmcp-thinking').remove();
+                    if (!state.isStopped) {
+                        handleAIResponse(response);
+                    }
+                })
+                .catch(() => {
+                    $('.sflmcp-thinking').remove();
+                    finishProcessing();
+                });
+            return;
+        }
+
+        // Execute the tool sequentially
+        executeToolCallSequential(toolCall);
     }
 
     /**
@@ -964,6 +1090,64 @@
         if ($chatMessages && $chatMessages.length) {
             $chatMessages.scrollTop($chatMessages[0].scrollHeight);
         }
+    }
+
+    /**
+     * Parse suggestions from AI response text
+     * Looks for lines starting with [SUGGESTION]
+     */
+    function parseSuggestions(text) {
+        const suggestions = [];
+        const lines = text.split('\n');
+        const cleanLines = [];
+        
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('[SUGGESTION]')) {
+                const suggestion = trimmed.replace('[SUGGESTION]', '').trim();
+                if (suggestion) {
+                    suggestions.push(suggestion);
+                }
+            } else {
+                cleanLines.push(line);
+            }
+        }
+        
+        // Remove trailing empty lines from clean text
+        while (cleanLines.length > 0 && cleanLines[cleanLines.length - 1].trim() === '') {
+            cleanLines.pop();
+        }
+        
+        return {
+            cleanText: cleanLines.join('\n'),
+            suggestions: suggestions
+        };
+    }
+
+    /**
+     * Render suggestion chips below the last message
+     */
+    function renderSuggestionChips(suggestions) {
+        // Remove any existing suggestion chips
+        $('.sflmcp-suggestions').remove();
+        
+        const $container = $('<div class="sflmcp-suggestions"></div>');
+        
+        suggestions.forEach(suggestion => {
+            const $chip = $('<button type="button" class="sflmcp-suggestion-chip"></button>');
+            $chip.text(suggestion);
+            $chip.on('click', function() {
+                // Remove all suggestion chips when one is clicked
+                $('.sflmcp-suggestions').remove();
+                // Set the suggestion as the input value and send
+                $chatInput.val(suggestion);
+                sendMessage();
+            });
+            $container.append($chip);
+        });
+        
+        $chatMessages.append($container);
+        scrollToBottom();
     }
 
     // Initialize on ready

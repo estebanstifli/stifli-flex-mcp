@@ -102,6 +102,8 @@ class StifliFlexMcp_Client_Admin {
 			'tools'    => $this->get_tools_info(), // Tools with name and description for display
 			'i18n'     => array(
 				'send'              => __( 'Send', 'stifli-flex-mcp' ),
+				'stop'              => __( 'Stop', 'stifli-flex-mcp' ),
+				'stopped'           => __( 'Stopped by user', 'stifli-flex-mcp' ),
 				'thinking'          => __( 'Thinking...', 'stifli-flex-mcp' ),
 				'executingTool'     => __( 'Executing tool:', 'stifli-flex-mcp' ),
 				'toolResult'        => __( 'Tool result:', 'stifli-flex-mcp' ),
@@ -147,14 +149,16 @@ class StifliFlexMcp_Client_Admin {
 	 */
 	public function get_advanced_settings() {
 		$defaults = array(
-			'system_prompt'      => __( 'You are an AI assistant with access to WordPress and WooCommerce tools. Use them carefully and always explain what you are doing.', 'stifli-flex-mcp' ),
-			'tool_display'       => 'full',
-			'max_tools_per_turn' => 10,
-			'temperature'        => 0.7,
-			'max_tokens'         => 4096,
-			'top_p'              => 1.0,
-			'frequency_penalty'  => 0,
-			'presence_penalty'   => 0,
+			'system_prompt'         => __( 'You are an AI assistant with access to WordPress and WooCommerce tools. Use them carefully and always explain what you are doing.', 'stifli-flex-mcp' ),
+			'tool_display'          => 'full',
+			'max_tools_per_turn'    => 10,
+			'temperature'           => 0.7,
+			'max_tokens'            => 4096,
+			'top_p'                 => 1.0,
+			'frequency_penalty'     => 0,
+			'presence_penalty'      => 0,
+			'enable_suggestions'    => true,
+			'suggestions_count'     => 3,
 		);
 
 		$settings = get_option( self::OPTION_NAME . '_advanced', array() );
@@ -210,6 +214,7 @@ class StifliFlexMcp_Client_Admin {
 		$settings = $this->get_settings();
 		$advanced = $this->get_advanced_settings();
 		$models   = $this->get_available_models();
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Tab selection for display only, no data processing
 		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'chat';
 		?>
 		<div class="wrap sflmcp-client-wrap">
@@ -376,6 +381,33 @@ class StifliFlexMcp_Client_Admin {
 			</p>
 
 			<table class="form-table sflmcp-advanced-form">
+				<!-- AI Provider & Model (first for convenience) -->
+				<tr>
+					<th scope="row">
+						<label for="sflmcp-adv-provider"><?php esc_html_e( 'AI Provider & Model', 'stifli-flex-mcp' ); ?></label>
+					</th>
+					<td>
+						<select id="sflmcp-adv-provider" name="adv_provider" style="width:200px;">
+							<option value="openai" <?php selected( $settings['provider'], 'openai' ); ?>>OpenAI</option>
+							<option value="claude" <?php selected( $settings['provider'], 'claude' ); ?>>Claude (Anthropic)</option>
+							<option value="gemini" <?php selected( $settings['provider'], 'gemini' ); ?>>Gemini (Google)</option>
+						</select>
+						<select id="sflmcp-adv-model" name="adv_model" style="width:350px;">
+							<?php foreach ( $models as $provider => $provider_models ) : ?>
+								<?php foreach ( $provider_models as $model_id => $model_name ) : ?>
+									<option value="<?php echo esc_attr( $model_id ); ?>" 
+											data-provider="<?php echo esc_attr( $provider ); ?>"
+											<?php selected( $settings['model'], $model_id ); ?>
+											<?php echo $settings['provider'] !== $provider ? 'style="display:none;"' : ''; ?>>
+										<?php echo esc_html( $model_name ); ?>
+									</option>
+								<?php endforeach; ?>
+							<?php endforeach; ?>
+						</select>
+						<p class="description"><?php esc_html_e( 'Also configurable in the Chat tab.', 'stifli-flex-mcp' ); ?></p>
+					</td>
+				</tr>
+
 				<!-- System Prompt -->
 				<tr>
 					<th scope="row">
@@ -414,30 +446,39 @@ class StifliFlexMcp_Client_Admin {
 					</td>
 				</tr>
 
-				<!-- Model Selection (duplicate for convenience) -->
+				<!-- Suggestions Section -->
+				<tr>
+					<th scope="row" colspan="2">
+						<h2 class="sflmcp-section-title">
+							<span class="dashicons dashicons-lightbulb"></span>
+							<?php esc_html_e( 'Suggested Replies', 'stifli-flex-mcp' ); ?>
+						</h2>
+						<p class="description"><?php esc_html_e( 'Show clickable suggestion chips after each AI response.', 'stifli-flex-mcp' ); ?></p>
+					</th>
+				</tr>
+
+				<!-- Enable Suggestions -->
 				<tr>
 					<th scope="row">
-						<label for="sflmcp-adv-provider"><?php esc_html_e( 'AI Provider & Model', 'stifli-flex-mcp' ); ?></label>
+						<label for="sflmcp-enable-suggestions"><?php esc_html_e( 'Enable Suggestions', 'stifli-flex-mcp' ); ?></label>
 					</th>
 					<td>
-						<select id="sflmcp-adv-provider" name="adv_provider" style="width:200px;">
-							<option value="openai" <?php selected( $settings['provider'], 'openai' ); ?>>OpenAI</option>
-							<option value="claude" <?php selected( $settings['provider'], 'claude' ); ?>>Claude (Anthropic)</option>
-							<option value="gemini" <?php selected( $settings['provider'], 'gemini' ); ?>>Gemini (Google)</option>
-						</select>
-						<select id="sflmcp-adv-model" name="adv_model" style="width:350px;">
-							<?php foreach ( $models as $provider => $provider_models ) : ?>
-								<?php foreach ( $provider_models as $model_id => $model_name ) : ?>
-									<option value="<?php echo esc_attr( $model_id ); ?>" 
-											data-provider="<?php echo esc_attr( $provider ); ?>"
-											<?php selected( $settings['model'], $model_id ); ?>
-											<?php echo $settings['provider'] !== $provider ? 'style="display:none;"' : ''; ?>>
-										<?php echo esc_html( $model_name ); ?>
-									</option>
-								<?php endforeach; ?>
-							<?php endforeach; ?>
-						</select>
-						<p class="description"><?php esc_html_e( 'Also configurable in the Chat tab.', 'stifli-flex-mcp' ); ?></p>
+						<label>
+							<input type="checkbox" id="sflmcp-enable-suggestions" name="enable_suggestions" value="1" <?php checked( $advanced['enable_suggestions'] ); ?> />
+							<?php esc_html_e( 'Show suggested replies as clickable chips', 'stifli-flex-mcp' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'When enabled, the AI will provide quick reply suggestions that you can click to send.', 'stifli-flex-mcp' ); ?></p>
+					</td>
+				</tr>
+
+				<!-- Number of Suggestions -->
+				<tr>
+					<th scope="row">
+						<label for="sflmcp-suggestions-count"><?php esc_html_e( 'Number of Suggestions', 'stifli-flex-mcp' ); ?></label>
+					</th>
+					<td>
+						<input type="number" id="sflmcp-suggestions-count" name="suggestions_count" value="<?php echo esc_attr( $advanced['suggestions_count'] ); ?>" min="1" max="6" class="small-text" />
+						<p class="description"><?php esc_html_e( 'How many suggestions to show after each response. Default: 3 (max 6).', 'stifli-flex-mcp' ); ?></p>
 					</td>
 				</tr>
 
@@ -556,6 +597,8 @@ class StifliFlexMcp_Client_Admin {
 			'top_p'              => floatval( $_POST['top_p'] ?? 1.0 ),
 			'frequency_penalty'  => floatval( $_POST['frequency_penalty'] ?? 0 ),
 			'presence_penalty'   => floatval( $_POST['presence_penalty'] ?? 0 ),
+			'enable_suggestions' => ! empty( $_POST['enable_suggestions'] ),
+			'suggestions_count'  => absint( $_POST['suggestions_count'] ?? 3 ),
 		);
 
 		// Validate ranges
@@ -565,6 +608,7 @@ class StifliFlexMcp_Client_Admin {
 		$advanced['frequency_penalty'] = max( 0, min( 2, $advanced['frequency_penalty'] ) );
 		$advanced['presence_penalty']  = max( 0, min( 2, $advanced['presence_penalty'] ) );
 		$advanced['max_tools_per_turn'] = max( 1, min( 50, $advanced['max_tools_per_turn'] ) );
+		$advanced['suggestions_count']  = max( 1, min( 6, $advanced['suggestions_count'] ) );
 
 		update_option( self::OPTION_NAME . '_advanced', $advanced );
 
@@ -590,6 +634,7 @@ class StifliFlexMcp_Client_Admin {
 		}
 
 		$user_id = get_current_user_id();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- JSON data must be decoded raw, then sanitized after parsing
 		$history = isset( $_POST['history'] ) ? json_decode( wp_unslash( $_POST['history'] ), true ) : array();
 
 		if ( ! is_array( $history ) ) {
@@ -652,7 +697,9 @@ class StifliFlexMcp_Client_Admin {
 		$provider      = sanitize_text_field( wp_unslash( $_POST['provider'] ?? 'openai' ) );
 		$api_key       = sanitize_text_field( wp_unslash( $_POST['api_key'] ?? '' ) );
 		$model         = sanitize_text_field( wp_unslash( $_POST['model'] ?? '' ) );
-		$conversation  = isset( $_POST['conversation'] ) ? json_decode( wp_unslash( $_POST['conversation'] ), true ) : array();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- JSON data must be decoded raw, then sanitized after parsing
+		$conversation = isset( $_POST['conversation'] ) ? json_decode( wp_unslash( $_POST['conversation'] ), true ) : array();
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- JSON data must be decoded raw, then sanitized after parsing
 		$tool_result   = isset( $_POST['tool_result'] ) ? json_decode( wp_unslash( $_POST['tool_result'] ), true ) : null;
 
 		// Get advanced settings for model parameters
@@ -671,6 +718,24 @@ class StifliFlexMcp_Client_Admin {
 			wp_send_json_error( array( 'message' => __( 'Invalid provider', 'stifli-flex-mcp' ) ) );
 		}
 
+		// Build system prompt with suggestions instruction if enabled
+		$system_prompt = $advanced['system_prompt'];
+		if ( ! empty( $advanced['enable_suggestions'] ) ) {
+			$count = intval( $advanced['suggestions_count'] );
+			$system_prompt .= "\n\n" . sprintf(
+				/* translators: %d is the number of suggestions to provide */
+				__( 'SUGGESTIONS: At the end of your response, provide exactly %d short follow-up questions or actions the user might want to take next. Format them EXACTLY like this, one per line:
+[SUGGESTION] First suggestion here
+[SUGGESTION] Second suggestion here
+[SUGGESTION] Third suggestion here
+Keep each suggestion under 50 characters. Only include the suggestions at the very end of your response. IMPORTANT: Write the suggestions in the same language the user is using in their messages.', 'stifli-flex-mcp' ),
+				$count
+			);
+		}
+
+		// Add instruction to execute tools one at a time for better reliability
+		$system_prompt .= "\n\n" . __( 'IMPORTANT: When using tools, execute only ONE tool at a time. Wait for the result before deciding if you need another tool. Never call multiple tools in parallel.', 'stifli-flex-mcp' );
+
 		// Send message to AI with advanced parameters
 		$result = $handler->send_message( array(
 			'api_key'       => $api_key,
@@ -679,7 +744,7 @@ class StifliFlexMcp_Client_Admin {
 			'conversation'  => $conversation,
 			'tools'         => $tools,
 			'tool_result'   => $tool_result,
-			'system_prompt' => $advanced['system_prompt'],
+			'system_prompt' => $system_prompt,
 			'temperature'   => $advanced['temperature'],
 			'max_tokens'    => $advanced['max_tokens'],
 			'top_p'         => $advanced['top_p'],
@@ -781,6 +846,7 @@ class StifliFlexMcp_Client_Admin {
 		}
 
 		$tool_name = sanitize_text_field( wp_unslash( $_POST['tool_name'] ?? '' ) );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- JSON data must be decoded raw, then sanitized after parsing
 		$arguments = isset( $_POST['arguments'] ) ? json_decode( wp_unslash( $_POST['arguments'] ), true ) : array();
 
 		if ( empty( $tool_name ) ) {
