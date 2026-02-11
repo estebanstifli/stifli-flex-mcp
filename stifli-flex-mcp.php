@@ -153,7 +153,7 @@ require_once __DIR__ . '/models/model.php';
 require_once __DIR__ . '/controller.php';
 require_once __DIR__ . '/mod.php';
 
-// Load AI Chat Client
+// Load AI Chat Agent
 require_once __DIR__ . '/client/providers/class-provider-base.php';
 require_once __DIR__ . '/client/providers/class-provider-openai.php';
 require_once __DIR__ . '/client/providers/class-provider-claude.php';
@@ -1452,7 +1452,7 @@ add_action('plugins_loaded', function() {
 		$stifliFlexMcp->model = new StifliFlexMcpModel();
 	}
 	
-	// Initialize AI Chat Client admin
+	// Initialize AI Chat Agent admin
 	if (class_exists('StifliFlexMcp_Client_Admin') && is_admin()) {
 		new StifliFlexMcp_Client_Admin();
 	}

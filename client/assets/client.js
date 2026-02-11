@@ -1,5 +1,5 @@
 /**
- * StifLi Flex MCP - AI Chat Client JavaScript
+ * StifLi Flex MCP - AI Chat Agent JavaScript
  * 
  * Handles chat UI, AI provider communication, tool execution, and history management
  * 
@@ -1008,7 +1008,7 @@
         $chatMessages.html(`
             <div class="sflmcp-welcome-message">
                 <div class="sflmcp-welcome-icon">🤖</div>
-                <h3>${sflmcpClient.i18n.welcome || 'Welcome to AI Chat Client'}</h3>
+                <h3>${sflmcpClient.i18n.welcome || 'Welcome to AI Chat Agent'}</h3>
                 <p>${sflmcpClient.i18n.welcomeDesc || 'Configure your API key above and start chatting!'}</p>
             </div>
         `);

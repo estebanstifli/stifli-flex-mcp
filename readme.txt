@@ -1,7 +1,8 @@
-=== StifLi Flex MCP ===
+=== StifLi Flex MCP - AI Chat Agent and MCP Server === 
+
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags: mcp, chatgpt, ai, automation, rest-api
+Tags: mcp, chatgpt, ai, agent, gemini
 Requires at least: 5.8
 Tested up to: 6.9
 Stable tag: 2.0.2
@@ -9,171 +10,191 @@ Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Transform your WordPress site into an AI-powered Model Context Protocol (MCP) server with 117 tools for ChatGPT, Claude, and other AI agents.
+AI Chat Agent for WordPress. Chat directly from your admin panel & manage content, WooCommerce and your site via natural conversation.
 
 == Description ==
 
-StifLi Flex MCP transforms your WordPress site into a powerful Model Context Protocol (MCP) server, exposing 117 tools that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site.
+**StifLi Flex MCP** turns your WordPress site into an intelligent AI agent. Ask questions, create posts, manage orders, update settings — all through a natural conversation with the AI of your choice, right from your WordPress dashboard.
+Also works as a full MCP server for external AI clients.
 
-**Key Features:**
+No complex setup, no external tools required. Just add your API key and start chatting.
 
-* **🆕 Built-in AI Chat Client** - Chat directly with AI from your WordPress admin. No external connections needed!
-* **🆕 WordPress Abilities Integration** (6.9+) - Auto-discover and import abilities from other plugins!
-* 55 WordPress tools (posts, pages, comments, media, taxonomies, options)
-* 61 WooCommerce tools (products, orders, coupons, shipping, taxes, webhooks)
-* **Custom Tools** - Turn any WordPress plugin into an AI tool in minutes, no coding expertise required
-* JSON-RPC 2.0 compliant REST endpoint
-* Server-Sent Events (SSE) support for real-time streaming
-* Profile-based tool management (8 predefined profiles + custom profiles)
-* WordPress Application Passwords authentication (recommended by WordPress.org)
-* Compatible with ChatGPT Custom Connectors, Claude Desktop, LibreChat
-* Granular permissions control
+**🤖 AI Chat Agent — Your WordPress AI Assistant**
 
-**🚀 NEW: Custom Tools - Unlimited AI Capabilities**
+The built-in AI Chat Agent gives you a powerful conversational interface to manage your entire WordPress site:
 
-Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simple PHP snippets that expose plugin functionality to AI agents. Examples:
+* **Talk to your site** — "Show me the last 5 orders", "Create a blog post about SEO tips", "What plugins are installed?"
+* **Multi-provider** — Choose between OpenAI (GPT-4o, GPT-4.5), Anthropic (Claude 4 Opus/Sonnet, Haiku), or Google (Gemini 2.5 Pro/Flash)
+* **117+ tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, update settings, and much more
+* **Smart suggestions** — After each response, get contextual follow-up suggestions
+* **Conversation history** — Auto-saved across sessions with multi-tab support
+* **Safe by design** — Choose "Always Allow" or "Ask User" mode for tool execution confirmations
+* **Advanced tuning** — Control temperature, max tokens, top_p, system prompts
 
-* Query Contact Form 7 submissions through AI conversations
-* Get Yoast SEO scores and recommendations via ChatGPT
+**💡 What Can You Do With It?**
+
+Here are just a few examples of what you can ask your AI agent:
+
+* 📝 "Write a 500-word blog post about healthy eating and publish it as draft"
+* 🛒 "Show me today's WooCommerce orders and their total revenue"
+* 🔍 "What are the top 10 most commented posts on my site?"
+* 📊 "List all products with stock below 5 units"
+* 🏷️ "Create a 20% discount coupon valid for the next 7 days"
+* 🖼️ "Show me the last 10 images uploaded to the media library"
+* ⚙️ "What is my site's tagline and timezone?"
+* 📦 "Update the price of product #123 to $29.99"
+* 💬 "Show me all pending comments so I can review them"
+* 🧩 "What plugins are currently active?"
+
+The AI agent understands context, chains multiple operations, and works with your site's real data in real time.
+
+**🚀 Extend With Custom Tools**
+
+Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simple PHP snippets that expose plugin functionality to your AI agent:
+
+* Query Contact Form 7 submissions through conversation
+* Get Yoast SEO scores and recommendations
 * Control WP Super Cache settings with natural language
-* Access Advanced Custom Fields data through AI agents
-* Build custom WooCommerce reports for AI analysis
+* Access Advanced Custom Fields data
+* Build custom WooCommerce reports
 
-No coding experience required for basic tools - use our examples as templates. Advanced users can create sophisticated integrations with full WordPress/plugin API access.
+No coding experience required — use the built-in examples as templates.
 
-**🆕 Built-in AI Chat Client - A World of Possibilities**
+**🧠 WordPress Abilities Integration** (WordPress 6.9+)
 
-The new AI Chat Client opens up a whole new world of possibilities without needing to connect from external tools! Chat directly with AI from your WordPress admin panel:
+Automatically discover and import abilities registered by other plugins into your AI agent's toolkit. If a plugin supports the WordPress Abilities API, StifLi Flex MCP can detect, import, and expose it as an AI tool — zero configuration needed.
 
-* **Multi-provider support** - OpenAI (GPT-4o, GPT-4.5), Claude (Claude 4, Haiku), Google Gemini (2.0 Flash, 2.5 Pro)
-* **Direct tool execution** - AI can manage your WordPress/WooCommerce directly through conversation
-* **Smart suggestions** - Get contextual follow-up suggestions after each response
-* **Conversation history** - Auto-saved across sessions with tab support
-* **Tool confirmations** - Choose "Always Allow" or "Ask User" for tool execution
-* **Advanced settings** - Control temperature, max tokens, top_p, and system prompts
+**📡 Full MCP Server — Connect External AI Clients**
 
-No API keys to configure externally, no complex setup - just add your API key and start chatting!
+StifLi Flex MCP also works as a standards-compliant Model Context Protocol (MCP) server, so you can connect external AI clients:
+
+* **ChatGPT** — via Custom Connectors with SSE streaming
+* **Claude Desktop** — direct MCP connection
+* **LibreChat** — full MCP integration
+* **Any MCP-compatible client** — JSON-RPC 2.0 + SSE
+
+The server exposes 117+ tools (55 WordPress + 61 WooCommerce + 1 Core + Abilities + Custom Tools) that external AI agents can discover and execute.
+
+**🛡️ Security**
+
+* WordPress Application Passwords (native WordPress 5.6+ feature)
+* Per-tool capability checks linked to WordPress roles
+* Profile-based tool restrictions (8 predefined profiles + custom)
+* Tool execution confirmations in AI Chat Agent
+
+**📋 Tool Profiles**
+
+* WordPress Read Only — safe read-only access
+* WordPress Full Management — complete CRUD operations
+* WooCommerce Read Only — query store data
+* WooCommerce Store Management — products, orders, coupons
+* Complete E-commerce — all WooCommerce tools
+* Complete Site — all 117+ tools enabled
+* Safe Mode — non-sensitive reads only
+* Development/Debug — diagnostic tools
 
 **Demo & Installation Tutorial:**
 
 https://youtu.be/KHr1zt2R8Ew
 
-**Predefined Profiles:**
-
-* WordPress Read Only - Safe read-only access to WordPress data
-* WordPress Full Management - Complete WordPress CRUD operations
-* WooCommerce Read Only - Query WooCommerce data without modifications
-* WooCommerce Store Management - Full store management capabilities
-* Complete E-commerce - All WooCommerce tools including advanced settings
-* Complete Site - All 117 tools enabled
-* Safe Mode - Non-sensitive read-only access
-* Development/Debug - Diagnostic and configuration tools
-
-**Use Cases:**
-
-* Automate content publishing with AI assistants
-* Manage WooCommerce stores through conversational interfaces
-* Build AI-powered WordPress dashboards
-* Create automated workflows for content management
-* Enable AI agents to query and modify WordPress data
-
-**Security Features:**
-
-* WordPress Application Passwords (native WordPress 5.6+ feature)
-* HTTP Basic Authentication (industry standard)
-* Tool-level capability checks
-* Profile-based tool restrictions
-
 == Installation ==
 
-1. Upload the `stifli-flex-mcp` folder to `/wp-content/plugins/` directory
-2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Go to StifLi Flex MCP → Settings for setup instructions
-4. Create an Application Password in your WordPress profile (Users → Profile → Application Passwords)
-5. Use HTTP Basic Authentication with your username and application password
+= Quick Start (AI Chat Agent) =
+
+1. Upload the `stifli-flex-mcp` folder to `/wp-content/plugins/` or install from the WordPress plugin directory
+2. Activate the plugin
+3. Go to **StifLi Flex MCP → AI Chat Agent**
+4. Open the **Settings** tab and select your AI provider (OpenAI, Claude, or Gemini)
+5. Enter your API key
+6. Start chatting!
+
+That's it — no external tools, no complex configuration. Your AI agent is ready.
+
+= Optional: MCP Server for External Clients =
+
+If you also want to connect external AI clients (ChatGPT Connectors, Claude Desktop, LibreChat):
+
+1. Go to **StifLi Flex MCP → MCP Server**
+2. Create an Application Password in your WordPress profile (Users → Profile → Application Passwords)
+3. Use HTTP Basic Authentication with your username and application password
+4. Configure your MCP client with the provided endpoint URLs
 
 **Endpoints:**
 
-* HTTP JSON-RPC: `https://yoursite.com/wp-json/stifli-flex-mcp/v1/messages`
+* JSON-RPC: `https://yoursite.com/wp-json/stifli-flex-mcp/v1/messages`
 * SSE Streaming: `https://yoursite.com/wp-json/stifli-flex-mcp/v1/sse`
 
 == Frequently Asked Questions ==
 
+= How do I set up the AI Chat Agent? =
+
+1. Go to StifLi Flex MCP → AI Chat Agent → Settings
+2. Choose your AI provider (OpenAI, Claude, or Gemini)
+3. Enter your API key (you get this from your AI provider's website)
+4. Go to the Chat tab and start talking!
+
+= Which AI provider should I use? =
+
+All three providers work great. Here's a quick comparison:
+
+* **OpenAI (GPT-4o / GPT-4.5)** — Best overall balance of speed and quality
+* **Claude (Opus / Sonnet)** — Excellent at understanding complex instructions and writing
+* **Gemini (2.5 Pro / Flash)** — Great value, fast responses
+
+You can switch providers at any time from the Settings tab.
+
+= What can the AI agent do with my site? =
+
+The agent has access to 117+ tools covering:
+
+* **Content** — Create, edit, delete posts, pages, and comments
+* **Media** — Upload, list, and manage images and files
+* **WooCommerce** — Products, orders, coupons, customers, shipping, taxes
+* **Taxonomies** — Categories, tags, custom taxonomies
+* **Settings** — Site options, menus, navigation
+* **System** — Plugins, themes, site health
+
+You control which tools are available through Profiles.
+
+= Is it safe to let AI manage my site? =
+
+Yes, with multiple layers of protection:
+
+* **Tool confirmations** — In "Ask User" mode, you approve every action before it executes
+* **Permission checks** — Every tool verifies WordPress capabilities before running  
+* **Profiles** — Restrict which tools are available (e.g., "Read Only" profiles)
+* **Application Passwords** — Revocable at any time for MCP server connections
+
 = What is MCP? =
 
-Model Context Protocol (MCP) is a standard protocol for exposing tools and data to AI agents. This plugin implements an MCP-compatible server for WordPress.
-
-= How do I connect ChatGPT? =
-
-1. Create an Application Password in your WordPress profile (Users → Profile)
-2. Create a custom connector in ChatGPT
-3. Use the SSE endpoint URL with HTTP Basic Authentication
-4. ChatGPT will discover all available tools automatically
-
-= Is this safe for production sites? =
-
-Yes, when configured properly:
-* Uses WordPress Application Passwords (native security feature)
-* Each Application Password is tied to a WordPress user with specific permissions
-* Use profile-based restrictions (e.g., "WordPress Read Only")
-* Review enabled tools in the Tools Management tab
-* You can revoke Application Passwords at any time
-
-= What permissions do AI agents have? =
-
-Permissions are determined by:
-1. The WordPress user's Application Password used for authentication
-2. The active profile (which tools are enabled)
-3. Individual tool capability requirements
-
-= Can I customize which tools are available? =
-
-Yes! You can:
-* Apply predefined profiles
-* Manually enable/disable individual tools
-* Create custom profiles
-* Export/import profile configurations
+Model Context Protocol (MCP) is a standard for connecting AI agents to data sources and tools. This plugin implements an MCP server so external AI clients like ChatGPT or Claude Desktop can discover and use your WordPress tools. This is in addition to the built-in AI Chat Agent.
 
 = Does this work with WooCommerce? =
 
-Yes! The plugin includes 61 WooCommerce-specific tools. WooCommerce tools will only function when WooCommerce is installed and active.
+Yes! The plugin includes 61 WooCommerce tools. They activate automatically when WooCommerce is installed. Ask your AI agent "Show me today's orders" and it just works.
 
-= How do I troubleshoot connection issues? =
+= Can I create my own tools? =
 
-1. Check the Settings tab for test commands
-2. Test with PowerShell scripts (included in examples/)
-3. Verify your hosting doesn't block SSE connections
-4. Check WAF/CDN settings (may block long-lived connections)
-5. Review debug.log with WP_DEBUG enabled
+Absolutely! Go to **MCP Server → Custom Tools** and create PHP-powered tools that expose any plugin's functionality to your AI agent. Built-in examples included.
 
-= Can I use this without WooCommerce? =
+= What are WordPress Abilities? =
 
-Absolutely! The 55 WordPress tools work independently. WooCommerce tools are optional.
+WordPress 6.9 introduced the Abilities API, letting plugins register standardized capabilities. If you have plugins that support Abilities, StifLi Flex MCP can auto-discover and import them from **MCP Server → Abilities** tab.
 
-= What are Custom Tools? =
+= How do I connect ChatGPT or Claude Desktop? =
 
-Custom Tools is a powerful feature that lets you create your own AI tools using PHP code. This means you can expose ANY plugin's functionality to AI agents - from querying Contact Form 7 submissions to controlling cache plugins. Each Custom Tool has a name, description, optional input schema, and PHP code that executes when called.
-
-= How do I create a Custom Tool? =
-
-1. Go to StifLi Flex MCP → Custom Tools
-2. Click "Add New Tool"
-3. Enter a name (e.g., "custom_my_feature")
-4. Write a description that helps AI understand when to use the tool
-5. Add your PHP code (the code receives `$args` with any input parameters)
-6. Optionally define an input schema for structured parameters
-7. Save and enable the tool
-
-The plugin includes several examples to get you started!
+1. Go to **StifLi Flex MCP → MCP Server** for the endpoint URLs
+2. Create an Application Password (Users → Profile → Application Passwords)
+3. Configure your external AI client with the SSE endpoint and credentials
+4. The client will auto-discover all available tools
 
 == Screenshots ==
 
-1. AI Chat Client - Chat with AI directly from WordPress admin
-2. Settings tab - Setup instructions and endpoint URLs
-3. Profiles tab - Manage tool configurations
-4. WordPress Tools tab - Enable/disable WordPress tools
-5. WooCommerce Tools tab - Manage WooCommerce tools
-
+1. AI Chat Agent - Chat with AI directly from WordPress admin
+2. AI Chat Agent - Settings and provider configuration
+3. MCP Server - Endpoint URLs and authentication setup
+4. MCP Server - Tool profiles management
+5. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
 = 2.0.2 =
@@ -184,6 +205,8 @@ The plugin includes several examples to get you started!
 * New: Abilities exposed as MCP tools (ability_* prefix) for AI agents
 * New: Database table wp_sflmcp_abilities for persistent ability storage
 * Improved: Plugin description updated to reflect 117+ tools
+* Improved: Admin menu reordered — AI Chat Agent first, MCP Server second  
+* Improved: Renamed "AI Chat" to "AI Chat Agent" across the UI
 * Technical: Uses wp_get_abilities(), wp_get_ability(), $ability->execute() APIs
 
 = 2.0.1 =
@@ -214,14 +237,12 @@ The plugin includes several examples to get you started!
 * Fix: Deferred WooCommerce detection to ensure tools load correctly regardless of plugin load order
 * Fix: WooCommerce module dispatch now correctly handles tool routing
 
-
 = 1.0.4 =
 * New: Debug logging system with dedicated log file (wp-content/uploads/sflmcp-logs/)
 * New: Logs tab in admin UI to enable/disable logging and view debug logs
 * New: Clear logs and refresh functionality from admin panel
 * New: "WordPress Full Management" profile now active by default on fresh installs
 * Security: Log directory protected with .htaccess and index.php
-
 
 = 1.0.3 =
 * Security: Replaced custom token authentication with WordPress Application Passwords
@@ -247,7 +268,7 @@ The plugin includes several examples to get you started!
 == Upgrade Notice ==
 
 = 2.0.2 =
-New WordPress Abilities integration! Auto-discover and import abilities from other plugins (WordPress 6.9+ required).
+New WordPress Abilities integration! Auto-discover and import abilities from other plugins (WordPress 6.9+ required). Admin menu reordered with AI Chat Agent first.
 
 = 2.0.1 =
 Major update! New built-in AI Chat Client - chat with GPT-4.5, Claude 4, or Gemini directly from WordPress admin. No external tools needed!

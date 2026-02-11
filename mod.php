@@ -25,6 +25,7 @@ class StifliFlexMcp {
 		// Register admin menu and settings when in WP admin
 		if (is_admin()) {
 			add_action('admin_menu', array($this, 'registerAdmin'));
+			add_action('admin_menu', array($this, 'registerMcpServerSubmenu'), 20);
 			add_action('admin_init', array($this, 'registerSettings'));
 			add_action('admin_enqueue_scripts', array($this, 'enqueueAdminScripts'));
 			// AJAX handlers for profiles management
@@ -965,7 +966,10 @@ class StifliFlexMcp {
 	}
 
 	/**
-	 * Register admin menu entry for plugin settings
+	 * Register top-level admin menu.
+	 * Only creates the parent — submenus are added by priority:
+	 *   Priority 10: AI Chat Agent (client class, same slug as parent → first item)
+	 *   Priority 20: MCP Server (this class → second item)
 	 */
 	public function registerAdmin() {
 		add_menu_page(
@@ -973,9 +977,23 @@ class StifliFlexMcp {
 			__('StifLi Flex MCP', 'stifli-flex-mcp'),
 			'manage_options',
 			'stifli-flex-mcp',
-			array($this, 'adminPage'),
+			'__return_null',
 			'dashicons-rest-api',
 			30
+		);
+	}
+
+	/**
+	 * Register MCP Server submenu at priority 20 (after AI Chat Agent at priority 10).
+	 */
+	public function registerMcpServerSubmenu() {
+		add_submenu_page(
+			'stifli-flex-mcp',
+			__('MCP Server', 'stifli-flex-mcp'),
+			__('MCP Server', 'stifli-flex-mcp'),
+			'manage_options',
+			'sflmcp-server',
+			array($this, 'adminPage')
 		);
 	}
 
@@ -990,8 +1008,8 @@ class StifliFlexMcp {
 	 * Enqueue admin scripts and styles
 	 */
 	public function enqueueAdminScripts($hook) {
-		// Only load on our plugin page
-		if ($hook !== 'toplevel_page_stifli-flex-mcp') {
+		// Only load on our MCP Server page
+		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server') {
 			return;
 		}
 
@@ -1168,33 +1186,33 @@ class StifliFlexMcp {
 		
 		?>
 		<div class="wrap">
-			<h1><?php echo esc_html__('StifLi Flex MCP', 'stifli-flex-mcp'); ?></h1>
+			<h1><?php echo esc_html__('MCP Server', 'stifli-flex-mcp'); ?></h1>
 			
 			<h2 class="nav-tab-wrapper">
-				<a href="?page=stifli-flex-mcp&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Settings', 'stifli-flex-mcp'); ?>
 				</a>
-				<a href="?page=stifli-flex-mcp&tab=profiles" class="nav-tab <?php echo $active_tab === 'profiles' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=profiles" class="nav-tab <?php echo $active_tab === 'profiles' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Profiles', 'stifli-flex-mcp'); ?>
 				</a>
-				<a href="?page=stifli-flex-mcp&tab=tools" class="nav-tab <?php echo $active_tab === 'tools' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=tools" class="nav-tab <?php echo $active_tab === 'tools' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('WordPress Tools', 'stifli-flex-mcp'); ?>
 				</a>
-				<a href="?page=stifli-flex-mcp&tab=wc_tools" class="nav-tab <?php echo $active_tab === 'wc_tools' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=wc_tools" class="nav-tab <?php echo $active_tab === 'wc_tools' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('WooCommerce Tools', 'stifli-flex-mcp'); ?>
 				</a>
 				<?php if ( stifli_flex_mcp_abilities_available() ) : ?>
-				<a href="?page=stifli-flex-mcp&tab=abilities" class="nav-tab <?php echo $active_tab === 'abilities' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=abilities" class="nav-tab <?php echo $active_tab === 'abilities' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Abilities', 'stifli-flex-mcp'); ?>
 				</a>
 				<?php endif; ?>
-				<a href="?page=stifli-flex-mcp&tab=custom" class="nav-tab <?php echo $active_tab === 'custom' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=custom" class="nav-tab <?php echo $active_tab === 'custom' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Custom Tools', 'stifli-flex-mcp'); ?>
 				</a>
-				<a href="?page=stifli-flex-mcp&tab=logs" class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=logs" class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('Logs', 'stifli-flex-mcp'); ?>
 				</a>
-				<a href="?page=stifli-flex-mcp&tab=help" class="nav-tab <?php echo $active_tab === 'help' ? 'nav-tab-active' : ''; ?>">
+				<a href="?page=sflmcp-server&tab=help" class="nav-tab <?php echo $active_tab === 'help' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('📚 Help', 'stifli-flex-mcp'); ?>
 				</a>
 			</h2>
@@ -1383,7 +1401,7 @@ class StifliFlexMcp {
 					<?php echo esc_html($active_profile['profile_name']); ?>
 					<br>
 					<?php echo esc_html__('Changes to tools will be automatically saved to this profile.', 'stifli-flex-mcp'); ?>
-					<a href="?page=stifli-flex-mcp&tab=profiles" class="button button-small" style="margin-left: 10px;">
+					<a href="?page=sflmcp-server&tab=profiles" class="button button-small" style="margin-left: 10px;">
 						<?php echo esc_html__('View Profiles', 'stifli-flex-mcp'); ?>
 					</a>
 				</p>
@@ -1496,7 +1514,7 @@ class StifliFlexMcp {
 					<?php echo esc_html($active_profile['profile_name']); ?>
 					<br>
 					<?php echo esc_html__('Changes to tools will be automatically saved to this profile.', 'stifli-flex-mcp'); ?>
-					<a href="?page=stifli-flex-mcp&tab=profiles" class="button button-small" style="margin-left: 10px;">
+					<a href="?page=sflmcp-server&tab=profiles" class="button button-small" style="margin-left: 10px;">
 						<?php echo esc_html__('View Profiles', 'stifli-flex-mcp'); ?>
 					</a>
 				</p>
@@ -1863,7 +1881,7 @@ class StifliFlexMcp {
 		<h2><?php echo esc_html__('🔌 Custom Tools (Webhooks & Actions)', 'stifli-flex-mcp'); ?></h2>
 		<p>
 			<?php echo esc_html__('Create custom tools that connect to external services, call any WordPress/plugin action hook, or integrate with APIs. The AI will invoke these tools just like native functions.', 'stifli-flex-mcp'); ?>
-			<a href="?page=stifli-flex-mcp&tab=help" class="button button-link">
+			<a href="?page=sflmcp-server&tab=help" class="button button-link">
 				📚 <?php echo esc_html__('View Complete Guide', 'stifli-flex-mcp'); ?>
 			</a>
 		</p>

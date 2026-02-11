@@ -48,15 +48,15 @@ class StifliFlexMcp_Client_Admin {
 	}
 
 	/**
-	 * Add submenu page under StifLi Flex MCP
+	 * Add submenu page under StifLi Flex MCP — first item (AI Chat Agent)
 	 */
 	public function add_submenu_page() {
 		add_submenu_page(
 			'stifli-flex-mcp',
-			__( 'AI Chat Client', 'stifli-flex-mcp' ),
-			__( 'AI Chat', 'stifli-flex-mcp' ),
+			__( 'AI Chat Agent', 'stifli-flex-mcp' ),
+			__( 'AI Chat Agent', 'stifli-flex-mcp' ),
 			'manage_options',
-			'sflmcp-client',
+			'stifli-flex-mcp', // Same slug as parent → replaces auto-generated first submenu
 			array( $this, 'render_page' )
 		);
 	}
@@ -67,7 +67,8 @@ class StifliFlexMcp_Client_Admin {
 	 * @param string $hook The current admin page hook.
 	 */
 	public function enqueue_assets( $hook ) {
-		if ( 'stifli-flex-mcp_page_sflmcp-client' !== $hook ) {
+		// AI Chat Agent is now the parent page (same slug as menu)
+		if ( 'toplevel_page_stifli-flex-mcp' !== $hook ) {
 			return;
 		}
 
@@ -116,7 +117,7 @@ class StifliFlexMcp_Client_Admin {
 				'messageRequired'   => __( 'Please enter a message', 'stifli-flex-mcp' ),
 				'settingsSaved'     => __( 'Settings saved', 'stifli-flex-mcp' ),
 				'clearChat'         => __( 'Clear Chat', 'stifli-flex-mcp' ),
-				'welcome'           => __( 'Welcome to AI Chat Client', 'stifli-flex-mcp' ),
+				'welcome'           => __( 'Welcome to AI Chat Agent', 'stifli-flex-mcp' ),
 				'welcomeDesc'       => __( 'Configure your API key above and start chatting!', 'stifli-flex-mcp' ),
 				'historyRestored'   => __( 'Previous conversation restored', 'stifli-flex-mcp' ),
 				'historyCleared'    => __( 'Chat history cleared', 'stifli-flex-mcp' ),
@@ -218,7 +219,7 @@ class StifliFlexMcp_Client_Admin {
 		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'chat';
 		?>
 		<div class="wrap sflmcp-client-wrap">
-			<h1><?php esc_html_e( 'AI Chat Client', 'stifli-flex-mcp' ); ?></h1>
+			<h1><?php esc_html_e( 'AI Chat Agent', 'stifli-flex-mcp' ); ?></h1>
 			
 			<!-- Tab Navigation -->
 			<nav class="nav-tab-wrapper sflmcp-tabs">
@@ -343,7 +344,7 @@ class StifliFlexMcp_Client_Admin {
 			<div class="sflmcp-chat-messages" id="sflmcp-chat-messages">
 				<div class="sflmcp-welcome-message">
 					<div class="sflmcp-welcome-icon">🤖</div>
-					<h3><?php esc_html_e( 'Welcome to AI Chat Client', 'stifli-flex-mcp' ); ?></h3>
+					<h3><?php esc_html_e( 'Welcome to AI Chat Agent', 'stifli-flex-mcp' ); ?></h3>
 					<p><?php esc_html_e( 'This chat can execute MCP tools on your WordPress site. Configure your API key above and start chatting!', 'stifli-flex-mcp' ); ?></p>
 					<p class="sflmcp-welcome-hint"><?php esc_html_e( 'Try: "List my recent posts" or "Show WooCommerce orders"', 'stifli-flex-mcp' ); ?></p>
 				</div>
