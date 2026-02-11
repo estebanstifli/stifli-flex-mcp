@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: StifLi Flex MCP
+Plugin Name: StifLi Flex MCP - AI Chat Agent and MCP Server
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
 Version: 2.0.2
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // define debug constant
 if ( ! defined( 'SFLMCP_DEBUG' ) ) {
-	define( 'SFLMCP_DEBUG', true );
+	define( 'SFLMCP_DEBUG', false );	
 }
 
 // Debug logging function
@@ -908,11 +908,13 @@ function stifli_flex_mcp_apply_active_profile() {
 if (!function_exists('stifli_flex_mcp_maybe_create_custom_tools_table')) {
 	function stifli_flex_mcp_maybe_create_custom_tools_table() {
 		global $wpdb;
-		$table_name = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools');
+		$table_name = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools', false);
+		$table_safe = StifliFlexMcpUtils::getPrefixedTable('sflmcp_custom_tools');
 		$charset_collate = $wpdb->get_charset_collate();
 
-		if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-			$sql = "CREATE TABLE $table_name (
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange -- schema check for plugin-managed table.
+		if ($wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ) !== $table_name) {
+			$sql = "CREATE TABLE $table_safe (
 				id bigint(20) NOT NULL AUTO_INCREMENT,
 				tool_name varchar(100) NOT NULL,
 				tool_description text NOT NULL,

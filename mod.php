@@ -542,13 +542,10 @@ class StifliFlexMcp {
 			return array();
 		}
 		$now = gmdate('Y-m-d H:i:s');
-		$queue_select = StifliFlexMcpUtils::formatSqlWithTables(
-			'SELECT id, payload FROM %s WHERE session_id = %%s AND expires_at >= %%s ORDER BY id ASC',
-			'sflmcp_queue'
-		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query is prepared via formatSqlWithTables helper.
+		$queue_tbl = StifliFlexMcpUtils::getPrefixedTable('sflmcp_queue');
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
 		$rows = $wpdb->get_results(
-			$wpdb->prepare($queue_select, $sessionKey, $now),
+			$wpdb->prepare( "SELECT id, payload FROM {$queue_tbl} WHERE session_id = %s AND expires_at >= %s ORDER BY id ASC", $sessionKey, $now ),
 			ARRAY_A
 		);
 		if (empty($rows)) {
@@ -615,13 +612,9 @@ class StifliFlexMcp {
 		$tools_table_sql = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools');
 		
 		// Get profile tools
-		$profile_tools_query = sprintf(
-			'SELECT tool_name FROM %s WHERE profile_id = %%d',
-			$profile_tools_table_sql
-		);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
 		$profile_tools = $wpdb->get_col(
-			$wpdb->prepare($profile_tools_query, $profile_id)
+			$wpdb->prepare( "SELECT tool_name FROM {$profile_tools_table_sql} WHERE profile_id = %d", $profile_id )
 		);
 		
 		if ($profile_tools === null) {
@@ -629,27 +622,24 @@ class StifliFlexMcp {
 		}
 		
 		// Disable all tools first
-		$disable_tools_query = sprintf('UPDATE %s SET enabled = %%d', $tools_table_sql);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
-		$wpdb->query($wpdb->prepare($disable_tools_query, 0));
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
+		$wpdb->query($wpdb->prepare( "UPDATE {$tools_table_sql} SET enabled = %d", 0 ));
 		
 		// Enable profile tools
 		if (!empty($profile_tools)) {
 			$placeholders = implode(',', array_fill(0, count($profile_tools), '%s'));
-			$enable_tools_query = 'UPDATE ' . $tools_table_sql . ' SET enabled = 1 WHERE tool_name IN (' . $placeholders . ')';
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses dynamic placeholders with prepare.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper, placeholders are dynamic.
 			$wpdb->query(
 				$wpdb->prepare(
-					$enable_tools_query,
+					"UPDATE {$tools_table_sql} SET enabled = 1 WHERE tool_name IN ({$placeholders})",
 					...$profile_tools
 				)
 			);
 		}
 		
 		// Mark profile as active
-		$deactivate_profiles_query = sprintf('UPDATE %s SET is_active = %%d', $profiles_table_sql);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
-		$wpdb->query($wpdb->prepare($deactivate_profiles_query, 0));
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
+		$wpdb->query($wpdb->prepare( "UPDATE {$profiles_table_sql} SET is_active = %d", 0 ));
 		$wpdb->update($profiles_table, array('is_active' => 1), array('id' => $profile_id), array('%d'), array('%d'));
 		
 		wp_send_json_success(array('message' => count($profile_tools) . ' herramientas habilitadas'));

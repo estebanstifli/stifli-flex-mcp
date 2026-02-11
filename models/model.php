@@ -249,13 +249,10 @@ class StifliFlexMcpModel {
         $table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table;
         
         if ($table_exists) {
-            $tools_query = StifliFlexMcpUtils::formatSqlWithTables(
-                'SELECT tool_name, token_estimate FROM %s WHERE enabled = %%d',
-                'sflmcp_tools'
-            );
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- query is prepared via formatSqlWithTables helper.
+            $tools_tbl = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools');
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
             $results = $wpdb->get_results(
-                $wpdb->prepare($tools_query, 1),
+                $wpdb->prepare( "SELECT tool_name, token_estimate FROM {$tools_tbl} WHERE enabled = %d", 1 ),
                 ARRAY_A
             );
             foreach ($results as $row) {
@@ -1222,7 +1219,7 @@ class StifliFlexMcpModel {
      */
     private function getImportedAbilities() {
         global $wpdb;
-        $table = $wpdb->prefix . 'sflmcp_abilities';
+        $table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_abilities', false);
         
         // Check if table exists first
         $like = $wpdb->esc_like($table);
@@ -1232,9 +1229,9 @@ class StifliFlexMcpModel {
         }
         
         $tools = array();
-        
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- fresh data needed.
-        $results = $wpdb->get_results($wpdb->prepare("SELECT * FROM `$table` WHERE enabled = %d", 1));
+        $table_safe = StifliFlexMcpUtils::getPrefixedTable('sflmcp_abilities');
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
+        $results = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table_safe} WHERE enabled = %d", 1));
         
         if (!$results) {
             return array();
