@@ -75,9 +75,25 @@ abstract class StifliFlexMcp_Client_Provider_Base {
 	 * @return array|WP_Error Response or error.
 	 */
 	protected function make_request( $url, $headers, $body ) {
+		$meta = $this->make_request_with_meta( $url, $headers, $body );
+		if ( is_wp_error( $meta ) ) {
+			return $meta;
+		}
+		return $meta['body'] ?? array();
+	}
+
+	/**
+	 * Make an HTTP request and return response body + headers + status.
+	 *
+	 * @param string $url     API URL.
+	 * @param array  $headers Request headers.
+	 * @param array  $body    Request body.
+	 * @return array|WP_Error Meta response (body/headers/status/body_raw) or error.
+	 */
+	protected function make_request_with_meta( $url, $headers, $body ) {
 		$response = wp_remote_post( $url, array(
 			'headers' => $headers,
-			'body'    => wp_json_encode( $body ),
+			'body'    => wp_json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ),
 			'timeout' => 120, // AI responses can be slow
 		) );
 
@@ -87,20 +103,65 @@ abstract class StifliFlexMcp_Client_Provider_Base {
 
 		$status_code = wp_remote_retrieve_response_code( $response );
 		$body_raw    = wp_remote_retrieve_body( $response );
-		$body_json   = json_decode( $body_raw, true );
-
-		if ( $status_code >= 400 ) {
-			$error_msg = isset( $body_json['error']['message'] ) 
-				? $body_json['error']['message'] 
-				: ( isset( $body_json['error'] ) && is_string( $body_json['error'] ) 
-					? $body_json['error'] 
-					/* translators: %d is the HTTP status code */
-					: sprintf( __( 'API error: %d', 'stifli-flex-mcp' ), $status_code ) );
-			
-			return new WP_Error( 'api_error', $error_msg );
+		$headers_obj = wp_remote_retrieve_headers( $response );
+		$headers_arr = array();
+		if ( $headers_obj ) {
+			// WP_HTTP_Requests_Response::get_headers returns Requests_Utility_CaseInsensitiveDictionary
+			if ( is_object( $headers_obj ) && method_exists( $headers_obj, 'getAll' ) ) {
+				$headers_arr = $headers_obj->getAll();
+			} elseif ( is_array( $headers_obj ) ) {
+				$headers_arr = $headers_obj;
+			} elseif ( $headers_obj instanceof ArrayAccess ) {
+				// Best-effort conversion.
+				foreach ( $headers_obj as $k => $v ) {
+					$headers_arr[ $k ] = $v;
+				}
+			}
 		}
 
-		return $body_json;
+		// Normalize keys to lowercase for consistent lookups.
+		$headers_lower = array();
+		if ( is_array( $headers_arr ) ) {
+			foreach ( $headers_arr as $k => $v ) {
+				if ( is_string( $k ) ) {
+					$headers_lower[ strtolower( $k ) ] = $v;
+				}
+			}
+		}
+		$headers_arr = $headers_lower;
+
+		$body_json = json_decode( $body_raw, true );
+		if ( ! is_array( $body_json ) ) {
+			$body_json = array();
+		}
+
+		if ( $status_code >= 400 ) {
+			$error_msg = isset( $body_json['error']['message'] )
+				? $body_json['error']['message']
+				: ( isset( $body_json['error'] ) && is_string( $body_json['error'] )
+					? $body_json['error']
+					/* translators: %d is the HTTP status code */
+					: sprintf( __( 'API error: %d', 'stifli-flex-mcp' ), $status_code ) );
+
+			// Enrich with HTTP meta for debugging (rate limit headers, retry-after, etc.).
+			$data = array(
+				'status_code' => $status_code,
+				'headers'     => $headers_arr,
+			);
+			if ( ! empty( $body_raw ) ) {
+				$data['body_raw'] = $body_raw;
+			}
+
+			$prefix = sprintf( __( 'HTTP %d: ', 'stifli-flex-mcp' ), $status_code );
+			return new WP_Error( 'api_error', $prefix . $error_msg, $data );
+		}
+
+		return array(
+			'status_code' => $status_code,
+			'headers'     => $headers_arr,
+			'body_raw'    => $body_raw,
+			'body'        => $body_json,
+		);
 	}
 
 	/**

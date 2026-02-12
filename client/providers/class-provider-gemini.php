@@ -126,12 +126,16 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 		// Build URL with API key
 		$url = sprintf( self::API_URL_TEMPLATE, $model ) . '?key=' . $api_key;
 
-		stifli_flex_mcp_log( '[Gemini] Sending request to model: ' . $model );
-		stifli_flex_mcp_log( '[Gemini] Tools count: ' . count( $tools ) );
-		stifli_flex_mcp_log( '[Gemini] Request body: ' . wp_json_encode( $body ) );
+		stifli_flex_mcp_log( sprintf(
+			'[Gemini] Request summary model=%s contents=%d tools=%d max_tokens=%d',
+			$model,
+			count( $contents ),
+			count( $tools ),
+			intval( $max_tokens )
+		) );
 
 		// Make request
-		$response = $this->make_request(
+		$meta = $this->make_request_with_meta(
 			$url,
 			array(
 				'Content-Type' => 'application/json',
@@ -139,12 +143,26 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 			$body
 		);
 
-		if ( is_wp_error( $response ) ) {
-			stifli_flex_mcp_log( '[Gemini] Request error: ' . $response->get_error_message() );
-			return $response;
+		if ( is_wp_error( $meta ) ) {
+			stifli_flex_mcp_log( '[Gemini] Request error: ' . $meta->get_error_message() );
+			return $meta;
 		}
 
-		stifli_flex_mcp_log( '[Gemini] Raw response: ' . wp_json_encode( $response ) );
+		$response = $meta['body'] ?? array();
+		$headers  = $meta['headers'] ?? array();
+
+		// Log provider-reported usage if present.
+		if ( isset( $response['usageMetadata'] ) && is_array( $response['usageMetadata'] ) ) {
+			$u = $response['usageMetadata'];
+			$prompt = isset( $u['promptTokenCount'] ) ? $u['promptTokenCount'] : 'n/a';
+			$output = isset( $u['candidatesTokenCount'] ) ? $u['candidatesTokenCount'] : 'n/a';
+			$total  = isset( $u['totalTokenCount'] ) ? $u['totalTokenCount'] : 'n/a';
+			$cached = isset( $u['cachedContentTokenCount'] ) ? $u['cachedContentTokenCount'] : 0;
+			stifli_flex_mcp_log( sprintf(
+				'[Gemini] Usage input=%s output=%s total=%s cached=%s',
+				$prompt, $output, $total, $cached
+			) );
+		}
 
 		return $this->parse_response( $response, $contents );
 	}

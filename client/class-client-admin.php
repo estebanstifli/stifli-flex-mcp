@@ -33,6 +33,67 @@ class StifliFlexMcp_Client_Admin {
 	const HISTORY_EXPIRATION = 604800;
 
 	/**
+	 * Encryption cipher method
+	 */
+	const CIPHER = 'aes-256-cbc';
+
+	/**
+	 * Encrypt a value for safe storage in the database.
+	 *
+	 * @param string $plain_text The plain text to encrypt.
+	 * @return string The base64-encoded encrypted value (iv:ciphertext).
+	 */
+	private static function encrypt_value( $plain_text ) {
+		if ( empty( $plain_text ) ) {
+			return '';
+		}
+
+		$key = hash( 'sha256', wp_salt( 'auth' ), true );
+		$iv  = openssl_random_pseudo_bytes( openssl_cipher_iv_length( self::CIPHER ) );
+
+		$encrypted = openssl_encrypt( $plain_text, self::CIPHER, $key, 0, $iv );
+		if ( false === $encrypted ) {
+			return $plain_text; // Fallback to plain text on failure.
+		}
+
+		// Store as base64(iv):base64(ciphertext)
+		return base64_encode( $iv ) . ':' . $encrypted;
+	}
+
+	/**
+	 * Decrypt a value from the database.
+	 *
+	 * @param string $encrypted_text The encrypted value (iv:ciphertext).
+	 * @return string The decrypted plain text.
+	 */
+	private static function decrypt_value( $encrypted_text ) {
+		if ( empty( $encrypted_text ) ) {
+			return '';
+		}
+
+		// If the value doesn't contain ':', it's not encrypted (legacy plain text).
+		if ( strpos( $encrypted_text, ':' ) === false ) {
+			return $encrypted_text;
+		}
+
+		$parts = explode( ':', $encrypted_text, 2 );
+		if ( count( $parts ) !== 2 ) {
+			return $encrypted_text;
+		}
+
+		$iv         = base64_decode( $parts[0] );
+		$ciphertext = $parts[1];
+		$key        = hash( 'sha256', wp_salt( 'auth' ), true );
+
+		$decrypted = openssl_decrypt( $ciphertext, self::CIPHER, $key, 0, $iv );
+		if ( false === $decrypted ) {
+			return $encrypted_text; // Return as-is if decryption fails.
+		}
+
+		return $decrypted;
+	}
+
+	/**
 	 * Initialize the client admin
 	 */
 	public function __construct() {
@@ -140,7 +201,12 @@ class StifliFlexMcp_Client_Admin {
 		);
 
 		$settings = get_option( self::OPTION_NAME, array() );
-		return wp_parse_args( $settings, $defaults );
+		$settings = wp_parse_args( $settings, $defaults );
+
+		// Decrypt the API key.
+		$settings['api_key'] = self::decrypt_value( $settings['api_key'] );
+
+		return $settings;
 	}
 
 	/**
@@ -152,6 +218,7 @@ class StifliFlexMcp_Client_Admin {
 		$defaults = array(
 			'system_prompt'         => __( 'You are an AI assistant with access to WordPress and WooCommerce tools. Use them carefully and always explain what you are doing.', 'stifli-flex-mcp' ),
 			'tool_display'          => 'full',
+			'max_history_turns'     => 10,
 			'max_tools_per_turn'    => 10,
 			'temperature'           => 0.7,
 			'max_tokens'            => 4096,
@@ -291,7 +358,12 @@ class StifliFlexMcp_Client_Admin {
 				
 				<div class="sflmcp-setting-group">
 					<label for="sflmcp-api-key"><?php esc_html_e( 'API Key', 'stifli-flex-mcp' ); ?></label>
-					<input type="password" id="sflmcp-api-key" name="api_key" value="<?php echo esc_attr( $settings['api_key'] ); ?>" placeholder="sk-..." />
+					<div class="sflmcp-api-key-wrapper">
+						<input type="password" id="sflmcp-api-key" name="api_key" value="<?php echo esc_attr( $settings['api_key'] ); ?>" placeholder="sk-..." />
+						<button type="button" id="sflmcp-api-key-toggle" class="sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Show/Hide API Key', 'stifli-flex-mcp' ); ?>">
+							<span class="dashicons dashicons-visibility"></span>
+						</button>
+					</div>
 				</div>
 				
 				<div class="sflmcp-setting-group">
@@ -302,7 +374,7 @@ class StifliFlexMcp_Client_Admin {
 								<option value="<?php echo esc_attr( $model_id ); ?>" 
 										data-provider="<?php echo esc_attr( $provider ); ?>"
 										<?php selected( $settings['model'], $model_id ); ?>
-										<?php echo $settings['provider'] !== $provider ? 'style="display:none;"' : ''; ?>>
+										<?php echo $settings['provider'] !== $provider ? 'disabled hidden' : ''; ?>>
 									<?php echo esc_html( $model_name ); ?>
 								</option>
 							<?php endforeach; ?>
@@ -319,9 +391,10 @@ class StifliFlexMcp_Client_Admin {
 				</div>
 				
 				<div class="sflmcp-setting-group sflmcp-setting-actions">
-					<button type="button" id="sflmcp-save-settings" class="button button-primary">
-						<?php esc_html_e( 'Save Settings', 'stifli-flex-mcp' ); ?>
-					</button>
+					<span id="sflmcp-settings-autosave" class="sflmcp-autosave-indicator" style="display:none;">
+						<span class="dashicons dashicons-saved"></span>
+						<?php esc_html_e( 'Saved', 'stifli-flex-mcp' ); ?>
+					</span>
 				</div>
 			</div>
 		</div>
@@ -399,7 +472,7 @@ class StifliFlexMcp_Client_Admin {
 									<option value="<?php echo esc_attr( $model_id ); ?>" 
 											data-provider="<?php echo esc_attr( $provider ); ?>"
 											<?php selected( $settings['model'], $model_id ); ?>
-											<?php echo $settings['provider'] !== $provider ? 'style="display:none;"' : ''; ?>>
+											<?php echo $settings['provider'] !== $provider ? 'disabled hidden' : ''; ?>>
 										<?php echo esc_html( $model_name ); ?>
 									</option>
 								<?php endforeach; ?>
@@ -435,6 +508,17 @@ class StifliFlexMcp_Client_Admin {
 						<p class="description"><?php esc_html_e( 'How tool executions are displayed in the chat.', 'stifli-flex-mcp' ); ?></p>
 					</td>
 				</tr>
+
+					<!-- Max History Turns -->
+					<tr>
+						<th scope="row">
+							<label for="sflmcp-max-history-turns"><?php esc_html_e( 'Max Tool Cycles in History', 'stifli-flex-mcp' ); ?></label>
+						</th>
+						<td>
+							<input type="number" id="sflmcp-max-history-turns" name="max_history_turns" value="<?php echo esc_attr( $advanced['max_history_turns'] ?? 10 ); ?>" min="1" max="100" class="small-text" />
+							<p class="description"><?php esc_html_e( 'Max tool call/result cycles kept in history. Plain text messages are always kept. Default: 10.', 'stifli-flex-mcp' ); ?></p>
+						</td>
+					</tr>
 
 				<!-- Max Tools Per Turn -->
 				<tr>
@@ -569,7 +653,7 @@ class StifliFlexMcp_Client_Admin {
 
 		$settings = array(
 			'provider'   => sanitize_text_field( wp_unslash( $_POST['provider'] ?? 'openai' ) ),
-			'api_key'    => sanitize_text_field( wp_unslash( $_POST['api_key'] ?? '' ) ),
+			'api_key'    => self::encrypt_value( sanitize_text_field( wp_unslash( $_POST['api_key'] ?? '' ) ) ),
 			'model'      => sanitize_text_field( wp_unslash( $_POST['model'] ?? '' ) ),
 			'permission' => sanitize_text_field( wp_unslash( $_POST['permission'] ?? 'ask' ) ),
 		);
@@ -592,6 +676,7 @@ class StifliFlexMcp_Client_Admin {
 		$advanced = array(
 			'system_prompt'      => sanitize_textarea_field( wp_unslash( $_POST['system_prompt'] ?? '' ) ),
 			'tool_display'       => sanitize_text_field( wp_unslash( $_POST['tool_display'] ?? 'full' ) ),
+			'max_history_turns'  => absint( $_POST['max_history_turns'] ?? 10 ),
 			'max_tools_per_turn' => absint( $_POST['max_tools_per_turn'] ?? 10 ),
 			'temperature'        => floatval( $_POST['temperature'] ?? 0.7 ),
 			'max_tokens'         => absint( $_POST['max_tokens'] ?? 4096 ),
@@ -609,6 +694,7 @@ class StifliFlexMcp_Client_Admin {
 		$advanced['frequency_penalty'] = max( 0, min( 2, $advanced['frequency_penalty'] ) );
 		$advanced['presence_penalty']  = max( 0, min( 2, $advanced['presence_penalty'] ) );
 		$advanced['max_tools_per_turn'] = max( 1, min( 50, $advanced['max_tools_per_turn'] ) );
+		$advanced['max_history_turns'] = max( 1, min( 100, $advanced['max_history_turns'] ) );
 		$advanced['suggestions_count']  = max( 1, min( 6, $advanced['suggestions_count'] ) );
 
 		update_option( self::OPTION_NAME . '_advanced', $advanced );
@@ -618,6 +704,8 @@ class StifliFlexMcp_Client_Admin {
 			$settings = $this->get_settings();
 			$settings['provider'] = sanitize_text_field( wp_unslash( $_POST['adv_provider'] ) );
 			$settings['model']    = sanitize_text_field( wp_unslash( $_POST['adv_model'] ) );
+			// Re-encrypt the API key before saving back.
+			$settings['api_key'] = self::encrypt_value( $settings['api_key'] );
 			update_option( self::OPTION_NAME, $settings );
 		}
 
@@ -710,7 +798,11 @@ class StifliFlexMcp_Client_Admin {
 			wp_send_json_error( array( 'message' => __( 'API Key is required', 'stifli-flex-mcp' ) ) );
 		}
 
-		// Get MCP tools
+		// Trim history sent to the provider to control payload size.
+		$max_history_turns = absint( $advanced['max_history_turns'] ?? 10 );
+		$conversation = $this->trim_conversation_history( $conversation, $max_history_turns, $tool_result );
+
+		// Get MCP tools (always full JSON Schemas)
 		$tools = $this->get_mcp_tools();
 
 		// Initialize the appropriate provider handler
@@ -773,17 +865,265 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 		}
 
 		$all_tools = $stifliFlexMcp->model->getToolsList();
-		$formatted = array();
 
+		$formatted = array();
 		foreach ( $all_tools as $tool ) {
+			$name = $tool['name'];
+			$desc = $tool['description'] ?? '';
+			$schema = $tool['inputSchema'] ?? array( 'type' => 'object', 'properties' => new stdClass() );
+
 			$formatted[] = array(
-				'name'        => $tool['name'],
-				'description' => $tool['description'],
-				'inputSchema' => $tool['inputSchema'] ?? array( 'type' => 'object', 'properties' => new stdClass() ),
+				'name'        => $name,
+				'description' => $desc,
+				'inputSchema' => $schema,
 			);
 		}
 
+		stifli_flex_mcp_log( sprintf( '[Client] Tools payload mode=full tools=%d', count( $formatted ) ) );
 		return $formatted;
+	}
+
+	/**
+	 * Trim conversation history to a maximum number of recent turns.
+	 *
+	 * A "tool cycle" counts as one turn: the assistant's tool_use/function_call plus its
+	 * corresponding tool_result/function_call_output. Plain text messages (user/assistant)
+	 * are kept freely and don't count toward the limit.
+	 *
+	 * The cut point is always placed at a safe boundary — just before a plain-text user
+	 * message — so orphaned tool_result/function_call_output references are impossible.
+	 *
+	 * @param mixed $conversation Conversation array.
+	 * @param int   $max_turns Max tool cycles to keep.
+	 * @param mixed $tool_result Optional tool_result payload (unused, kept for signature compat).
+	 * @return array
+	 */
+	private function trim_conversation_history( $conversation, $max_turns, $tool_result = null ) {
+		if ( ! is_array( $conversation ) ) {
+			return array();
+		}
+
+		$conversation = array_values( $conversation );
+		$max_turns = absint( $max_turns );
+		if ( $max_turns <= 0 ) {
+			$max_turns = 10;
+		}
+
+		$orig_count = count( $conversation );
+		if ( $orig_count === 0 ) {
+			return array();
+		}
+
+		// Walk backwards counting tool cycles. Each tool_result / function_call_output /
+		// functionResponse counts as one cycle. When we exceed max_turns, we know we
+		// need to trim everything before a safe boundary.
+		$tool_count  = 0;
+		$cut_index   = 0; // default: keep everything
+
+		for ( $i = $orig_count - 1; $i >= 0; $i-- ) {
+			$msg = $conversation[ $i ];
+			if ( ! is_array( $msg ) ) {
+				continue;
+			}
+
+			$tool_count += $this->count_tool_results_in_message( $msg );
+
+			if ( $tool_count > $max_turns ) {
+				// Find the nearest safe boundary at or after $i: a plain-text user message.
+				$cut_index = $this->find_safe_cut_point( $conversation, $i, $orig_count );
+				break;
+			}
+		}
+
+		$trimmed = array_slice( $conversation, $cut_index );
+		$new_count = count( $trimmed );
+		if ( $new_count !== $orig_count ) {
+			stifli_flex_mcp_log( sprintf( '[Client] Trimmed conversation %d -> %d (max_tool_cycles=%d)', $orig_count, $new_count, $max_turns ) );
+		}
+		return $trimmed;
+	}
+
+	/**
+	 * Count how many tool result items a single conversation message contains.
+	 *
+	 * Handles all three provider formats:
+	 * - Claude: user message with content[] containing tool_result blocks
+	 * - OpenAI: item with type = function_call_output
+	 * - Gemini: user/model message with parts[] containing functionResponse
+	 *
+	 * @param array $msg Conversation message.
+	 * @return int Number of tool results in this message.
+	 */
+	private function count_tool_results_in_message( $msg ) {
+		$count = 0;
+
+		// OpenAI Responses API: each function_call_output is one tool result.
+		if ( ( $msg['type'] ?? '' ) === 'function_call_output' ) {
+			return 1;
+		}
+
+		// Claude: content is array of blocks.
+		$content = $msg['content'] ?? null;
+		if ( is_array( $content ) ) {
+			foreach ( $content as $block ) {
+				if ( is_array( $block ) && ( $block['type'] ?? '' ) === 'tool_result' ) {
+					$count++;
+				}
+			}
+		}
+
+		// Gemini: parts is array of parts.
+		$parts = $msg['parts'] ?? null;
+		if ( is_array( $parts ) ) {
+			foreach ( $parts as $part ) {
+				if ( is_array( $part ) && isset( $part['functionResponse'] ) ) {
+					$count++;
+				}
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Find the nearest safe cut point at or after $from.
+	 *
+	 * A safe cut point is a plain-text user message — one that does NOT contain
+	 * tool_result (Claude), function_call_output (OpenAI), or functionResponse (Gemini).
+	 * Cutting here guarantees no orphaned tool references.
+	 *
+	 * @param array $conversation Full conversation array.
+	 * @param int   $from Start searching from this index.
+	 * @param int   $total Total conversation length.
+	 * @return int The index to slice from (0 = keep all if no safe point found).
+	 */
+	private function find_safe_cut_point( $conversation, $from, $total ) {
+		for ( $i = $from; $i < $total; $i++ ) {
+			$msg = $conversation[ $i ];
+			if ( ! is_array( $msg ) ) {
+				continue;
+			}
+
+			// Skip OpenAI function_call and function_call_output items.
+			$type = $msg['type'] ?? '';
+			if ( $type === 'function_call' || $type === 'function_call_output' ) {
+				continue;
+			}
+
+			// Must be a user-role message.
+			if ( ( $msg['role'] ?? '' ) !== 'user' ) {
+				continue;
+			}
+
+			// Reject if it contains any tool_result blocks (Claude).
+			$content = $msg['content'] ?? null;
+			if ( is_array( $content ) ) {
+				$has_tool_result = false;
+				foreach ( $content as $block ) {
+					if ( is_array( $block ) && ( $block['type'] ?? '' ) === 'tool_result' ) {
+						$has_tool_result = true;
+						break;
+					}
+				}
+				if ( $has_tool_result ) {
+					continue;
+				}
+			}
+
+			// Reject if it contains any functionResponse parts (Gemini).
+			$parts = $msg['parts'] ?? null;
+			if ( is_array( $parts ) ) {
+				$has_func_response = false;
+				foreach ( $parts as $part ) {
+					if ( is_array( $part ) && isset( $part['functionResponse'] ) ) {
+						$has_func_response = true;
+						break;
+					}
+				}
+				if ( $has_func_response ) {
+					continue;
+				}
+			}
+
+			// This is a safe plain-text user message.
+			return $i;
+		}
+
+		// No safe cut point found — keep the entire conversation to avoid breaking tool chains.
+		return 0;
+	}
+
+	/**
+	 * Shorten text without breaking multibyte safety too much.
+	 *
+	 * @param string $text Text.
+	 * @param int    $max_len Max length.
+	 * @return string
+	 */
+	private function shorten_text( $text, $max_len ) {
+		$text = trim( (string) $text );
+		$max_len = intval( $max_len );
+		if ( $max_len <= 0 || $text === '' ) {
+			return $text;
+		}
+		if ( function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' ) ) {
+			if ( mb_strlen( $text ) <= $max_len ) {
+				return $text;
+			}
+			return mb_substr( $text, 0, $max_len - 1 ) . '…';
+		}
+		if ( strlen( $text ) <= $max_len ) {
+			return $text;
+		}
+		return substr( $text, 0, $max_len - 1 ) . '…';
+	}
+
+	/**
+	 * Compact a JSON Schema by stripping verbose keys like descriptions.
+	 * Keeps structure needed for tool calling (type/properties/required/enum/items/etc).
+	 *
+	 * @param mixed $schema Schema.
+	 * @return mixed
+	 */
+	private function compact_json_schema( $schema ) {
+		if ( is_object( $schema ) ) {
+			$schema = json_decode( wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), true );
+		}
+		if ( ! is_array( $schema ) ) {
+			return $schema;
+		}
+
+		$strip_keys = array(
+			'description',
+			'title',
+			'examples',
+			'example',
+			'default',
+			'$comment',
+			'deprecated',
+			'readOnly',
+			'writeOnly',
+		);
+		foreach ( $strip_keys as $k ) {
+			if ( array_key_exists( $k, $schema ) ) {
+				unset( $schema[ $k ] );
+			}
+		}
+
+		foreach ( $schema as $k => $v ) {
+			if ( is_array( $v ) || is_object( $v ) ) {
+				$schema[ $k ] = $this->compact_json_schema( $v );
+			}
+		}
+
+		if ( ! isset( $schema['type'] ) ) {
+			$schema['type'] = 'object';
+		}
+		if ( ! isset( $schema['properties'] ) ) {
+			$schema['properties'] = new stdClass();
+		}
+
+		return $schema;
 	}
 
 	/**

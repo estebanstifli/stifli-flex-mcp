@@ -25,13 +25,14 @@
     };
 
     // Cache DOM elements (chat tab)
-    let $chatMessages, $chatInput, $sendBtn, $clearBtn, $saveSettingsBtn;
+    let $chatMessages, $chatInput, $sendBtn, $clearBtn;
     let $providerSelect, $modelSelect, $apiKeyInput, $permissionSelect, $toolModal;
-    let $autosaveIndicator;
+    let $autosaveIndicator, $settingsAutosave;
 
     // Cache DOM elements (advanced tab)
     let $advProviderSelect, $advModelSelect;
     let $systemPrompt, $toolDisplay, $maxTools;
+    let $maxHistoryTurns;
     let $temperature, $temperatureValue;
     let $maxTokens, $topP, $topPValue;
     let $frequencyPenalty, $frequencyPenaltyValue;
@@ -69,13 +70,13 @@
         $chatInput = $('#sflmcp-chat-input');
         $sendBtn = $('#sflmcp-send-btn');
         $clearBtn = $('#sflmcp-clear-chat');
-        $saveSettingsBtn = $('#sflmcp-save-settings');
         $providerSelect = $('#sflmcp-provider');
         $modelSelect = $('#sflmcp-model');
         $apiKeyInput = $('#sflmcp-api-key');
         $permissionSelect = $('#sflmcp-permission');
         $toolModal = $('#sflmcp-tool-modal');
         $autosaveIndicator = $('#sflmcp-autosave-indicator');
+        $settingsAutosave = $('#sflmcp-settings-autosave');
     }
 
     /**
@@ -86,6 +87,7 @@
         $advModelSelect = $('#sflmcp-adv-model');
         $systemPrompt = $('#sflmcp-system-prompt');
         $toolDisplay = $('#sflmcp-tool-display');
+        $maxHistoryTurns = $('#sflmcp-max-history-turns');
         $maxTools = $('#sflmcp-max-tools');
         $temperature = $('#sflmcp-temperature');
         $temperatureValue = $('#sflmcp-temperature-value');
@@ -117,8 +119,25 @@
                 }
             });
             $clearBtn.on('click', clearChat);
-            $saveSettingsBtn.on('click', saveSettings);
-            $providerSelect.on('change', updateModelOptions);
+            $providerSelect.on('change', function() {
+                updateModelOptions();
+                triggerChatAutoSave();
+            });
+            $modelSelect.on('change', triggerChatAutoSave);
+            $apiKeyInput.on('input', triggerChatAutoSave);
+            $permissionSelect.on('change', triggerChatAutoSave);
+
+            // API key show/hide toggle
+            $('#sflmcp-api-key-toggle').on('click', function() {
+                var $icon = $(this).find('.dashicons');
+                if ($apiKeyInput.attr('type') === 'password') {
+                    $apiKeyInput.attr('type', 'text');
+                    $icon.removeClass('dashicons-visibility').addClass('dashicons-hidden');
+                } else {
+                    $apiKeyInput.attr('type', 'password');
+                    $icon.removeClass('dashicons-hidden').addClass('dashicons-visibility');
+                }
+            });
             
             // Modal buttons
             $toolModal.find('.sflmcp-modal-allow').on('click', function() {
@@ -147,6 +166,7 @@
             // Auto-save on all advanced fields
             $systemPrompt.on('input', triggerAdvancedAutoSave);
             $toolDisplay.on('change', triggerAdvancedAutoSave);
+            $maxHistoryTurns.on('input', triggerAdvancedAutoSave);
             $maxTools.on('input', triggerAdvancedAutoSave);
             $maxTokens.on('input', triggerAdvancedAutoSave);
             
@@ -185,17 +205,21 @@
      */
     function updateModelOptions() {
         const provider = $providerSelect.val();
+        let firstMatch = null;
+        let currentVisible = false;
         $modelSelect.find('option').each(function() {
             const $opt = $(this);
             if ($opt.data('provider') === provider) {
-                $opt.show();
+                $opt.prop('disabled', false).prop('hidden', false);
+                if (!firstMatch) firstMatch = $opt;
+                if ($opt.is(':selected')) currentVisible = true;
             } else {
-                $opt.hide();
+                $opt.prop('disabled', true).prop('hidden', true);
             }
         });
-        // Select first visible option if current is hidden
-        if ($modelSelect.find('option:selected').is(':hidden')) {
-            $modelSelect.find('option:visible').first().prop('selected', true);
+        // Force select first matching option if current is not for this provider
+        if (!currentVisible && firstMatch) {
+            firstMatch.prop('selected', true);
         }
     }
 
@@ -204,17 +228,20 @@
      */
     function updateAdvancedModelOptions() {
         const provider = $advProviderSelect.val();
+        let firstMatch = null;
+        let currentVisible = false;
         $advModelSelect.find('option').each(function() {
             const $opt = $(this);
             if ($opt.data('provider') === provider) {
-                $opt.show();
+                $opt.prop('disabled', false).prop('hidden', false);
+                if (!firstMatch) firstMatch = $opt;
+                if ($opt.is(':selected')) currentVisible = true;
             } else {
-                $opt.hide();
+                $opt.prop('disabled', true).prop('hidden', true);
             }
         });
-        // Select first visible option if current is hidden
-        if ($advModelSelect.find('option:selected').is(':hidden')) {
-            $advModelSelect.find('option:visible').first().prop('selected', true);
+        if (!currentVisible && firstMatch) {
+            firstMatch.prop('selected', true);
         }
     }
 
@@ -232,6 +259,16 @@
                 $row.hide();
             }
         });
+    }
+
+    /**
+     * Trigger auto-save for chat header settings (debounced)
+     */
+    function triggerChatAutoSave() {
+        if (state.saveTimeout) {
+            clearTimeout(state.saveTimeout);
+        }
+        state.saveTimeout = setTimeout(saveSettings, 500);
     }
 
     /**
@@ -256,6 +293,7 @@
                 nonce: sflmcpClient.nonce,
                 system_prompt: $systemPrompt.val(),
                 tool_display: $toolDisplay.val(),
+                max_history_turns: $maxHistoryTurns.val(),
                 max_tools_per_turn: $maxTools.val(),
                 temperature: $temperature.val(),
                 max_tokens: $maxTokens.val(),
@@ -1030,10 +1068,9 @@
                 permission: $permissionSelect.val()
             },
             success: function(response) {
-                if (response.success) {
-                    showNotice(sflmcpClient.i18n.settingsSaved, 'success');
-                } else {
-                    showNotice(response.data.message, 'error');
+                if (response.success && $settingsAutosave && $settingsAutosave.length) {
+                    $settingsAutosave.fadeIn(200);
+                    setTimeout(function() { $settingsAutosave.fadeOut(300); }, 2000);
                 }
             }
         });

@@ -119,8 +119,16 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 			$body['tools'] = $this->format_tools( $tools );
 		}
 
+		stifli_flex_mcp_log( sprintf(
+			'[OpenAI] Request summary model=%s input_items=%d tools=%d max_tokens=%d',
+			$model,
+			count( $input ),
+			count( $tools ),
+			intval( $max_tokens )
+		) );
+
 		// Make request
-		$response = $this->make_request(
+		$meta = $this->make_request_with_meta(
 			self::API_URL,
 			array(
 				'Content-Type'  => 'application/json',
@@ -129,8 +137,72 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 			$body
 		);
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
+		if ( is_wp_error( $meta ) ) {
+			// Log rate limit headers on errors (429s).
+			$data = $meta->get_error_data();
+			if ( is_array( $data ) && ! empty( $data['headers'] ) && is_array( $data['headers'] ) ) {
+				$h = $data['headers'];
+				$keys = array(
+					'retry-after',
+					'x-ratelimit-remaining-tokens',
+					'x-ratelimit-remaining-requests',
+					'x-ratelimit-limit-tokens',
+					'x-ratelimit-limit-requests',
+				);
+				$parts = array();
+				foreach ( $keys as $k ) {
+					if ( isset( $h[ $k ] ) ) {
+						$parts[] = $k . '=' . $h[ $k ];
+					}
+				}
+				if ( ! empty( $parts ) ) {
+					stifli_flex_mcp_log( '[OpenAI] Error rate-limit headers: ' . implode( ' ', $parts ) );
+				}
+			}
+			return $meta;
+		}
+
+		$response = $meta['body'] ?? array();
+		$headers  = $meta['headers'] ?? array();
+
+		// Log provider-reported usage if present.
+		if ( isset( $response['usage'] ) && is_array( $response['usage'] ) ) {
+			$u = $response['usage'];
+			$prompt   = isset( $u['input_tokens'] ) ? $u['input_tokens'] : ( isset( $u['prompt_tokens'] ) ? $u['prompt_tokens'] : 'n/a' );
+			$output   = isset( $u['output_tokens'] ) ? $u['output_tokens'] : ( isset( $u['completion_tokens'] ) ? $u['completion_tokens'] : 'n/a' );
+			$total    = isset( $u['total_tokens'] ) ? $u['total_tokens'] : 'n/a';
+			// Cached tokens: Responses API uses input_tokens_details, Chat API uses prompt_tokens_details
+			$cached   = 'n/a';
+			if ( isset( $u['input_tokens_details']['cached_tokens'] ) ) {
+				$cached = $u['input_tokens_details']['cached_tokens'];
+			} elseif ( isset( $u['prompt_tokens_details']['cached_tokens'] ) ) {
+				$cached = $u['prompt_tokens_details']['cached_tokens'];
+			}
+			stifli_flex_mcp_log( sprintf(
+				'[OpenAI] Usage input=%s output=%s total=%s cached=%s',
+				$prompt, $output, $total, $cached
+			) );
+		}
+
+		// Log key rate limit headers if present.
+		if ( is_array( $headers ) && ! empty( $headers ) ) {
+			$keys = array(
+				'x-ratelimit-remaining-tokens',
+				'x-ratelimit-remaining-requests',
+				'x-ratelimit-limit-tokens',
+				'x-ratelimit-limit-requests',
+				'x-ratelimit-reset-tokens',
+				'x-ratelimit-reset-requests',
+			);
+			$parts = array();
+			foreach ( $keys as $k ) {
+				if ( isset( $headers[ $k ] ) ) {
+					$parts[] = $k . '=' . $headers[ $k ];
+				}
+			}
+			if ( ! empty( $parts ) ) {
+				stifli_flex_mcp_log( '[OpenAI] Rate headers: ' . implode( ' ', $parts ) );
+			}
 		}
 
 		return $this->parse_response( $response, $input );

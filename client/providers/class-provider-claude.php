@@ -107,12 +107,20 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 			);
 		}
 
-		// Build request body
+		// Build request body.
+		// Use structured system prompt with cache_control for Anthropic prompt caching.
+		$system_text = $this->get_system_prompt( $system_prompt );
 		$body = array(
 			'model'       => $model,
 			'max_tokens'  => intval( $max_tokens ),
 			'messages'    => $messages,
-			'system'      => $this->get_system_prompt( $system_prompt ),
+			'system'      => array(
+				array(
+					'type'          => 'text',
+					'text'          => $system_text,
+					'cache_control' => array( 'type' => 'ephemeral' ),
+				),
+			),
 		);
 
 		// Claude 4.5 models don't support both temperature and top_p
@@ -128,16 +136,20 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 		// Add tools if available
 		if ( ! empty( $tools ) ) {
 			$body['tools'] = $this->format_tools( $tools );
-			stifli_flex_mcp_log( '[Claude] Sending ' . count( $tools ) . ' tools to API' );
+			stifli_flex_mcp_log( '[Claude] Tools: ' . count( $tools ) );
 		}
 
 		// Final pass: ensure all tool_use inputs are objects for JSON serialization
 		$body = $this->ensure_tool_inputs_are_objects( $body );
 
-		stifli_flex_mcp_log( '[Claude] Final body before request: ' . wp_json_encode( $body ) );
+		// Log a compact summary (avoid logging full prompts/tools).
+		$body_json  = wp_json_encode( $body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$body_bytes = is_string( $body_json ) ? strlen( $body_json ) : 0;
+		$est_tokens = class_exists( 'StifliFlexMcpUtils' ) ? StifliFlexMcpUtils::estimateTokensFromString( (string) $body_json ) : (int) ceil( $body_bytes / 4 );
+		stifli_flex_mcp_log( sprintf( '[Claude] Request summary model=%s messages=%d tools=%d body_bytes=%d est_tokens~%d max_tokens=%d', $model, count( $messages ), count( $tools ), $body_bytes, $est_tokens, intval( $max_tokens ) ) );
 
 		// Make request
-		$response = $this->make_request(
+		$meta = $this->make_request_with_meta(
 			self::API_URL,
 			array(
 				'Content-Type'      => 'application/json',
@@ -147,13 +159,66 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 			$body
 		);
 
-		if ( is_wp_error( $response ) ) {
-			return $response;
+		if ( is_wp_error( $meta ) ) {
+			// If available, log rate limit headers to diagnose 429s.
+			$data = $meta->get_error_data();
+			if ( is_array( $data ) && ! empty( $data['headers'] ) && is_array( $data['headers'] ) ) {
+				$h = $data['headers'];
+				$keys = array(
+					'retry-after',
+					'anthropic-ratelimit-input-tokens-remaining',
+					'anthropic-ratelimit-output-tokens-remaining',
+					'anthropic-ratelimit-tokens-remaining',
+				);
+				$parts = array();
+				foreach ( $keys as $k ) {
+					if ( isset( $h[ $k ] ) ) {
+						$parts[] = $k . '=' . $h[ $k ];
+					}
+				}
+				if ( ! empty( $parts ) ) {
+					stifli_flex_mcp_log( '[Claude] Error rate-limit headers: ' . implode( ' ', $parts ) );
+				}
+			}
+			return $meta;
 		}
 
-		stifli_flex_mcp_log( '[Claude] Raw response: ' . wp_json_encode( $response ) );
+		$response = $meta['body'] ?? array();
+		$headers  = $meta['headers'] ?? array();
 
-		return $this->parse_response( $response, $messages );
+		// Log provider-reported usage if present.
+		if ( isset( $response['usage'] ) && is_array( $response['usage'] ) ) {
+			$u = $response['usage'];
+			stifli_flex_mcp_log( sprintf(
+				'[Claude] Usage input=%s output=%s cache_create=%s cache_read=%s',
+				isset( $u['input_tokens'] ) ? $u['input_tokens'] : 'n/a',
+				isset( $u['output_tokens'] ) ? $u['output_tokens'] : 'n/a',
+				isset( $u['cache_creation_input_tokens'] ) ? $u['cache_creation_input_tokens'] : 'n/a',
+				isset( $u['cache_read_input_tokens'] ) ? $u['cache_read_input_tokens'] : 'n/a'
+			) );
+		}
+
+		// Log key rate limit headers if present.
+		if ( is_array( $headers ) && ! empty( $headers ) ) {
+			$keys = array(
+				'anthropic-ratelimit-input-tokens-remaining',
+				'anthropic-ratelimit-output-tokens-remaining',
+				'anthropic-ratelimit-tokens-remaining',
+				'anthropic-ratelimit-input-tokens-limit',
+				'anthropic-ratelimit-output-tokens-limit',
+			);
+			$parts = array();
+			foreach ( $keys as $k ) {
+				if ( isset( $headers[ $k ] ) ) {
+					$parts[] = $k . '=' . $headers[ $k ];
+				}
+			}
+			if ( ! empty( $parts ) ) {
+				stifli_flex_mcp_log( '[Claude] Rate headers: ' . implode( ' ', $parts ) );
+			}
+		}
+
+		return $this->parse_response( $response, $messages, $headers );
 	}
 
 	/**
@@ -270,6 +335,13 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 			);
 		}
 
+		// Add prompt-caching breakpoint on the last tool so the entire tools array
+		// is cached across requests (tools are static and ~6-8k tokens).
+		if ( ! empty( $formatted ) ) {
+			$last = count( $formatted ) - 1;
+			$formatted[ $last ]['cache_control'] = array( 'type' => 'ephemeral' );
+		}
+
 		return $formatted;
 	}
 
@@ -280,12 +352,14 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 	 * @param array $messages Messages sent.
 	 * @return array Parsed response.
 	 */
-	private function parse_response( $response, $messages ) {
+	private function parse_response( $response, $messages, $headers = array() ) {
 		$result = array(
 			'text'         => '',
 			'tool_calls'   => array(),
 			'conversation' => $messages,
 			'finished'     => true,
+			'usage'        => isset( $response['usage'] ) && is_array( $response['usage'] ) ? $response['usage'] : null,
+			'rate_limit'   => $this->extract_rate_limit_headers( $headers ),
 		);
 
 		if ( ! isset( $response['content'] ) || ! is_array( $response['content'] ) ) {
@@ -351,6 +425,40 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 		stifli_flex_mcp_log( '[Claude] Parsed result - text length: ' . strlen( $result['text'] ) . ', tool_calls: ' . count( $result['tool_calls'] ) );
 
 		return $result;
+	}
+
+	/**
+	 * Extract rate limit headers we care about into a compact array.
+	 *
+	 * @param array $headers Response headers.
+	 * @return array|null
+	 */
+	private function extract_rate_limit_headers( $headers ) {
+		if ( ! is_array( $headers ) || empty( $headers ) ) {
+			return null;
+		}
+		$keys = array(
+			'retry-after',
+			'anthropic-ratelimit-requests-limit',
+			'anthropic-ratelimit-requests-remaining',
+			'anthropic-ratelimit-requests-reset',
+			'anthropic-ratelimit-tokens-limit',
+			'anthropic-ratelimit-tokens-remaining',
+			'anthropic-ratelimit-tokens-reset',
+			'anthropic-ratelimit-input-tokens-limit',
+			'anthropic-ratelimit-input-tokens-remaining',
+			'anthropic-ratelimit-input-tokens-reset',
+			'anthropic-ratelimit-output-tokens-limit',
+			'anthropic-ratelimit-output-tokens-remaining',
+			'anthropic-ratelimit-output-tokens-reset',
+		);
+		$out = array();
+		foreach ( $keys as $k ) {
+			if ( isset( $headers[ $k ] ) ) {
+				$out[ $k ] = $headers[ $k ];
+			}
+		}
+		return empty( $out ) ? null : $out;
 	}
 
 	/**

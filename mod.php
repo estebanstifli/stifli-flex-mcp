@@ -1859,7 +1859,7 @@ class StifliFlexMcp {
 		
 		<h3><?php echo esc_html__('Log Contents', 'stifli-flex-mcp'); ?> <small class="sflmcp-small-text">(<?php echo esc_html__('last 500 lines', 'stifli-flex-mcp'); ?>)</small></h3>
 		
-		<textarea id="sflmcp_log_viewer" class="sflmcp-log-viewer" readonly><?php echo esc_textarea($log_contents); ?></textarea>
+		<textarea id="sflmcp_log_viewer" class="sflmcp-log-viewer" readonly wrap="off"><?php echo esc_textarea($log_contents); ?></textarea>
 		<?php
 	}
 

@@ -1,6 +1,40 @@
 <?php
 // Utilidades mínimas para StifliFlexMcp (stub)
 class StifliFlexMcpUtils {
+	/**
+	 * Rough token estimation from a string.
+	 *
+	 * NOTE: This is an approximation (about 4 chars/token for English-ish text).
+	 * Use provider-reported usage when available.
+	 *
+	 * @param string $text Input text.
+	 * @return int Estimated tokens.
+	 */
+	public static function estimateTokensFromString( $text ) {
+		if ( ! is_string( $text ) ) {
+			return 0;
+		}
+		$len = strlen( $text );
+		if ( $len <= 0 ) {
+			return 0;
+		}
+		return (int) ceil( $len / 4 );
+	}
+
+	/**
+	 * Rough token estimation from any JSON-serializable value.
+	 *
+	 * @param mixed $value Any value.
+	 * @return int Estimated tokens.
+	 */
+	public static function estimateTokensFromJson( $value ) {
+		$json = wp_json_encode( $value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		if ( ! is_string( $json ) ) {
+			return 0;
+		}
+		return self::estimateTokensFromString( $json );
+	}
+
 	public static function getUserAgent() {
 		return isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 	}

@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, agent, gemini
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -197,6 +197,10 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 5. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 2.0.3 =
+
+
+
 = 2.0.2 =
 * **🆕 WordPress Abilities Integration** (WordPress 6.9+) - Auto-discover and import abilities from other plugins!
 * New: Abilities tab in admin (appears only on WordPress 6.9+)

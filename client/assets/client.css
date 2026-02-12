@@ -40,17 +40,55 @@
 }
 
 .sflmcp-setting-group select,
-.sflmcp-setting-group input[type="password"] {
+.sflmcp-setting-group input[type="password"],
+.sflmcp-setting-group input[type="text"] {
     min-width: 180px;
     height: 32px;
 }
 
-.sflmcp-setting-group input[type="password"] {
+.sflmcp-setting-group input[type="password"],
+.sflmcp-setting-group input[type="text"] {
     min-width: 280px;
+}
+
+/* API Key toggle */
+.sflmcp-api-key-wrapper {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.sflmcp-api-key-wrapper input {
+    padding-right: 36px;
+}
+
+.sflmcp-api-key-toggle {
+    position: absolute;
+    right: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    color: #666;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.sflmcp-api-key-toggle:hover {
+    color: #2271b1;
+}
+
+.sflmcp-api-key-toggle .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
 }
 
 .sflmcp-setting-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
 }
 
 /* Notice */
@@ -726,17 +764,13 @@
     }
     
     .sflmcp-setting-group select,
-    .sflmcp-setting-group input[type="password"] {
+    .sflmcp-setting-group input[type="password"],
+    .sflmcp-setting-group input[type="text"] {
         width: 100%;
     }
     
     .sflmcp-setting-actions {
         margin-left: 0;
-        width: 100%;
-    }
-    
-    .sflmcp-setting-actions button {
-        width: 100%;
     }
     
     .sflmcp-content {
