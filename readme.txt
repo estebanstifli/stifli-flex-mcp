@@ -198,8 +198,18 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 
 == Changelog ==
 = 2.0.3 =
-
-
+* ** Encrypted API Keys** - API keys are now stored encrypted (AES-256-CBC) in the database for improved security
+* ** Prompt Caching (Claude)** - Enabled Anthropic prompt caching on system prompt and tools, reducing token usage and latency on repeated requests
+* ** Provider Usage Logging** - Real-time logging of input/output/cached tokens for Claude, OpenAI, and Gemini
+* ** Rate Limit Awareness** - Captures and logs rate limit headers from all three providers for better diagnostics on 429 errors
+* New: Conversation history trimming with configurable "Max Tool Cycles in History" setting to control payload size
+* New: Smart trim algorithm with safe cut points — never orphans tool_result references
+* New: API key visibility toggle (eye icon) in chat settings
+* New: Token estimation utilities (`estimateTokensFromString`, `estimateTokensFromJson`)
+* Improved: Auto-save on all chat settings (removed manual "Save Settings" button)
+* Improved: Compact request logging — summaries instead of full body dumps, reducing log noise
+* Improved: HTTP request layer now returns headers and status code alongside body (`make_request_with_meta`)
+* Improved: JSON encoding with `JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE` for cleaner payloads
 
 = 2.0.2 =
 * **🆕 WordPress Abilities Integration** (WordPress 6.9+) - Auto-discover and import abilities from other plugins!
