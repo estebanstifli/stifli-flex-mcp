@@ -278,14 +278,3 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 * Granular permission control per tool
 * Profile import/export functionality
 * Compatible with ChatGPT Custom Connectors, Claude Desktop, LibreChat
-
-== Upgrade Notice ==
-
-= 2.0.2 =
-New WordPress Abilities integration! Auto-discover and import abilities from other plugins (WordPress 6.9+ required). Admin menu reordered with AI Chat Agent first.
-
-= 2.0.1 =
-Major update! New built-in AI Chat Client - chat with GPT-4.5, Claude 4, or Gemini directly from WordPress admin. No external tools needed!
-
-= 1.0.0 =
-Initial release. Install and configure your MCP server to start automating WordPress with AI agents.
