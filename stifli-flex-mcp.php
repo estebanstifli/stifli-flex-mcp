@@ -166,6 +166,14 @@ if ( is_admin() ) {
 	new StifliFlexMcp_Automation_Admin();
 }
 
+// Ensure automation cron is always running (for existing installs)
+add_action( 'init', 'stifli_flex_mcp_check_automation_cron', 99 );
+function stifli_flex_mcp_check_automation_cron() {
+	if ( ! wp_next_scheduled( 'sflmcp_process_automation_tasks' ) ) {
+		wp_schedule_event( time(), 'every_minute', 'sflmcp_process_automation_tasks' );
+	}
+}
+
 /*
  * Custom data layer for plugin tables.
  * phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter

@@ -190,6 +190,16 @@ class StifliFlexMcp_Automation_Admin {
 				}
 				?>
 			</div>
+
+			<!-- WP-Cron Notice -->
+			<div class="sflmcp-cron-notice" style="margin-top: 24px; padding: 12px 16px; background: #fff8e5; border: 1px solid #dba617; border-left-width: 4px; border-radius: 4px;">
+				<p style="margin: 0; color: #996800;">
+					<span class="dashicons dashicons-info" style="color: #dba617; margin-right: 6px;"></span>
+					<strong><?php esc_html_e( 'Important:', 'stifli-flex-mcp' ); ?></strong>
+					<?php esc_html_e( 'WordPress WP-Cron only runs when there are visits. For low-traffic sites, we recommend setting up a real server cron:', 'stifli-flex-mcp' ); ?>
+				</p>
+				<code style="display: block; margin-top: 8px; padding: 8px 12px; background: #f6f7f7; border-radius: 3px; font-size: 12px; color: #50575e; word-break: break-all;">* * * * * wget -q -O - <?php echo esc_url( site_url( '/wp-cron.php?doing_wp_cron' ) ); ?> > /dev/null 2>&1</code>
+			</div>
 		</div>
 		<?php
 	}

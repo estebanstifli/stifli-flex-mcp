@@ -629,6 +629,7 @@
 	padding: 0;
 	background: none;
 	border: none;
+	white-space: normal;
 }
 
 .sflmcp-tool-header {
