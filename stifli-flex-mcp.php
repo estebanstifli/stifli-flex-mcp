@@ -159,6 +159,12 @@ require_once __DIR__ . '/client/providers/class-provider-openai.php';
 require_once __DIR__ . '/client/providers/class-provider-claude.php';
 require_once __DIR__ . '/client/providers/class-provider-gemini.php';
 require_once __DIR__ . '/client/class-client-admin.php';
+require_once __DIR__ . '/client/class-automation-admin.php';
+
+// Initialize Automation Admin
+if ( is_admin() ) {
+	new StifliFlexMcp_Automation_Admin();
+}
 
 /*
  * Custom data layer for plugin tables.
@@ -1296,6 +1302,186 @@ function stifli_flex_mcp_abilities_available() {
 	return function_exists('wp_get_abilities');
 }
 
+// ============================================================
+// Automation Tasks Tables
+// ============================================================
+
+/**
+ * Create automation tasks table
+ */
+function stifli_flex_mcp_maybe_create_automation_tasks_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_automation_tasks';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		task_name varchar(255) NOT NULL,
+		task_description text,
+		prompt longtext NOT NULL,
+		system_prompt text,
+		provider varchar(50) DEFAULT 'default',
+		model varchar(100) DEFAULT '',
+		allowed_tools text,
+		schedule_preset varchar(50) DEFAULT 'daily_morning',
+		schedule_time varchar(10) DEFAULT '08:00',
+		schedule_timezone varchar(100) DEFAULT 'UTC',
+		output_action varchar(50) DEFAULT 'log',
+		output_config text,
+		status varchar(20) DEFAULT 'draft',
+		next_run datetime DEFAULT NULL,
+		last_run datetime DEFAULT NULL,
+		retry_count int(11) DEFAULT 0,
+		max_retries int(11) DEFAULT 3,
+		created_by bigint(20) DEFAULT 0,
+		created_at datetime DEFAULT CURRENT_TIMESTAMP,
+		updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		KEY status (status),
+		KEY next_run (next_run),
+		KEY schedule_preset (schedule_preset)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Create automation logs table
+ */
+function stifli_flex_mcp_maybe_create_automation_logs_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_automation_logs';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		task_id bigint(20) NOT NULL,
+		started_at datetime DEFAULT CURRENT_TIMESTAMP,
+		completed_at datetime DEFAULT NULL,
+		status varchar(20) DEFAULT 'running',
+		ai_response longtext,
+		tools_called text,
+		tokens_input int(11) DEFAULT 0,
+		tokens_output int(11) DEFAULT 0,
+		execution_time_ms int(11) DEFAULT 0,
+		error_message text,
+		PRIMARY KEY  (id),
+		KEY task_id (task_id),
+		KEY status (status),
+		KEY started_at (started_at)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Create automation templates table
+ */
+function stifli_flex_mcp_maybe_create_automation_templates_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_automation_templates';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		template_name varchar(255) NOT NULL,
+		template_slug varchar(100) NOT NULL,
+		template_description text,
+		category varchar(100) DEFAULT 'general',
+		icon varchar(100) DEFAULT 'dashicons-clock',
+		default_prompt longtext,
+		default_system_prompt text,
+		suggested_tools text,
+		suggested_schedule varchar(50) DEFAULT 'daily_morning',
+		is_system tinyint(1) DEFAULT 0,
+		created_at datetime DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		UNIQUE KEY template_slug (template_slug),
+		KEY category (category),
+		KEY is_system (is_system)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Schedule automation cron event
+ */
+function stifli_flex_mcp_ensure_automation_cron() {
+	// Register custom intervals for automation
+	add_filter('cron_schedules', 'stifli_flex_mcp_automation_cron_schedules');
+	
+	if (!wp_next_scheduled('sflmcp_process_automation_tasks')) {
+		wp_schedule_event(time(), 'every_minute', 'sflmcp_process_automation_tasks');
+	}
+}
+
+/**
+ * Add custom cron schedules for automation
+ */
+function stifli_flex_mcp_automation_cron_schedules($schedules) {
+	if (!isset($schedules['every_minute'])) {
+		$schedules['every_minute'] = array(
+			'interval' => 60,
+			'display'  => __('Every Minute', 'stifli-flex-mcp'),
+		);
+	}
+	if (!isset($schedules['every_2_hours'])) {
+		$schedules['every_2_hours'] = array(
+			'interval' => 7200,
+			'display'  => __('Every 2 Hours', 'stifli-flex-mcp'),
+		);
+	}
+	if (!isset($schedules['every_6_hours'])) {
+		$schedules['every_6_hours'] = array(
+			'interval' => 21600,
+			'display'  => __('Every 6 Hours', 'stifli-flex-mcp'),
+		);
+	}
+	return $schedules;
+}
+add_filter('cron_schedules', 'stifli_flex_mcp_automation_cron_schedules');
+
+/**
+ * Process pending automation tasks (cron handler)
+ */
+add_action('sflmcp_process_automation_tasks', 'stifli_flex_mcp_run_automation_tasks');
+function stifli_flex_mcp_run_automation_tasks() {
+	// Check if engine class exists
+	$engine_file = __DIR__ . '/client/class-automation-engine.php';
+	if (!file_exists($engine_file)) {
+		return;
+	}
+	
+	require_once $engine_file;
+	
+	if (class_exists('StifliFlexMcp_Automation_Engine')) {
+		$engine = StifliFlexMcp_Automation_Engine::get_instance();
+		$engine->process_pending_tasks();
+	}
+}
+
 register_activation_hook(__FILE__, 'stifli_flex_mcp_activate');
 register_deactivation_hook(__FILE__, 'stifli_flex_mcp_deactivate');
 
@@ -1307,17 +1493,25 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_maybe_add_tools_token_column();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
+	
+	// Automation tables
+	stifli_flex_mcp_maybe_create_automation_tasks_table();
+	stifli_flex_mcp_maybe_create_automation_logs_table();
+	stifli_flex_mcp_maybe_create_automation_templates_table();
+	
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
+	stifli_flex_mcp_ensure_automation_cron();
 	
 	// Authentication now uses WordPress Application Passwords (no custom token needed)
 }
 
 function stifli_flex_mcp_deactivate() {
 	wp_clear_scheduled_hook('sflmcp_clean_queue');
+	wp_clear_scheduled_hook('sflmcp_process_automation_tasks');
 }
 
 add_action('sflmcp_clean_queue', 'stifli_flex_mcp_clean_queue');
