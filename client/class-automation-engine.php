@@ -1339,6 +1339,250 @@ class StifliFlexMcp_Automation_Engine {
 	}
 
 	/**
+	 * Start step-based test prompt - initializes session and gets first response
+	 *
+	 * @param array $args Arguments with prompt and system_prompt.
+	 * @return array Result with session_id, tool_calls or text, and finished flag.
+	 */
+	public function test_prompt_start( $args ) {
+		try {
+			// Get settings from AI Chat Agent
+			$client_settings = get_option( 'sflmcp_client_settings', array() );
+			$api_key         = $this->decrypt_api_key( $client_settings['api_key'] ?? '' );
+
+			if ( empty( $api_key ) ) {
+				throw new Exception( __( 'API key not configured in AI Chat Agent.', 'stifli-flex-mcp' ) );
+			}
+
+			$provider = $client_settings['provider'] ?? 'openai';
+			$model    = $client_settings['model'] ?? 'gpt-5.2-chat-latest';
+
+			// Get tools
+			global $stifliFlexMcp;
+			$tools = $stifliFlexMcp->model->getToolsList();
+
+			// Create session
+			$session_id = wp_generate_uuid4();
+
+			$provider_args = array(
+				'api_key'       => $api_key,
+				'model'         => $model,
+				'message'       => $args['prompt'],
+				'conversation'  => array(),
+				'tools'         => $tools,
+				'system_prompt' => $args['system_prompt'] ?? '',
+				'temperature'   => 0.7,
+				'max_tokens'    => 4096,
+			);
+
+			// Get provider instance
+			$provider_instance = $this->get_provider_instance( $provider );
+			if ( is_wp_error( $provider_instance ) ) {
+				throw new Exception( $provider_instance->get_error_message() );
+			}
+
+			stifli_flex_mcp_log( '[Automation] test_start - Session ' . $session_id . ' provider=' . $provider );
+
+			// Send first message
+			$response = $provider_instance->send_message( $provider_args );
+
+			if ( is_wp_error( $response ) ) {
+				throw new Exception( $response->get_error_message() );
+			}
+
+			// Extract tool calls
+			$tool_calls = $this->extract_tool_calls( $response, $model );
+			$text       = $this->extract_text_response( $response );
+
+			// Store session state
+			$session_data = array(
+				'provider'        => $provider,
+				'model'           => $model,
+				'api_key'         => $api_key,
+				'tools'           => $tools,
+				'system_prompt'   => $args['system_prompt'] ?? '',
+				'conversation'    => $response['conversation'] ?? array(),
+				'pending_tools'   => $tool_calls,
+				'tools_used'      => array(),
+				'iteration'       => 0,
+				'start_time'      => microtime( true ),
+			);
+			set_transient( 'sflmcp_test_session_' . $session_id, $session_data, 300 ); // 5 min expiry
+
+			// If no tool calls, we're done
+			if ( empty( $tool_calls ) ) {
+				delete_transient( 'sflmcp_test_session_' . $session_id );
+				return array(
+					'success'    => true,
+					'session_id' => $session_id,
+					'finished'   => true,
+					'text'       => $text,
+					'tool_calls' => array(),
+					'tools_used' => array(),
+				);
+			}
+
+			return array(
+				'success'    => true,
+				'session_id' => $session_id,
+				'finished'   => false,
+				'text'       => $text,
+				'tool_calls' => array_map( function( $tc ) {
+					return array(
+						'name'      => $tc['name'],
+						'arguments' => $tc['arguments'],
+					);
+				}, $tool_calls ),
+				'tools_used' => array(),
+			);
+
+		} catch ( Exception $e ) {
+			return array(
+				'success' => false,
+				'error'   => $e->getMessage(),
+			);
+		}
+	}
+
+	/**
+	 * Execute one step of test prompt - runs pending tools and gets next response
+	 *
+	 * @param string $session_id Session ID from test_prompt_start.
+	 * @return array Result with tool results, next tool_calls or final text.
+	 */
+	public function test_prompt_step( $session_id ) {
+		try {
+			// Get session data
+			$session_data = get_transient( 'sflmcp_test_session_' . $session_id );
+			if ( ! $session_data ) {
+				throw new Exception( __( 'Test session expired or not found.', 'stifli-flex-mcp' ) );
+			}
+
+			$pending_tools = $session_data['pending_tools'] ?? array();
+			if ( empty( $pending_tools ) ) {
+				delete_transient( 'sflmcp_test_session_' . $session_id );
+				return array(
+					'success'  => true,
+					'finished' => true,
+					'text'     => '',
+					'tools_used' => $session_data['tools_used'],
+				);
+			}
+
+			// Get provider instance
+			$provider_instance = $this->get_provider_instance( $session_data['provider'] );
+			if ( is_wp_error( $provider_instance ) ) {
+				throw new Exception( $provider_instance->get_error_message() );
+			}
+
+			// Execute all pending tools and collect results
+			$tool_results = array();
+			$tools_executed = array();
+
+			foreach ( $pending_tools as $tool_call ) {
+				$tool_name = $tool_call['name'];
+
+				stifli_flex_mcp_log( '[Automation] test_step - Executing: ' . $tool_name );
+
+				// Track tool usage
+				if ( ! in_array( $tool_name, $session_data['tools_used'], true ) ) {
+					$session_data['tools_used'][] = $tool_name;
+				}
+
+				// Execute tool
+				$result = $this->execute_tool( $tool_name, $tool_call['arguments'] );
+
+				$tools_executed[] = array(
+					'name'      => $tool_name,
+					'arguments' => $tool_call['arguments'],
+					'result'    => is_string( $result ) ? substr( $result, 0, 500 ) : wp_json_encode( $result ),
+				);
+
+				// Format tool result for provider
+				$tool_results[] = $this->format_tool_result( $tool_call, $result, $session_data['model'] );
+			}
+
+			// Send tool results to LLM
+			$provider_args = array(
+				'api_key'       => $session_data['api_key'],
+				'model'         => $session_data['model'],
+				'message'       => '',
+				'conversation'  => $session_data['conversation'],
+				'tools'         => $session_data['tools'],
+				'system_prompt' => $session_data['system_prompt'],
+				'temperature'   => 0.7,
+				'max_tokens'    => 4096,
+				'tool_result'   => count( $tool_results ) === 1 ? $tool_results[0] : $tool_results,
+			);
+
+			$response = $provider_instance->send_message( $provider_args );
+
+			if ( is_wp_error( $response ) ) {
+				throw new Exception( $response->get_error_message() );
+			}
+
+			// Extract next tool calls
+			$next_tool_calls = $this->extract_tool_calls( $response, $session_data['model'] );
+			$text            = $this->extract_text_response( $response );
+
+			// Update session
+			$session_data['conversation']  = $response['conversation'] ?? $session_data['conversation'];
+			$session_data['pending_tools'] = $next_tool_calls;
+			$session_data['iteration']++;
+
+			// Check iteration limit
+			if ( $session_data['iteration'] >= 10 ) {
+				delete_transient( 'sflmcp_test_session_' . $session_id );
+				return array(
+					'success'         => true,
+					'finished'        => true,
+					'text'            => $text ?: __( 'Maximum iterations reached.', 'stifli-flex-mcp' ),
+					'tools_executed'  => $tools_executed,
+					'tools_used'      => $session_data['tools_used'],
+					'execution_time'  => round( ( microtime( true ) - $session_data['start_time'] ) * 1000 ),
+				);
+			}
+
+			// If no more tool calls, we're done
+			if ( empty( $next_tool_calls ) ) {
+				delete_transient( 'sflmcp_test_session_' . $session_id );
+				return array(
+					'success'         => true,
+					'finished'        => true,
+					'text'            => $text,
+					'tools_executed'  => $tools_executed,
+					'tools_used'      => $session_data['tools_used'],
+					'execution_time'  => round( ( microtime( true ) - $session_data['start_time'] ) * 1000 ),
+				);
+			}
+
+			// Save session for next step
+			set_transient( 'sflmcp_test_session_' . $session_id, $session_data, 300 );
+
+			return array(
+				'success'        => true,
+				'finished'       => false,
+				'text'           => $text,
+				'tools_executed' => $tools_executed,
+				'tool_calls'     => array_map( function( $tc ) {
+					return array(
+						'name'      => $tc['name'],
+						'arguments' => $tc['arguments'],
+					);
+				}, $next_tool_calls ),
+				'tools_used'     => $session_data['tools_used'],
+			);
+
+		} catch ( Exception $e ) {
+			delete_transient( 'sflmcp_test_session_' . $session_id );
+			return array(
+				'success' => false,
+				'error'   => $e->getMessage(),
+			);
+		}
+	}
+
+	/**
 	 * Get schedule presets
 	 *
 	 * @return array Schedule presets.

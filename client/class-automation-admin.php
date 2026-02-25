@@ -41,6 +41,8 @@ class StifliFlexMcp_Automation_Admin {
 		add_action( 'wp_ajax_sflmcp_automation_toggle_task', array( $this, 'ajax_toggle_task' ) );
 		add_action( 'wp_ajax_sflmcp_automation_run_task', array( $this, 'ajax_run_task' ) );
 		add_action( 'wp_ajax_sflmcp_automation_test_prompt', array( $this, 'ajax_test_prompt' ) );
+		add_action( 'wp_ajax_sflmcp_automation_test_start', array( $this, 'ajax_test_start' ) );
+		add_action( 'wp_ajax_sflmcp_automation_test_step', array( $this, 'ajax_test_step' ) );
 		add_action( 'wp_ajax_sflmcp_automation_get_logs', array( $this, 'ajax_get_logs' ) );
 		add_action( 'wp_ajax_sflmcp_automation_get_templates', array( $this, 'ajax_get_templates' ) );
 	}
@@ -997,6 +999,60 @@ class StifliFlexMcp_Automation_Admin {
 			'prompt'        => $prompt,
 			'system_prompt' => $system_prompt,
 		) );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( array( 'message' => $result['error'] ) );
+		}
+	}
+
+	/**
+	 * AJAX: Start test prompt (step-based approach)
+	 */
+	public function ajax_test_start() {
+		check_ajax_referer( 'sflmcp_automation', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$prompt        = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : '';
+		$system_prompt = isset( $_POST['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['system_prompt'] ) ) : '';
+
+		if ( empty( $prompt ) ) {
+			wp_send_json_error( array( 'message' => __( 'Prompt is required', 'stifli-flex-mcp' ) ) );
+		}
+
+		$result = $this->engine->test_prompt_start( array(
+			'prompt'        => $prompt,
+			'system_prompt' => $system_prompt,
+		) );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( array( 'message' => $result['error'] ) );
+		}
+	}
+
+	/**
+	 * AJAX: Execute one step of test prompt
+	 */
+	public function ajax_test_step() {
+		check_ajax_referer( 'sflmcp_automation', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
+
+		if ( empty( $session_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Session ID is required', 'stifli-flex-mcp' ) ) );
+		}
+
+		$result = $this->engine->test_prompt_step( $session_id );
 
 		if ( $result['success'] ) {
 			wp_send_json_success( $result );

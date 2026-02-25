@@ -756,7 +756,7 @@
 	}
 
 	/**
-	 * Handle test prompt (chat-style)
+	 * Handle test prompt (chat-style with step-by-step progress)
 	 */
 	function handleTestPrompt() {
 		const $btn = $(this);
@@ -770,86 +770,62 @@
 
 		// Add user message to chat
 		addChatMessage('user', prompt);
-		
+
 		// Show thinking indicator
 		showThinking();
-		
+
 		$btn.prop('disabled', true);
 		$('#sflmcp-test-summary').hide();
+		state.detectedTools = [];
 
 		const startTime = Date.now();
 
+		// Start the step-based test
 		$.ajax({
 			url: sflmcpAutomation.ajaxUrl,
 			method: 'POST',
 			data: {
-				action: 'sflmcp_automation_test_prompt',
+				action: 'sflmcp_automation_test_start',
 				nonce: sflmcpAutomation.nonce,
 				prompt: prompt,
 				system_prompt: systemPrompt
 			},
 			success: function(response) {
-				hideThinking();
-				$btn.prop('disabled', false);
-				const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-
-				if (response.success) {
-					// Display intermediate steps (tool calls and intermediate text)
-					const steps = response.data.steps || [];
-					steps.forEach(step => {
-						if (step.type === 'tool') {
-							addToolMessageWithResult(step.name, step.arguments, step.result);
-						} else if (step.type === 'text' && step.content) {
-							// Only show non-final text responses as intermediate
-							if (steps.indexOf(step) < steps.length - 1) {
-								addChatMessage('assistant', step.content);
-							}
-						}
-					});
-					
-					state.detectedTools = response.data.tools_detected || [];
-					
-					// Always save detected tools to hidden input for later use
-					$('#sflmcp-detected-tools').val(state.detectedTools.join(','));
-					
-					// Add final assistant response
-					const aiResponse = response.data.response || 'No response';
-					addChatMessage('assistant', aiResponse);
-					
-					// Show summary below chat
-					if (state.detectedTools.length > 0) {
-						const toolsHtml = state.detectedTools.map(t => 
-							`<span class="sflmcp-detected-tool"><span class="dashicons dashicons-yes"></span> ${t}</span>`
-						).join('');
-						$('#sflmcp-detected-tools-list').html(toolsHtml);
-						
-						$('#sflmcp-test-suggestion').html(`
-							<strong>💡 ${sflmcpAutomation.i18n.tip || 'Tip'}:</strong> 
-							${state.detectedTools.length} tools detected (${duration}s). 
-							<button type="button" class="button button-small" id="sflmcp-apply-detected">
-								${sflmcpAutomation.i18n.applyDetected || 'Apply detected tools'}
-							</button>
-						`);
-						
-						$('#sflmcp-apply-detected').on('click', function() {
-							state.selectedTools = [...state.detectedTools];
-							$('#sflmcp-allowed-tools').val(state.selectedTools.join(','));
-							$('[name="tools_mode"][value="custom"]').prop('checked', true).trigger('change');
-							updateToolsUI();
-						});
-						
-						$('#sflmcp-test-summary').show();
-					} else {
-						$('#sflmcp-detected-tools-list').html(
-							`<span class="sflmcp-no-tools">${sflmcpAutomation.i18n.noToolsCalled || 'No tools were called'}</span>`
-						);
-						$('#sflmcp-test-suggestion').html(`<small>${duration}s</small>`);
-						$('#sflmcp-test-summary').show();
-					}
-				} else {
-					// Add error message as assistant response
-					addChatMessage('assistant', '❌ ' + (response.data?.message || 'Unknown error'));
+				if (!response.success) {
+					hideThinking();
+					$btn.prop('disabled', false);
+					addChatMessage('assistant', '❌ ' + (response.data?.message || 'Error starting test'));
+					return;
 				}
+
+				const sessionId = response.data.session_id;
+
+				// Show any initial text
+				if (response.data.text) {
+					hideThinking();
+					addChatMessage('assistant', response.data.text);
+					showThinking();
+				}
+
+				// If finished immediately (no tool calls)
+				if (response.data.finished) {
+					hideThinking();
+					$btn.prop('disabled', false);
+					finishTest(startTime, response.data.tools_used || []);
+					return;
+				}
+
+				// Show pending tool calls
+				if (response.data.tool_calls && response.data.tool_calls.length > 0) {
+					hideThinking();
+					response.data.tool_calls.forEach(tc => {
+						addToolMessagePending(tc.name, tc.arguments);
+					});
+					showThinking();
+				}
+
+				// Continue with steps
+				executeTestStep(sessionId, startTime, $btn);
 			},
 			error: function() {
 				hideThinking();
@@ -857,6 +833,179 @@
 				addChatMessage('assistant', '❌ Connection error');
 			}
 		});
+	}
+
+	/**
+	 * Execute one step of the test and continue if needed
+	 */
+	function executeTestStep(sessionId, startTime, $btn) {
+		$.ajax({
+			url: sflmcpAutomation.ajaxUrl,
+			method: 'POST',
+			data: {
+				action: 'sflmcp_automation_test_step',
+				nonce: sflmcpAutomation.nonce,
+				session_id: sessionId
+			},
+			success: function(response) {
+				if (!response.success) {
+					hideThinking();
+					$btn.prop('disabled', false);
+					addChatMessage('assistant', '❌ ' + (response.data?.message || 'Error in step'));
+					return;
+				}
+
+				// Show executed tools with results
+				if (response.data.tools_executed && response.data.tools_executed.length > 0) {
+					hideThinking();
+					response.data.tools_executed.forEach(tool => {
+						updateToolMessageWithResult(tool.name, tool.result);
+					});
+
+					// Track detected tools
+					response.data.tools_executed.forEach(tool => {
+						if (!state.detectedTools.includes(tool.name)) {
+							state.detectedTools.push(tool.name);
+						}
+					});
+				}
+
+				// Show any intermediate text
+				if (response.data.text && !response.data.finished) {
+					addChatMessage('assistant', response.data.text);
+				}
+
+				// If finished
+				if (response.data.finished) {
+					hideThinking();
+					$btn.prop('disabled', false);
+
+					// Show final response
+					if (response.data.text) {
+						addChatMessage('assistant', response.data.text);
+					}
+
+					finishTest(startTime, response.data.tools_used || state.detectedTools);
+					return;
+				}
+
+				// Show next pending tool calls
+				if (response.data.tool_calls && response.data.tool_calls.length > 0) {
+					response.data.tool_calls.forEach(tc => {
+						addToolMessagePending(tc.name, tc.arguments);
+					});
+					showThinking();
+				}
+
+				// Continue with next step
+				executeTestStep(sessionId, startTime, $btn);
+			},
+			error: function() {
+				hideThinking();
+				$btn.prop('disabled', false);
+				addChatMessage('assistant', '❌ Connection error');
+			}
+		});
+	}
+
+	/**
+	 * Add a pending tool message (about to execute)
+	 */
+	function addToolMessagePending(toolName, args) {
+		const $messages = $('#sflmcp-test-chat-messages');
+
+		// Format arguments preview
+		let argsPreview = '';
+		if (args && typeof args === 'object') {
+			const entries = Object.entries(args).slice(0, 2);
+			argsPreview = entries.map(([k, v]) => {
+				const val = typeof v === 'string' ? v.substring(0, 30) : JSON.stringify(v).substring(0, 30);
+				return `${k}: ${val}${val.length >= 30 ? '...' : ''}`;
+			}).join(', ');
+		}
+
+		const $message = $(`
+			<div class="sflmcp-test-message sflmcp-test-message-tool" data-tool="${escapeHtml(toolName)}">
+				<div class="sflmcp-test-avatar">
+					<span class="dashicons dashicons-admin-tools"></span>
+				</div>
+				<div class="sflmcp-test-content">
+					<div class="sflmcp-tool-header">
+						<span class="sflmcp-tool-executed">${escapeHtml(toolName)}</span>
+						<span class="sflmcp-tool-status sflmcp-tool-pending">
+							<span class="spinner is-active"></span>
+						</span>
+					</div>
+					${argsPreview ? `<div class="sflmcp-tool-args-preview">${escapeHtml(argsPreview)}</div>` : ''}
+				</div>
+			</div>
+		`);
+
+		$messages.append($message);
+		$messages.scrollTop($messages[0].scrollHeight);
+	}
+
+	/**
+	 * Update a pending tool message with result
+	 */
+	function updateToolMessageWithResult(toolName, result) {
+		const $message = $(`.sflmcp-test-message-tool[data-tool="${toolName}"]`).last();
+
+		if ($message.length) {
+			// Update status
+			$message.find('.sflmcp-tool-status').html('✓').removeClass('sflmcp-tool-pending').addClass('sflmcp-tool-done');
+
+			// Add result preview
+			if (result) {
+				const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+				const preview = resultStr.substring(0, 150) + (resultStr.length > 150 ? '...' : '');
+				$message.find('.sflmcp-test-content').append(`
+					<div class="sflmcp-tool-result"><small>${escapeHtml(preview)}</small></div>
+				`);
+			}
+		}
+
+		$('#sflmcp-test-chat-messages').scrollTop($('#sflmcp-test-chat-messages')[0].scrollHeight);
+	}
+
+	/**
+	 * Finish test and show summary
+	 */
+	function finishTest(startTime, toolsUsed) {
+		const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+		state.detectedTools = toolsUsed;
+		$('#sflmcp-detected-tools').val(state.detectedTools.join(','));
+
+		if (state.detectedTools.length > 0) {
+			const toolsHtml = state.detectedTools.map(t =>
+				`<span class="sflmcp-detected-tool"><span class="dashicons dashicons-yes"></span> ${t}</span>`
+			).join('');
+			$('#sflmcp-detected-tools-list').html(toolsHtml);
+
+			$('#sflmcp-test-suggestion').html(`
+				<strong>💡 ${sflmcpAutomation.i18n.tip || 'Tip'}:</strong>
+				${state.detectedTools.length} tools detected (${duration}s).
+				<button type="button" class="button button-small" id="sflmcp-apply-detected">
+					${sflmcpAutomation.i18n.applyDetected || 'Apply detected tools'}
+				</button>
+			`);
+
+			$('#sflmcp-apply-detected').on('click', function() {
+				state.selectedTools = [...state.detectedTools];
+				$('#sflmcp-allowed-tools').val(state.selectedTools.join(','));
+				$('[name="tools_mode"][value="custom"]').prop('checked', true).trigger('change');
+				updateToolsUI();
+			});
+
+			$('#sflmcp-test-summary').show();
+		} else {
+			$('#sflmcp-detected-tools-list').html(
+				`<span class="sflmcp-no-tools">${sflmcpAutomation.i18n.noToolsCalled || 'No tools were called'}</span>`
+			);
+			$('#sflmcp-test-suggestion').html(`<small>${duration}s</small>`);
+			$('#sflmcp-test-summary').show();
+		}
 	}
 
 	/**
