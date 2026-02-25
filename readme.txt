@@ -80,7 +80,7 @@ Schedule AI-powered tasks to run automatically on your WordPress site:
 Run AI workflows automatically when specific events happen:
 
 * **WordPress Triggers** — New post published, user registered, comment posted
-* **WooCommerce Triggers** — New order received, order status changed (Coming Soon)
+* **WooCommerce Triggers** — New order received, order status changed, order completed, refunded
 * **Conditional Logic** — Run only when conditions are met (post type, status, category)
 * **Dynamic Prompts** — Use placeholders like `{{post.title}}` for context-aware AI
 * **Rate Limiting** — Prevent runaway executions with configurable cooldowns

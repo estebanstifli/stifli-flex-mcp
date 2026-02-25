@@ -188,6 +188,10 @@ class StifliFlexMcp_Event_Trigger_Registry {
 			if ( ! isset( $grouped[ $cat ] ) ) {
 				$grouped[ $cat ] = array();
 			}
+			
+			// Add availability flag
+			$trigger['available'] = empty( $trigger['plugin_required'] ) || $this->is_plugin_active( $trigger['plugin_required'] );
+			
 			$grouped[ $cat ][] = $trigger;
 		}
 		

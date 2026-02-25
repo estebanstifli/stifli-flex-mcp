@@ -99,12 +99,24 @@
 
         // Trigger family cards
         $(document).on('click', '.sflmcp-trigger-family-card', function() {
-            if ($(this).hasClass('disabled')) {
-                // WooCommerce Coming Soon
-                return;
-            }
+            const $card = $(this);
+            const family = $card.data('family');
+            
             $('.sflmcp-trigger-family-card').removeClass('active');
-            $(this).addClass('active');
+            $card.addClass('active');
+            
+            // Show/hide WooCommerce warning
+            if (family === 'woocommerce' && !sflmcpEvents.woocommerceActive) {
+                $('#sflmcp-wc-warning').show();
+            } else {
+                $('#sflmcp-wc-warning').hide();
+            }
+            
+            // Re-populate triggers filtered by platform
+            populateTriggerSelect();
+            
+            // Reset trigger selection
+            $('#trigger_id').val('').trigger('change');
         });
 
         // Collapsible sections
@@ -319,12 +331,24 @@
      * Initialize task form
      */
     function initializeTaskForm() {
+        // Set platform based on existing trigger (for editing)
+        const triggerId = $('#trigger_id').data('value');
+        if (triggerId && triggerId.startsWith('wc_')) {
+            // WooCommerce trigger - switch platform
+            $('.sflmcp-trigger-family-card').removeClass('active');
+            $('.sflmcp-trigger-family-card[data-family="woocommerce"]').addClass('active');
+            
+            // Show warning if WooCommerce not active
+            if (!sflmcpEvents.woocommerceActive) {
+                $('#sflmcp-wc-warning').show();
+            }
+        }
+        
         populateTriggerSelect();
         renderToolsList();
         loadFormData();
         
         // Set initial trigger value if editing
-        const triggerId = $('#trigger_id').data('value');
         if (triggerId) {
             setTimeout(function() {
                 $('#trigger_id').val(triggerId);
@@ -347,11 +371,23 @@
         const $select = $('#trigger_id');
         if (!$select.length || Object.keys(state.triggersByCategory).length === 0) return;
 
+        // Get selected platform
+        const $activeFamily = $('.sflmcp-trigger-family-card.active');
+        const selectedPlatform = $activeFamily.length ? $activeFamily.data('family') : 'wordpress';
+
         const currentVal = $select.val() || $select.data('value');
         $select.empty();
         $select.append('<option value="">-- Select a trigger --</option>');
 
         Object.keys(state.triggersByCategory).forEach(function(category) {
+            // Filter categories by platform
+            const categoryLower = category.toLowerCase();
+            const isWooCommerce = categoryLower.startsWith('woocommerce');
+            
+            // Skip categories not matching the selected platform
+            if (selectedPlatform === 'wordpress' && isWooCommerce) return;
+            if (selectedPlatform === 'woocommerce' && !isWooCommerce) return;
+            
             const $optgroup = $('<optgroup label="' + category + '"></optgroup>');
             
             state.triggersByCategory[category].forEach(function(trigger) {

@@ -86,6 +86,28 @@
 	text-transform: uppercase;
 }
 
+/* Platform warning message */
+.sflmcp-platform-warning {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 0 0 0;
+	padding: 8px 12px;
+	background: #fcf0f1;
+	border: 1px solid #d63638;
+	border-left-width: 4px;
+	border-radius: 4px;
+	color: #8a2424;
+	font-size: 13px;
+}
+
+.sflmcp-platform-warning .dashicons {
+	color: #d63638;
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+}
+
 /* Rotate animation for collapsible sections */
 .rotate-180 {
 	transform: rotate(180deg);

@@ -106,12 +106,13 @@ class StifliFlexMcp_Event_Automation_Admin {
 		}
 
 		wp_localize_script( 'sflmcp-events', 'sflmcpEvents', array(
-			'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-			'adminUrl' => admin_url( 'admin.php' ),
-			'nonce'    => wp_create_nonce( 'sflmcp_events_nonce' ),
-			'tools'    => $tools,
-			'allTools' => $all_tools,
-			'i18n'     => array(
+			'ajaxUrl'           => admin_url( 'admin-ajax.php' ),
+			'adminUrl'          => admin_url( 'admin.php' ),
+			'nonce'             => wp_create_nonce( 'sflmcp_events_nonce' ),
+			'tools'             => $tools,
+			'allTools'          => $all_tools,
+			'woocommerceActive' => class_exists( 'WooCommerce' ),
+			'i18n'              => array(
 				'confirmDelete' => __( 'Are you sure you want to delete this automation?', 'stifli-flex-mcp' ),
 				'saving'        => __( 'Saving...', 'stifli-flex-mcp' ),
 				'saved'         => __( 'Saved!', 'stifli-flex-mcp' ),
@@ -275,12 +276,15 @@ class StifliFlexMcp_Event_Automation_Admin {
 							<span class="dashicons dashicons-wordpress"></span>
 							<span class="sflmcp-family-name">WordPress</span>
 						</div>
-						<div class="sflmcp-trigger-family-card disabled" data-family="woocommerce">
+						<div class="sflmcp-trigger-family-card" data-family="woocommerce">
 							<span class="dashicons dashicons-cart"></span>
 							<span class="sflmcp-family-name">WooCommerce</span>
-							<span class="sflmcp-coming-soon-badge"><?php esc_html_e( 'Coming Soon', 'stifli-flex-mcp' ); ?></span>
 						</div>
 					</div>
+					<p id="sflmcp-wc-warning" class="sflmcp-platform-warning" style="display:none;">
+						<span class="dashicons dashicons-warning"></span>
+						<?php esc_html_e( 'WooCommerce is not installed. Triggers will not work until WooCommerce is active.', 'stifli-flex-mcp' ); ?>
+					</p>
 				</div>
 
 				<div class="sflmcp-form-row">
@@ -810,7 +814,9 @@ class StifliFlexMcp_Event_Automation_Admin {
 		}
 
 		$registry = StifliFlexMcp_Event_Trigger_Registry::get_instance();
-		$grouped  = $registry->get_grouped( true );
+		
+		// Get ALL triggers (not just available ones) - each has 'available' flag
+		$grouped = $registry->get_grouped( false );
 
 		$response = array( 
 			'triggers'   => $registry->get_available(),
