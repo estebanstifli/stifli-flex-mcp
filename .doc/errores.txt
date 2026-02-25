@@ -1,29 +1,30 @@
-FILE: client/class-automation-admin.php
-Line	Column	Type	Code	Message	Edit Link
-265	19	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_row($wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $edit_id ))\n$table assigned unsafely at line 263:\n $table = $wpdb->prefix . 'sflmcp_automation_tasks'\n$task assigned unsafely at line 265:\n $task = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $edit_id ) )	View in code editor (opens in a new tab)
-784	19	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_results("SELECT * FROM {$table}{$where} ORDER BY created_at DESC")\n$table assigned unsafely at line 774:\n $table = $wpdb->prefix . 'sflmcp_automation_tasks'\n$where assigned unsafely at line 778:\n $where = ''\n$_POST['status'] used without escaping.\n$status assigned unsafely at line 776:\n $status = isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : ''\nNote: sanitize_text_field() is not a safe escaping function.	View in code editor (opens in a new tab)
-949	19	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_row($wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $task_id ))	View in code editor (opens in a new tab)
-1113	18	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $logs_table used in $wpdb->get_results($wpdb->prepare(\r\n\t\t\t"SELECT l.*, t.task_name \r\n\t\t\t FROM {$logs_table} l \r\n\t\t\t LEFT JOIN {$tasks_table} t ON l.task_id = t.id \r\n\t\t\t WHERE {$where} \r\n\t\t\t ORDER BY l.started_at DESC \r\n\t\t\t LIMIT 100",\r\n\t\t\t$where_values\r\n\t\t))	View in code editor (opens in a new tab)
+FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-automation-admin.php
+Line	Column	Type	Code	Message
+377	120	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
+Learn more (opens in a new tab)
+433	90	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
+Learn more (opens in a new tab)
 
-FILE: client/class-automation-engine.php
-Line	Column	Type	Code	Message	Edit Link
-212	19	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_results($wpdb->prepare(\r\n\t\t\t"SELECT * FROM {$table} WHERE status = 'active' AND next_run <= %s ORDER BY next_run ASC LIMIT 3",\r\n\t\t\t$now\r\n\t\t))	View in code editor (opens in a new tab)
-1398	18	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_row($wpdb->prepare(\r\n\t\t\t"SELECT * FROM {$table} WHERE id = %d",\r\n\t\t\t$task_id\r\n\t\t))\n$table assigned unsafely at line 1395:\n $table = $wpdb->prefix . 'sflmcp_automation_tasks'\n$task assigned unsafely at line 1398:\n $task = $wpdb->get_row( $wpdb->prepare(\r\n\t\t\t"SELECT * FROM {$table} WHERE id = %d",\r\n\t\t\t$task_id\r\n\t\t) )\n$task_id used without escaping.	View in code editor (opens in a new tab)
+FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-event-automation-admin.php
+Line	Column	Type	Code	Message
+386	120	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
+Learn more (opens in a new tab)
 
-FILE: client/class-event-automation-admin.php
-Line	Column	Type	Code	Message	Edit Link
-227	25	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_row($wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $edit_id ))\n$table assigned unsafely at line 225:\n $table = $wpdb->prefix . 'sflmcp_event_automations'\n$automation assigned unsafely at line 227:\n $automation = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $edit_id ), ARRAY_A )	View in code editor (opens in a new tab)
-622	25	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_results("SELECT * FROM {$table} WHERE {$where_sql} ORDER BY created_at DESC")	View in code editor (opens in a new tab)
-653	24	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_row($wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ))\n$table assigned unsafely at line 650:\n $table = $wpdb->prefix . 'sflmcp_event_automations'\n$automation assigned unsafely at line 653:\n $automation = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A )	View in code editor (opens in a new tab)
-827	20	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $tools_table used in $wpdb->get_results("SELECT tool_name, tool_description, category FROM {$tools_table} WHERE enabled = 1 ORDER BY category, tool_name")\n$tools_table assigned unsafely at line 825:\n $tools_table = $wpdb->prefix . 'sflmcp_tools'\n$tools assigned unsafely at line 827:\n $tools = $wpdb->get_results( "SELECT tool_name, tool_description, category FROM {$tools_table} WHERE enabled = 1 ORDER BY category, tool_name", ARRAY_A )	View in code editor (opens in a new tab)
-871	18	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $logs_table used in $wpdb->get_results("SELECT l.*, a.automation_name \r\n\t\t\t FROM {$logs_table} l \r\n\t\t\t LEFT JOIN {$auto_table} a ON l.automation_id = a.id \r\n\t\t\t WHERE {$where_sql} \r\n\t\t\t ORDER BY l.created_at DESC \r\n\t\t\t LIMIT 100")\n$logs_table assigned unsafely at line 851:\n $logs_table = $wpdb->prefix . 'sflmcp_event_logs'	View in code editor (opens in a new tab)
-883	25	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $auto_table used in $wpdb->get_results("SELECT id, automation_name FROM {$auto_table} ORDER BY automation_name")	View in code editor (opens in a new tab)
+FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\providers\class-provider-base.php
+Line	Column	Type	Code	Message
+155	32	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
+Learn more (opens in a new tab)
 
-FILE: client/class-event-automation-engine.php
-Line	Column	Type	Code	Message	Edit Link
-90	38	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_results("SELECT * FROM {$table} WHERE status = 'active'")\n$table assigned unsafely at line 87:\n $table = $wpdb->prefix . 'sflmcp_event_automations'\n$this->active_automations assigned unsafely at line 90:\n $this->active_automations = $wpdb->get_results(\r\n\t\t\t"SELECT * FROM {$table} WHERE status = 'active'",\r\n\t\t\tARRAY_A\r\n\t\t)	View in code editor (opens in a new tab)
-947	10	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->query($wpdb->prepare(\r\n\t\t\t"UPDATE {$table} SET run_count = run_count + 1, last_run = %s WHERE id = %d",\r\n\t\t\tcurrent_time( 'mysql' ),\r\n\t\t\t$automation_id\r\n\t\t))\n$table assigned unsafely at line 944:\n $table = $wpdb->prefix . 'sflmcp_event_automations'\n$automation_id used without escaping.	View in code editor (opens in a new tab)
+FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-automation-engine.php
+Line	Column	Type	Code	Message
+460	38	ERROR	WordPress.Security.EscapeOutput.ExceptionNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$response'.
+Learn more (opens in a new tab)
+566	38	ERROR	WordPress.Security.EscapeOutput.ExceptionNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$response'.
+Learn more (opens in a new tab)
 
-FILE: client/class-event-trigger-registry.php
-Line	Column	Type	Code	Message	Edit Link
-60	18	WARNING	PluginCheck.Security.DirectDB.UnescapedDBParameter	Unescaped parameter $table used in $wpdb->get_results("SELECT * FROM {$table} WHERE is_active = 1 ORDER BY category, trigger_name")\n$table assigned unsafely at line 57:\n $table = $wpdb->prefix . 'sflmcp_event_triggers'\n$rows assigned unsafely at line 60:\n $rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE is_active = 1 ORDER BY category, trigger_name", ARRAY_A )	View in code editor (opens in a new tab)
+FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-client-admin.php
+Line	Column	Type	Code	Message
+421	29	ERROR	WordPress.Security.EscapeOutput.OutputNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$enabled_tools'.
+Learn more (opens in a new tab)
+422	29	ERROR	WordPress.Security.EscapeOutput.OutputNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$total_tools'.
+Learn more (opens in a new tab)

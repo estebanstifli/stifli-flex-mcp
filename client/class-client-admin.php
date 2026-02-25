@@ -418,8 +418,8 @@ class StifliFlexMcp_Client_Admin {
 						printf(
 							/* translators: 1: enabled tools count, 2: total tools count */
 							esc_html__( '%1$d / %2$d tools enabled', 'stifli-flex-mcp' ),
-							$enabled_tools,
-							$total_tools
+							intval( $enabled_tools ),
+							intval( $total_tools )
 						);
 						?>
 						<a href="<?php echo esc_url( $configure_url ); ?>" class="sflmcp-configure-link">

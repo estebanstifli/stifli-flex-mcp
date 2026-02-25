@@ -167,8 +167,9 @@ class StifliFlexMcp_Logs_Admin {
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
 
-		$enabled = isset( $_POST['enabled'] ) && $_POST['enabled'] === 'true';
-		update_option( 'sflmcp_logging_enabled', $enabled );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- boolean check only
+		$enabled = ! empty( $_POST['enabled'] ) && in_array( $_POST['enabled'], array( 'true', '1', 1, true ), true );
+		update_option( 'sflmcp_logging_enabled', $enabled ? '1' : '' );
 
 		wp_send_json_success( array(
 			'enabled' => $enabled,

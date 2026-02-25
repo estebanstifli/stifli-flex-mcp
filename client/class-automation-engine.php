@@ -457,6 +457,7 @@ class StifliFlexMcp_Automation_Engine {
 			$response = $provider->send_message( $args );
 
 			if ( is_wp_error( $response ) ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Error message from WP_Error
 				throw new Exception( $response->get_error_message() );
 			}
 
@@ -563,6 +564,7 @@ class StifliFlexMcp_Automation_Engine {
 			$response = $provider->send_message( $args );
 
 			if ( is_wp_error( $response ) ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Error message from WP_Error
 				throw new Exception( $response->get_error_message() );
 			}
 

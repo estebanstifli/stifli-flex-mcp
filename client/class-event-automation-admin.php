@@ -383,6 +383,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 					<span class="sflmcp-step-number">4</span>
 					<?php esc_html_e( 'Tools Selection', 'stifli-flex-mcp' ); ?>
 					<span class="sflmcp-header-meta">
+						<?php /* translators: %d: number of enabled tools */ ?>
 						<span class="sflmcp-tools-count" id="sflmcp-tools-count-display"><?php echo esc_html( sprintf( __( '%d tools enabled', 'stifli-flex-mcp' ), $enabled_tools_count ) ); ?></span>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=sflmcp-server&tab=profiles' ) ); ?>" class="sflmcp-header-link"><?php esc_html_e( 'Manage Tools', 'stifli-flex-mcp' ); ?></a>
 					</span>

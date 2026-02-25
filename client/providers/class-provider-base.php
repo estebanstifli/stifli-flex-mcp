@@ -152,6 +152,7 @@ abstract class StifliFlexMcp_Client_Provider_Base {
 				$data['body_raw'] = $body_raw;
 			}
 
+			/* translators: %d: HTTP status code */
 			$prefix = sprintf( __( 'HTTP %d: ', 'stifli-flex-mcp' ), $status_code );
 			return new WP_Error( 'api_error', $prefix . $error_msg, $data );
 		}
