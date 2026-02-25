@@ -343,6 +343,14 @@ class StifliFlexMcp_Client_Admin {
 	 * @param array $models   Available models.
 	 */
 	private function render_chat_tab( $settings, $models ) {
+		// Get enabled tools count
+		global $wpdb;
+		$tools_table = $wpdb->prefix . 'sflmcp_tools';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$enabled_tools = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tools_table} WHERE enabled = 1" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$total_tools = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tools_table}" );
+		$configure_url = admin_url( 'admin.php?page=sflmcp-server&tab=profiles' );
 		?>
 		<!-- Settings Panel -->
 		<div class="sflmcp-client-settings">
@@ -402,7 +410,23 @@ class StifliFlexMcp_Client_Admin {
 		<!-- Chat Container -->
 		<div class="sflmcp-chat-container">
 			<div class="sflmcp-chat-header">
-				<span class="sflmcp-chat-title"><?php esc_html_e( 'Chat with AI', 'stifli-flex-mcp' ); ?></span>
+				<div class="sflmcp-chat-header-left">
+					<span class="sflmcp-chat-title"><?php esc_html_e( 'Chat with AI', 'stifli-flex-mcp' ); ?></span>
+					<span class="sflmcp-tools-count">
+						<span class="dashicons dashicons-admin-tools"></span>
+						<?php
+						printf(
+							/* translators: 1: enabled tools count, 2: total tools count */
+							esc_html__( '%1$d / %2$d tools enabled', 'stifli-flex-mcp' ),
+							$enabled_tools,
+							$total_tools
+						);
+						?>
+						<a href="<?php echo esc_url( $configure_url ); ?>" class="sflmcp-configure-link">
+							<?php esc_html_e( 'Configure', 'stifli-flex-mcp' ); ?>
+						</a>
+					</span>
+				</div>
 				<div class="sflmcp-chat-actions">
 					<span id="sflmcp-autosave-indicator" class="sflmcp-autosave-indicator" style="display:none;">
 						<span class="dashicons dashicons-saved"></span>

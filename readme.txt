@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, agent, gemini
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.0.3
+Stable tag: 2.1.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -63,6 +63,28 @@ No coding experience required — use the built-in examples as templates.
 **🧠 WordPress Abilities Integration** (WordPress 6.9+)
 
 Automatically discover and import abilities registered by other plugins into your AI agent's toolkit. If a plugin supports the WordPress Abilities API, StifLi Flex MCP can detect, import, and expose it as an AI tool — zero configuration needed.
+
+**⏰ Automation Tasks — Let AI Work While You Sleep**
+
+Schedule AI-powered tasks to run automatically on your WordPress site:
+
+* **Scheduled Tasks** — Create daily, weekly, or monthly automated workflows
+* **Templates** — Quick-start with pre-built templates (Daily Sales Report, Trending Article, Weekly Summary)
+* **Smart Scheduling** — Flexible presets from "Every hour" to "Monthly" with custom times and timezones
+* **Detected Tools Mode** — AI automatically identifies which tools are needed, saving tokens significantly
+* **Output Actions** — Send results via email, webhook, draft post, or custom hooks
+* **Execution Logs** — Full history with token usage, duration, and detailed results
+
+**🎯 Event Automations — Trigger AI on WordPress Events**
+
+Run AI workflows automatically when specific events happen:
+
+* **WordPress Triggers** — New post published, user registered, comment posted
+* **WooCommerce Triggers** — New order received, order status changed (Coming Soon)
+* **Conditional Logic** — Run only when conditions are met (post type, status, category)
+* **Dynamic Prompts** — Use placeholders like `{{post.title}}` for context-aware AI
+* **Rate Limiting** — Prevent runaway executions with configurable cooldowns
+* **Test Mode** — Preview your prompt with real trigger data before going live
 
 **📡 Full MCP Server — Connect External AI Clients**
 
@@ -197,6 +219,26 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 5. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 2.1.0 =
+* **🆕 Automation Tasks** — Schedule AI tasks to run automatically on a recurring basis!
+* **🆕 Event Automations** — Trigger AI workflows when WordPress events occur (new post, new user, etc.)
+* New: Automation Tasks admin with create, edit, duplicate, delete, and run-now functionality
+* New: 4 schedule presets (hourly, daily, weekly, monthly) with custom time and timezone support
+* New: Pre-built automation templates (Daily Sales Report, Trending Article, Weekly Summary, and more)
+* New: "Detected Tools" mode — AI identifies required tools during test, saves tokens significantly
+* New: Output actions — Email, Webhook, Draft Post, or Custom Hook
+* New: Execution Logs tab with full history, token usage, and detailed results
+* New: Event Automations with WordPress triggers (post published, user registered, comment posted)
+* New: Conditional logic for event triggers (post type, status, category filters)
+* New: Dynamic placeholders in prompts (`{{post.title}}`, `{{user.email}}`, etc.)
+* New: Rate limiting per automation to prevent runaway executions
+* New: Test mode for event automations — preview AI response with real trigger data
+* New: Tools count display in AI Chat Agent header with quick configure link
+* Improved: Cron tasks now execute with proper user permissions (task creator or admin fallback)
+* Improved: Complete log entry format fixes for database consistency
+* Improved: Database migration for automation logs table columns
+* Technical: New tables `wp_sflmcp_automation_tasks`, `wp_sflmcp_automation_logs`, `wp_sflmcp_event_automations`, `wp_sflmcp_event_logs`, `wp_sflmcp_event_triggers`
+
 = 2.0.3 =
 * ** Encrypted API Keys** - API keys are now stored encrypted (AES-256-CBC) in the database for improved security
 * ** Prompt Caching (Claude)** - Enabled Anthropic prompt caching on system prompt and tools, reducing token usage and latency on repeated requests

@@ -131,10 +131,47 @@
     background: #f6f7f7;
 }
 
+.sflmcp-chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
 .sflmcp-chat-title {
     font-size: 14px;
     font-weight: 600;
     color: #1d2327;
+}
+
+.sflmcp-tools-count {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #646970;
+    padding: 4px 10px;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+}
+
+.sflmcp-tools-count .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #2271b1;
+}
+
+.sflmcp-configure-link {
+    margin-left: 8px;
+    color: #2271b1;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.sflmcp-configure-link:hover {
+    color: #135e96;
+    text-decoration: underline;
 }
 
 /* Messages Area */
