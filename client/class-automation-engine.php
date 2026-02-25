@@ -238,6 +238,28 @@ class StifliFlexMcp_Automation_Engine {
 
 		stifli_flex_mcp_log( sprintf( '[Automation] Starting task: %s (ID: %d)', $task->task_name, $task->id ) );
 
+		// Save current user and switch to task creator for permissions
+		$original_user_id = get_current_user_id();
+		$task_user_id     = ! empty( $task->created_by ) ? intval( $task->created_by ) : 0;
+
+		// If no user set, try to get an admin
+		if ( 0 === $task_user_id ) {
+			$admins = get_users( array(
+				'role'   => 'administrator',
+				'number' => 1,
+				'fields' => 'ID',
+			) );
+			$task_user_id = ! empty( $admins ) ? intval( $admins[0] ) : 0;
+		}
+
+		// Switch to task user for tool permissions
+		if ( $task_user_id > 0 ) {
+			wp_set_current_user( $task_user_id );
+			stifli_flex_mcp_log( sprintf( '[Automation] Switched to user ID: %d for task execution', $task_user_id ) );
+		} else {
+			stifli_flex_mcp_log( '[Automation] Warning: No user available for task execution, tools may fail' );
+		}
+
 		// Create log entry
 		$log_id = $this->create_log_entry( $task->id, $task->prompt );
 
@@ -303,6 +325,9 @@ class StifliFlexMcp_Automation_Engine {
 
 			stifli_flex_mcp_log( sprintf( '[Automation] Task completed: %s (%.2fs)', $task->task_name, $execution_time / 1000 ) );
 
+			// Restore original user
+			wp_set_current_user( $original_user_id );
+
 			return array(
 				'success' => true,
 				'result'  => $result,
@@ -319,11 +344,200 @@ class StifliFlexMcp_Automation_Engine {
 
 			stifli_flex_mcp_log( sprintf( '[Automation] Task failed: %s - %s', $task->task_name, $e->getMessage() ) );
 
+			// Restore original user
+			wp_set_current_user( $original_user_id );
+
 			return array(
 				'success' => false,
 				'error'   => $e->getMessage(),
 			);
 		}
+	}
+
+	/**
+	 * Execute a task internally (used by event automations)
+	 *
+	 * @param object $task Task-like object with prompt, system_prompt, tools_enabled, etc.
+	 * @return array Result with response, tools_executed, tokens_used.
+	 */
+	public function execute_task_internal( $task ) {
+		$start_time = microtime( true );
+		$result     = array(
+			'response'       => '',
+			'tools_executed' => array(),
+			'tokens_used'    => 0,
+		);
+
+		try {
+			// Get settings from AI Chat Agent configuration
+			$client_settings   = get_option( 'sflmcp_client_settings', array() );
+			$advanced_settings = get_option( 'sflmcp_client_settings_advanced', array() );
+
+			// Use task provider/model or fallback to global config
+			$provider = ! empty( $task->provider ) ? $task->provider : ( $client_settings['provider'] ?? 'openai' );
+			$model    = ! empty( $task->model ) ? $task->model : ( $client_settings['model'] ?? 'gpt-5.2-chat-latest' );
+			$api_key  = $client_settings['api_key'] ?? '';
+
+			if ( empty( $api_key ) ) {
+				throw new Exception( __( 'API key not configured.', 'stifli-flex-mcp' ) );
+			}
+
+			// Decrypt API key
+			$api_key = $this->decrypt_api_key( $api_key );
+
+			// Get tools
+			$tools_enabled = ! empty( $task->tools_enabled ) 
+				? ( is_string( $task->tools_enabled ) ? json_decode( $task->tools_enabled, true ) : $task->tools_enabled )
+				: array();
+			
+			// If no specific tools selected (profile mode), use active profile tools
+			if ( empty( $tools_enabled ) ) {
+				global $stifliFlexMcp;
+				$tools = ! empty( $stifliFlexMcp->model ) ? $stifliFlexMcp->model->getToolsList() : array();
+				stifli_flex_mcp_log( '[Automation] execute_task_internal - Using active profile, got ' . count( $tools ) . ' tools' );
+			} else {
+				$tools = $this->get_tools_by_names( $tools_enabled );
+				stifli_flex_mcp_log( '[Automation] execute_task_internal - Using custom tools: ' . count( $tools_enabled ) . ' requested, ' . count( $tools ) . ' found' );
+			}
+
+			// Prepare prompts
+			$prompt = $task->prompt;
+			$system_prompt = ! empty( $task->system_prompt ) 
+				? $task->system_prompt 
+				: ( $advanced_settings['system_prompt'] ?? __( 'You are an AI assistant with access to WordPress tools.', 'stifli-flex-mcp' ) );
+
+			// Prepare arguments
+			$args = array(
+				'api_key'       => $api_key,
+				'model'         => $model,
+				'message'       => $prompt,
+				'conversation'  => array(),
+				'tools'         => $tools,
+				'system_prompt' => $system_prompt,
+				'temperature'   => floatval( $advanced_settings['temperature'] ?? 0.7 ),
+				'max_tokens'    => intval( $task->max_tokens ?? $advanced_settings['max_tokens'] ?? 4096 ),
+				'top_p'         => floatval( $advanced_settings['top_p'] ?? 1.0 ),
+			);
+
+			// Get provider instance
+			$provider_instance = $this->get_provider_instance( $provider );
+			if ( is_wp_error( $provider_instance ) ) {
+				throw new Exception( $provider_instance->get_error_message() );
+			}
+
+			// Run agentic loop (simplified - no log_id needed)
+			$loop_result = $this->run_agentic_loop_internal( $provider_instance, $args );
+
+			$result['response']       = $loop_result['response'] ?? '';
+			$result['tools_executed'] = $loop_result['tools_called'] ?? array();
+			$result['tokens_used']    = ( $loop_result['tokens']['input'] ?? 0 ) + ( $loop_result['tokens']['output'] ?? 0 );
+
+		} catch ( Exception $e ) {
+			$result['error'] = $e->getMessage();
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Run agentic loop internally (without logging)
+	 *
+	 * @param object $provider Provider instance.
+	 * @param array  $args     Arguments for the provider.
+	 * @return array Result.
+	 */
+	private function run_agentic_loop_internal( $provider, $args ) {
+		$iteration      = 0;
+		$tools_called   = array();
+		$tools_results  = array();
+		$final_response = '';
+		$total_tokens   = array( 'input' => 0, 'output' => 0 );
+
+		while ( $iteration < self::MAX_ITERATIONS ) {
+			$response = $provider->send_message( $args );
+
+			if ( is_wp_error( $response ) ) {
+				throw new Exception( $response->get_error_message() );
+			}
+
+			// Track tokens
+			if ( isset( $response['usage'] ) ) {
+				$total_tokens['input']  += $response['usage']['input_tokens'] ?? 0;
+				$total_tokens['output'] += $response['usage']['output_tokens'] ?? 0;
+			}
+
+			// Extract tool calls
+			$tool_calls = $this->extract_tool_calls( $response, $args['model'] );
+
+			if ( empty( $tool_calls ) ) {
+				$final_response = $this->extract_text_response( $response );
+				break;
+			}
+
+			// Execute each tool call
+			foreach ( $tool_calls as $tool_call ) {
+				$tool_name = $tool_call['name'];
+				$tool_args = $tool_call['arguments'];
+
+				$tools_called[] = array(
+					'name'      => $tool_name,
+					'arguments' => $tool_args,
+				);
+
+				$result = $this->execute_tool( $tool_name, $tool_args );
+				$tools_results[ $tool_name ] = $result;
+
+				$args['tool_result'] = $this->format_tool_result( $tool_call, $result, $args['model'] );
+				$args['message']     = '';
+			}
+
+			$args['conversation'] = $this->build_conversation_context( $response, $tool_call, $tools_results );
+			$iteration++;
+		}
+
+		return array(
+			'response'     => $final_response,
+			'tools_called' => $tools_called,
+			'tokens'       => $total_tokens,
+		);
+	}
+
+	/**
+	 * Get tools by their names (returns MCP format for provider conversion)
+	 *
+	 * @param array $names Tool names.
+	 * @return array Tools array in MCP format (with inputSchema).
+	 */
+	private function get_tools_by_names( $names ) {
+		if ( empty( $names ) || ! is_array( $names ) ) {
+			return array();
+		}
+
+		global $stifliFlexMcp;
+		if ( ! $stifliFlexMcp || ! isset( $stifliFlexMcp->model ) ) {
+			return array();
+		}
+
+		$model = $stifliFlexMcp->model;
+		if ( ! $model ) {
+			return array();
+		}
+
+		$all_tools = $model->getTools();
+		$tools     = array();
+
+		foreach ( $names as $name ) {
+			if ( isset( $all_tools[ $name ] ) ) {
+				// Return in MCP format (same as getToolsList) - providers will convert to their format
+				$tools[] = array(
+					'name'        => $all_tools[ $name ]['name'],
+					'description' => $all_tools[ $name ]['description'],
+					'inputSchema' => $all_tools[ $name ]['inputSchema'],
+				);
+			}
+		}
+
+		return $tools;
 	}
 
 	/**
@@ -765,8 +979,10 @@ class StifliFlexMcp_Automation_Engine {
 		$table = $wpdb->prefix . 'sflmcp_automation_logs';
 		$now   = current_time( 'mysql', true );
 
+		stifli_flex_mcp_log( sprintf( '[Automation] create_log_entry - Creating log for task %d', $task_id ) );
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$table,
 			array(
 				'task_id'     => $task_id,
@@ -777,7 +993,15 @@ class StifliFlexMcp_Automation_Engine {
 			array( '%d', '%s', '%s', '%s' )
 		);
 
-		return $wpdb->insert_id;
+		if ( false === $inserted ) {
+			stifli_flex_mcp_log( sprintf( '[Automation] create_log_entry - DB error: %s', $wpdb->last_error ) );
+			return 0;
+		}
+
+		$log_id = $wpdb->insert_id;
+		stifli_flex_mcp_log( sprintf( '[Automation] create_log_entry - Created log ID: %d', $log_id ) );
+
+		return $log_id;
 	}
 
 	/**
@@ -792,33 +1016,56 @@ class StifliFlexMcp_Automation_Engine {
 	private function complete_log_entry( $log_id, $status, $result, $execution_time, $error_message = '' ) {
 		global $wpdb;
 
+		if ( empty( $log_id ) ) {
+			stifli_flex_mcp_log( '[Automation] complete_log_entry - No log_id provided, skipping' );
+			return;
+		}
+
 		$table = $wpdb->prefix . 'sflmcp_automation_logs';
 		$now   = current_time( 'mysql', true );
 
-		$data = array(
-			'completed_at'      => $now,
-			'status'            => $status,
-			'execution_time_ms' => intval( $execution_time ),
-		);
+		// Build data and formats dynamically
+		$data    = array();
+		$formats = array();
+
+		// Always set these fields
+		$data['completed_at']      = $now;
+		$formats[]                 = '%s';
+		$data['status']            = $status;
+		$formats[]                 = '%s';
+		$data['execution_time_ms'] = intval( $execution_time );
+		$formats[]                 = '%d';
 
 		if ( 'success' === $status && $result ) {
 			$data['ai_response']   = $result['response'] ?? '';
+			$formats[]             = '%s';
 			$data['tools_called']  = wp_json_encode( $result['tools_called'] ?? array() );
+			$formats[]             = '%s';
 			$data['tools_results'] = wp_json_encode( $result['tools_results'] ?? array() );
+			$formats[]             = '%s';
 		}
 
 		if ( ! empty( $error_message ) ) {
 			$data['error_message'] = $error_message;
+			$formats[]             = '%s';
 		}
 
+		stifli_flex_mcp_log( sprintf( '[Automation] complete_log_entry - Updating log %d with status: %s, fields: %d', $log_id, $status, count( $data ) ) );
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->update(
+		$updated = $wpdb->update(
 			$table,
 			$data,
 			array( 'id' => $log_id ),
-			array( '%s', '%s', '%d', '%s', '%s', '%s', '%s' ),
+			$formats,
 			array( '%d' )
 		);
+
+		if ( false === $updated ) {
+			stifli_flex_mcp_log( sprintf( '[Automation] complete_log_entry - DB error: %s', $wpdb->last_error ) );
+		} else {
+			stifli_flex_mcp_log( sprintf( '[Automation] complete_log_entry - Updated %d rows', $updated ) );
+		}
 	}
 
 	/**

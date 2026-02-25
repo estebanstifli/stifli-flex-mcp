@@ -31,7 +31,7 @@ class StifliFlexMcp_Automation_Admin {
 		require_once __DIR__ . '/class-automation-engine.php';
 		$this->engine = StifliFlexMcp_Automation_Engine::get_instance();
 
-		add_action( 'admin_menu', array( $this, 'add_submenu_page' ), 15 );
+		add_action( 'admin_menu', array( $this, 'add_submenu_page' ), 20 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
 		// AJAX handlers
@@ -393,14 +393,14 @@ class StifliFlexMcp_Automation_Admin {
 							<input type="radio" name="tools_mode" value="detected">
 							<span class="sflmcp-radio-label">
 								<strong><?php esc_html_e( 'Detected Tools Only', 'stifli-flex-mcp' ); ?></strong>
-								<span><?php esc_html_e( 'Use only tools detected during prompt test (most efficient)', 'stifli-flex-mcp' ); ?></span>
+								<span><?php esc_html_e( 'Only tools detected during test - saves tokens significantly (recommended)', 'stifli-flex-mcp' ); ?></span>
 							</span>
 						</label>
 						<label class="sflmcp-radio-option">
 							<input type="radio" name="tools_mode" value="custom">
 							<span class="sflmcp-radio-label">
 								<strong><?php esc_html_e( 'Custom Selection', 'stifli-flex-mcp' ); ?></strong>
-								<span><?php esc_html_e( 'Manually select which tools this task can use', 'stifli-flex-mcp' ); ?></span>
+								<span><?php esc_html_e( 'Manually select tools - saves tokens vs full profile', 'stifli-flex-mcp' ); ?></span>
 							</span>
 						</label>
 					</div>

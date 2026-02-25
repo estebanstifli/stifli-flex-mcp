@@ -152,19 +152,31 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 		$headers  = $meta['headers'] ?? array();
 
 		// Log provider-reported usage if present.
+		$usage_data = null;
 		if ( isset( $response['usageMetadata'] ) && is_array( $response['usageMetadata'] ) ) {
 			$u = $response['usageMetadata'];
-			$prompt = isset( $u['promptTokenCount'] ) ? $u['promptTokenCount'] : 'n/a';
-			$output = isset( $u['candidatesTokenCount'] ) ? $u['candidatesTokenCount'] : 'n/a';
-			$total  = isset( $u['totalTokenCount'] ) ? $u['totalTokenCount'] : 'n/a';
+			$prompt = isset( $u['promptTokenCount'] ) ? $u['promptTokenCount'] : 0;
+			$output = isset( $u['candidatesTokenCount'] ) ? $u['candidatesTokenCount'] : 0;
+			$total  = isset( $u['totalTokenCount'] ) ? $u['totalTokenCount'] : 0;
 			$cached = isset( $u['cachedContentTokenCount'] ) ? $u['cachedContentTokenCount'] : 0;
 			stifli_flex_mcp_log( sprintf(
 				'[Gemini] Usage input=%s output=%s total=%s cached=%s',
 				$prompt, $output, $total, $cached
 			) );
+			$usage_data = array(
+				'input_tokens'  => $prompt,
+				'output_tokens' => $output,
+			);
 		}
 
-		return $this->parse_response( $response, $contents );
+		$parsed = $this->parse_response( $response, $contents );
+
+		// Include usage data for token tracking
+		if ( $usage_data ) {
+			$parsed['usage'] = $usage_data;
+		}
+
+		return $parsed;
 	}
 
 	/**

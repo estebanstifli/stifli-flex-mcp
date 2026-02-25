@@ -205,7 +205,18 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 			}
 		}
 
-		return $this->parse_response( $response, $input );
+		$parsed = $this->parse_response( $response, $input );
+
+		// Include usage data for token tracking
+		if ( isset( $response['usage'] ) && is_array( $response['usage'] ) ) {
+			$u = $response['usage'];
+			$parsed['usage'] = array(
+				'input_tokens'  => isset( $u['input_tokens'] ) ? $u['input_tokens'] : ( isset( $u['prompt_tokens'] ) ? $u['prompt_tokens'] : 0 ),
+				'output_tokens' => isset( $u['output_tokens'] ) ? $u['output_tokens'] : ( isset( $u['completion_tokens'] ) ? $u['completion_tokens'] : 0 ),
+			);
+		}
+
+		return $parsed;
 	}
 
 	/**

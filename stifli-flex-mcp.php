@@ -161,9 +161,28 @@ require_once __DIR__ . '/client/providers/class-provider-gemini.php';
 require_once __DIR__ . '/client/class-client-admin.php';
 require_once __DIR__ . '/client/class-automation-admin.php';
 
+// Load Event Automations
+require_once __DIR__ . '/client/class-event-trigger-registry.php';
+require_once __DIR__ . '/client/class-event-automation-engine.php';
+require_once __DIR__ . '/client/class-event-automation-admin.php';
+
+// Load Logs Admin
+require_once __DIR__ . '/client/class-logs-admin.php';
+
 // Initialize Automation Admin
 if ( is_admin() ) {
 	new StifliFlexMcp_Automation_Admin();
+	new StifliFlexMcp_Event_Automation_Admin();
+	new StifliFlexMcp_Logs_Admin();
+}
+
+// Initialize Event Automation Engine (for trigger hooks)
+add_action( 'init', 'stifli_flex_mcp_init_event_engine', 20 );
+function stifli_flex_mcp_init_event_engine() {
+	if ( class_exists( 'StifliFlexMcp_Event_Automation_Engine' ) ) {
+		$engine = StifliFlexMcp_Event_Automation_Engine::get_instance();
+		$engine->init();
+	}
 }
 
 // Ensure automation cron is always running (for existing installs)
@@ -1268,6 +1287,527 @@ function stifli_flex_mcp_ensure_clean_queue_event() {
 }
 
 /**
+ * Seed initial event triggers
+ */
+function stifli_flex_mcp_seed_event_triggers() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'sflmcp_event_triggers';
+	
+	// Check if already seeded
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+	if ($count > 0) {
+		return;
+	}
+	
+	$triggers = array(
+		// =====================
+		// WordPress - Posts
+		// =====================
+		array(
+			'trigger_id' => 'wp_post_published',
+			'trigger_name' => 'Post Published',
+			'trigger_description' => 'Fires when a post is published (new or from draft)',
+			'hook_name' => 'publish_post',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WordPress - Posts',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('post_id', 'post_title', 'post_content', 'post_excerpt', 'post_author', 'post_type', 'post_url')),
+		),
+		array(
+			'trigger_id' => 'wp_post_updated',
+			'trigger_name' => 'Post Updated',
+			'trigger_description' => 'Fires when an existing post is updated',
+			'hook_name' => 'post_updated',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WordPress - Posts',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('post_id', 'post_title', 'post_before', 'post_after')),
+		),
+		array(
+			'trigger_id' => 'wp_post_trashed',
+			'trigger_name' => 'Post Trashed',
+			'trigger_description' => 'Fires when a post is moved to trash',
+			'hook_name' => 'wp_trash_post',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Posts',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('post_id', 'post_title', 'post_type')),
+		),
+		array(
+			'trigger_id' => 'wp_post_deleted',
+			'trigger_name' => 'Post Deleted',
+			'trigger_description' => 'Fires before a post is permanently deleted',
+			'hook_name' => 'before_delete_post',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Posts',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('post_id', 'post_title', 'post_type')),
+		),
+		array(
+			'trigger_id' => 'wp_page_published',
+			'trigger_name' => 'Page Published',
+			'trigger_description' => 'Fires when a page is published',
+			'hook_name' => 'publish_page',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WordPress - Posts',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('post_id', 'post_title', 'post_content', 'post_url')),
+		),
+		array(
+			'trigger_id' => 'wp_post_status_changed',
+			'trigger_name' => 'Post Status Changed',
+			'trigger_description' => 'Fires when post status transitions (draft to publish, etc.)',
+			'hook_name' => 'transition_post_status',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WordPress - Posts',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('new_status', 'old_status', 'post_id', 'post_title', 'post_type')),
+		),
+		
+		// =====================
+		// WordPress - Users
+		// =====================
+		array(
+			'trigger_id' => 'wp_user_registered',
+			'trigger_name' => 'User Registered',
+			'trigger_description' => 'Fires when a new user registers',
+			'hook_name' => 'user_register',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('user_id', 'user_email', 'user_login', 'user_name', 'user_role')),
+		),
+		array(
+			'trigger_id' => 'wp_user_login',
+			'trigger_name' => 'User Logged In',
+			'trigger_description' => 'Fires when a user successfully logs in',
+			'hook_name' => 'wp_login',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('user_login', 'user_id', 'user_email', 'user_name')),
+		),
+		array(
+			'trigger_id' => 'wp_user_logout',
+			'trigger_name' => 'User Logged Out',
+			'trigger_description' => 'Fires when a user logs out',
+			'hook_name' => 'wp_logout',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('user_id')),
+		),
+		array(
+			'trigger_id' => 'wp_user_login_failed',
+			'trigger_name' => 'Login Failed',
+			'trigger_description' => 'Fires when a login attempt fails',
+			'hook_name' => 'wp_login_failed',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('username')),
+		),
+		array(
+			'trigger_id' => 'wp_user_profile_updated',
+			'trigger_name' => 'Profile Updated',
+			'trigger_description' => 'Fires when a user profile is updated',
+			'hook_name' => 'profile_update',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('user_id', 'user_email', 'user_name', 'old_user_data')),
+		),
+		array(
+			'trigger_id' => 'wp_user_role_changed',
+			'trigger_name' => 'User Role Changed',
+			'trigger_description' => 'Fires when a user role is changed',
+			'hook_name' => 'set_user_role',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('user_id', 'new_role', 'old_roles')),
+		),
+		array(
+			'trigger_id' => 'wp_user_deleted',
+			'trigger_name' => 'User Deleted',
+			'trigger_description' => 'Fires when a user is deleted',
+			'hook_name' => 'delete_user',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Users',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('user_id')),
+		),
+		
+		// =====================
+		// WordPress - Comments
+		// =====================
+		array(
+			'trigger_id' => 'wp_comment_posted',
+			'trigger_name' => 'Comment Posted',
+			'trigger_description' => 'Fires when a new comment is posted',
+			'hook_name' => 'comment_post',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WordPress - Comments',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('comment_id', 'comment_content', 'comment_author', 'comment_author_email', 'post_id')),
+		),
+		array(
+			'trigger_id' => 'wp_comment_approved',
+			'trigger_name' => 'Comment Approved',
+			'trigger_description' => 'Fires when a comment is approved',
+			'hook_name' => 'comment_approved_comment',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Comments',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('comment_id', 'comment_content', 'comment_author', 'post_id')),
+		),
+		array(
+			'trigger_id' => 'wp_comment_spam',
+			'trigger_name' => 'Comment Marked Spam',
+			'trigger_description' => 'Fires when a comment is marked as spam',
+			'hook_name' => 'spam_comment',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Comments',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('comment_id')),
+		),
+		array(
+			'trigger_id' => 'wp_comment_status_changed',
+			'trigger_name' => 'Comment Status Changed',
+			'trigger_description' => 'Fires when a comment status changes',
+			'hook_name' => 'transition_comment_status',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WordPress - Comments',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('new_status', 'old_status', 'comment_id')),
+		),
+		
+		// =====================
+		// WordPress - Media
+		// =====================
+		array(
+			'trigger_id' => 'wp_media_uploaded',
+			'trigger_name' => 'Media Uploaded',
+			'trigger_description' => 'Fires when a new media file is uploaded',
+			'hook_name' => 'add_attachment',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Media',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('attachment_id', 'file_name', 'file_type', 'file_url')),
+		),
+		array(
+			'trigger_id' => 'wp_media_deleted',
+			'trigger_name' => 'Media Deleted',
+			'trigger_description' => 'Fires when a media file is deleted',
+			'hook_name' => 'delete_attachment',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WordPress - Media',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('attachment_id')),
+		),
+		
+		// =====================
+		// WordPress - System
+		// =====================
+		array(
+			'trigger_id' => 'wp_plugin_activated',
+			'trigger_name' => 'Plugin Activated',
+			'trigger_description' => 'Fires when a plugin is activated',
+			'hook_name' => 'activated_plugin',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WordPress - System',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('plugin_file', 'network_wide')),
+		),
+		array(
+			'trigger_id' => 'wp_plugin_deactivated',
+			'trigger_name' => 'Plugin Deactivated',
+			'trigger_description' => 'Fires when a plugin is deactivated',
+			'hook_name' => 'deactivated_plugin',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WordPress - System',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('plugin_file', 'network_wide')),
+		),
+		array(
+			'trigger_id' => 'wp_theme_switched',
+			'trigger_name' => 'Theme Switched',
+			'trigger_description' => 'Fires when the active theme is changed',
+			'hook_name' => 'switch_theme',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WordPress - System',
+			'plugin_required' => null,
+			'payload_schema' => json_encode(array('new_theme', 'old_theme')),
+		),
+		
+		// =====================
+		// WooCommerce - Orders
+		// =====================
+		array(
+			'trigger_id' => 'wc_order_created',
+			'trigger_name' => 'New Order Created',
+			'trigger_description' => 'Fires when a new order is placed',
+			'hook_name' => 'woocommerce_new_order',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'order_number', 'order_total', 'customer_email', 'customer_name', 'items_count')),
+		),
+		array(
+			'trigger_id' => 'wc_order_status_changed',
+			'trigger_name' => 'Order Status Changed',
+			'trigger_description' => 'Fires when an order status changes',
+			'hook_name' => 'woocommerce_order_status_changed',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 4,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'old_status', 'new_status', 'order_total', 'customer_email')),
+		),
+		array(
+			'trigger_id' => 'wc_order_completed',
+			'trigger_name' => 'Order Completed',
+			'trigger_description' => 'Fires when an order is marked complete',
+			'hook_name' => 'woocommerce_order_status_completed',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'order_number', 'order_total', 'customer_email', 'customer_name')),
+		),
+		array(
+			'trigger_id' => 'wc_order_processing',
+			'trigger_name' => 'Order Processing',
+			'trigger_description' => 'Fires when an order status changes to processing',
+			'hook_name' => 'woocommerce_order_status_processing',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'order_number', 'order_total', 'customer_email')),
+		),
+		array(
+			'trigger_id' => 'wc_order_cancelled',
+			'trigger_name' => 'Order Cancelled',
+			'trigger_description' => 'Fires when an order is cancelled',
+			'hook_name' => 'woocommerce_order_status_cancelled',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'order_number', 'customer_email')),
+		),
+		array(
+			'trigger_id' => 'wc_order_refunded',
+			'trigger_name' => 'Order Refunded',
+			'trigger_description' => 'Fires when an order is refunded',
+			'hook_name' => 'woocommerce_order_refunded',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'refund_id')),
+		),
+		array(
+			'trigger_id' => 'wc_payment_complete',
+			'trigger_name' => 'Payment Complete',
+			'trigger_description' => 'Fires when payment is received for an order',
+			'hook_name' => 'woocommerce_payment_complete',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Orders',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'order_total', 'payment_method')),
+		),
+		
+		// =====================
+		// WooCommerce - Products
+		// =====================
+		array(
+			'trigger_id' => 'wc_product_created',
+			'trigger_name' => 'Product Created',
+			'trigger_description' => 'Fires when a new product is created',
+			'hook_name' => 'woocommerce_new_product',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Products',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('product_id', 'product_name', 'product_price', 'product_sku')),
+		),
+		array(
+			'trigger_id' => 'wc_product_updated',
+			'trigger_name' => 'Product Updated',
+			'trigger_description' => 'Fires when a product is updated',
+			'hook_name' => 'woocommerce_update_product',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Products',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('product_id', 'product_name', 'product_price')),
+		),
+		array(
+			'trigger_id' => 'wc_product_stock_changed',
+			'trigger_name' => 'Product Stock Changed',
+			'trigger_description' => 'Fires when product stock quantity changes',
+			'hook_name' => 'woocommerce_product_set_stock',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Products',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('product_id', 'product_name', 'stock_quantity')),
+		),
+		array(
+			'trigger_id' => 'wc_product_low_stock',
+			'trigger_name' => 'Product Low Stock',
+			'trigger_description' => 'Fires when product reaches low stock threshold',
+			'hook_name' => 'woocommerce_low_stock',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Products',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('product_id', 'product_name', 'stock_quantity')),
+		),
+		array(
+			'trigger_id' => 'wc_product_out_of_stock',
+			'trigger_name' => 'Product Out of Stock',
+			'trigger_description' => 'Fires when a product runs out of stock',
+			'hook_name' => 'woocommerce_no_stock',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Products',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('product_id', 'product_name')),
+		),
+		
+		// =====================
+		// WooCommerce - Customers
+		// =====================
+		array(
+			'trigger_id' => 'wc_customer_created',
+			'trigger_name' => 'Customer Created',
+			'trigger_description' => 'Fires when a new WooCommerce customer is created',
+			'hook_name' => 'woocommerce_created_customer',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WooCommerce - Customers',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('customer_id', 'customer_email', 'customer_name')),
+		),
+		
+		// =====================
+		// WooCommerce - Cart
+		// =====================
+		array(
+			'trigger_id' => 'wc_add_to_cart',
+			'trigger_name' => 'Product Added to Cart',
+			'trigger_description' => 'Fires when a product is added to cart',
+			'hook_name' => 'woocommerce_add_to_cart',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 6,
+			'category' => 'WooCommerce - Cart',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('cart_item_key', 'product_id', 'quantity')),
+		),
+		array(
+			'trigger_id' => 'wc_checkout_complete',
+			'trigger_name' => 'Checkout Complete',
+			'trigger_description' => 'Fires when checkout is processed',
+			'hook_name' => 'woocommerce_checkout_order_processed',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 3,
+			'category' => 'WooCommerce - Cart',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('order_id', 'posted_data')),
+		),
+		array(
+			'trigger_id' => 'wc_coupon_applied',
+			'trigger_name' => 'Coupon Applied',
+			'trigger_description' => 'Fires when a coupon is applied to cart',
+			'hook_name' => 'woocommerce_applied_coupon',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'WooCommerce - Cart',
+			'plugin_required' => 'woocommerce',
+			'payload_schema' => json_encode(array('coupon_code')),
+		),
+		
+		// =====================
+		// Forms - Contact Form 7
+		// =====================
+		array(
+			'trigger_id' => 'cf7_form_submitted',
+			'trigger_name' => 'Contact Form 7 Submitted',
+			'trigger_description' => 'Fires when a CF7 form is submitted and email sent',
+			'hook_name' => 'wpcf7_mail_sent',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 1,
+			'category' => 'Forms - Contact Form 7',
+			'plugin_required' => 'contact-form-7',
+			'payload_schema' => json_encode(array('form_id', 'form_title', 'posted_data')),
+		),
+		
+		// =====================
+		// Forms - Gravity Forms
+		// =====================
+		array(
+			'trigger_id' => 'gf_form_submitted',
+			'trigger_name' => 'Gravity Form Submitted',
+			'trigger_description' => 'Fires after a Gravity Form is submitted',
+			'hook_name' => 'gform_after_submission',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 2,
+			'category' => 'Forms - Gravity Forms',
+			'plugin_required' => 'gravityforms',
+			'payload_schema' => json_encode(array('entry', 'form')),
+		),
+		
+		// =====================
+		// Forms - WPForms
+		// =====================
+		array(
+			'trigger_id' => 'wpforms_submitted',
+			'trigger_name' => 'WPForms Submitted',
+			'trigger_description' => 'Fires after a WPForms form is submitted',
+			'hook_name' => 'wpforms_process_complete',
+			'hook_priority' => 10,
+			'hook_accepted_args' => 4,
+			'category' => 'Forms - WPForms',
+			'plugin_required' => 'wpforms',
+			'payload_schema' => json_encode(array('fields', 'entry', 'form_data')),
+		),
+	);
+	
+	foreach ($triggers as $trigger) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert($table, $trigger);
+	}
+}
+
+/**
  * Create abilities table for WordPress 6.9+ Abilities API integration.
  * This table stores abilities imported from other plugins.
  */
@@ -1370,7 +1910,23 @@ function stifli_flex_mcp_maybe_create_automation_logs_table() {
 
 	$like = $wpdb->esc_like($table_name);
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+	$table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name;
+
+	// If table exists, check for missing columns and add them
+	if ($table_exists) {
+		// Check for prompt_used column
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_name}");
+		$column_names = array_map(function($col) { return $col->Field; }, $columns);
+
+		if (!in_array('prompt_used', $column_names, true)) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query("ALTER TABLE {$table_name} ADD COLUMN prompt_used longtext AFTER error_message");
+		}
+		if (!in_array('tools_results', $column_names, true)) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query("ALTER TABLE {$table_name} ADD COLUMN tools_results longtext AFTER tools_called");
+		}
 		return;
 	}
 
@@ -1380,8 +1936,10 @@ function stifli_flex_mcp_maybe_create_automation_logs_table() {
 		started_at datetime DEFAULT CURRENT_TIMESTAMP,
 		completed_at datetime DEFAULT NULL,
 		status varchar(20) DEFAULT 'running',
+		prompt_used longtext,
 		ai_response longtext,
 		tools_called text,
+		tools_results longtext,
 		tokens_input int(11) DEFAULT 0,
 		tokens_output int(11) DEFAULT 0,
 		execution_time_ms int(11) DEFAULT 0,
@@ -1427,6 +1985,167 @@ function stifli_flex_mcp_maybe_create_automation_templates_table() {
 		UNIQUE KEY template_slug (template_slug),
 		KEY category (category),
 		KEY is_system (is_system)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Create event triggers table (catalog of available triggers)
+ */
+function stifli_flex_mcp_maybe_create_event_triggers_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_event_triggers';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		trigger_id varchar(100) NOT NULL,
+		trigger_name varchar(200) NOT NULL,
+		trigger_description text,
+		hook_name varchar(200) NOT NULL,
+		hook_priority int(11) DEFAULT 10,
+		hook_accepted_args int(11) DEFAULT 1,
+		category varchar(100) NOT NULL,
+		plugin_required varchar(100) DEFAULT NULL,
+		payload_schema longtext,
+		is_active tinyint(1) DEFAULT 1,
+		is_system tinyint(1) DEFAULT 1,
+		created_at datetime DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		UNIQUE KEY trigger_id (trigger_id),
+		KEY category (category),
+		KEY plugin_required (plugin_required),
+		KEY is_active (is_active)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Create event automations table (user configurations)
+ */
+function stifli_flex_mcp_maybe_create_event_automations_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_event_automations';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name;
+
+	// Always run migration for existing tables
+	if ($table_exists) {
+		stifli_flex_mcp_maybe_add_output_columns();
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		automation_name varchar(200) NOT NULL,
+		trigger_id varchar(100) NOT NULL,
+		conditions longtext,
+		prompt longtext NOT NULL,
+		system_prompt text,
+		tools_enabled longtext,
+		provider varchar(50) DEFAULT NULL,
+		model varchar(100) DEFAULT NULL,
+		max_tokens int(11) DEFAULT 2000,
+		output_email tinyint(1) DEFAULT 0,
+		email_recipients text,
+		email_subject varchar(255) DEFAULT NULL,
+		output_webhook tinyint(1) DEFAULT 0,
+		webhook_url varchar(500) DEFAULT NULL,
+		webhook_preset varchar(50) DEFAULT 'custom',
+		output_draft tinyint(1) DEFAULT 0,
+		draft_post_type varchar(50) DEFAULT 'post',
+		status enum('active','paused','error','draft') DEFAULT 'draft',
+		run_count int(11) DEFAULT 0,
+		last_run datetime DEFAULT NULL,
+		last_error text DEFAULT NULL,
+		created_by bigint(20) UNSIGNED DEFAULT NULL,
+		created_at datetime DEFAULT CURRENT_TIMESTAMP,
+		updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		KEY trigger_id (trigger_id),
+		KEY status (status),
+		KEY created_by (created_by)
+	) $charset_collate;";
+
+	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	dbDelta($sql);
+}
+
+/**
+ * Add output action columns to existing event_automations table
+ */
+function stifli_flex_mcp_maybe_add_output_columns() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_event_automations';
+
+	// Check if output_email column exists
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$column_exists = $wpdb->get_var( $wpdb->prepare(
+		"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'output_email'",
+		DB_NAME,
+		$table_name
+	) );
+
+	if ( ! $column_exists ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "ALTER TABLE {$table_name} 
+			ADD COLUMN output_email tinyint(1) DEFAULT 0 AFTER max_tokens,
+			ADD COLUMN email_recipients text AFTER output_email,
+			ADD COLUMN email_subject varchar(255) DEFAULT NULL AFTER email_recipients,
+			ADD COLUMN output_webhook tinyint(1) DEFAULT 0 AFTER email_subject,
+			ADD COLUMN webhook_url varchar(500) DEFAULT NULL AFTER output_webhook,
+			ADD COLUMN webhook_preset varchar(50) DEFAULT 'custom' AFTER webhook_url,
+			ADD COLUMN output_draft tinyint(1) DEFAULT 0 AFTER webhook_preset,
+			ADD COLUMN draft_post_type varchar(50) DEFAULT 'post' AFTER output_draft
+		" );
+	}
+}
+
+/**
+ * Create event automation logs table
+ */
+function stifli_flex_mcp_maybe_create_event_logs_table() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'sflmcp_event_logs';
+	$charset_collate = $wpdb->get_charset_collate();
+
+	$like = $wpdb->esc_like($table_name);
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+		return;
+	}
+
+	$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		automation_id bigint(20) NOT NULL,
+		trigger_id varchar(100) NOT NULL,
+		trigger_payload longtext,
+		prompt_sent longtext,
+		response longtext,
+		tools_executed longtext,
+		tokens_used int(11) DEFAULT 0,
+		execution_time float DEFAULT 0,
+		status enum('success','error','skipped') DEFAULT 'success',
+		error_message text DEFAULT NULL,
+		created_at datetime DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY  (id),
+		KEY automation_id (automation_id),
+		KEY trigger_id (trigger_id),
+		KEY status (status),
+		KEY created_at (created_at)
 	) $charset_collate;";
 
 	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -1506,6 +2225,12 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_maybe_create_automation_tasks_table();
 	stifli_flex_mcp_maybe_create_automation_logs_table();
 	stifli_flex_mcp_maybe_create_automation_templates_table();
+	
+	// Event automations tables
+	stifli_flex_mcp_maybe_create_event_triggers_table();
+	stifli_flex_mcp_maybe_create_event_automations_table();
+	stifli_flex_mcp_maybe_create_event_logs_table();
+	stifli_flex_mcp_seed_event_triggers();
 	
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_custom_tools_examples();
@@ -1642,6 +2367,11 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_maybe_add_tools_token_column();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
+	
+	// Automation tables (with migration for existing tables)
+	stifli_flex_mcp_maybe_create_automation_tasks_table();
+	stifli_flex_mcp_maybe_create_automation_logs_table();
+	
 	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();

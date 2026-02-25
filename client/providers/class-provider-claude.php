@@ -187,6 +187,7 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 		$headers  = $meta['headers'] ?? array();
 
 		// Log provider-reported usage if present.
+		$usage_data = null;
 		if ( isset( $response['usage'] ) && is_array( $response['usage'] ) ) {
 			$u = $response['usage'];
 			stifli_flex_mcp_log( sprintf(
@@ -196,6 +197,10 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 				isset( $u['cache_creation_input_tokens'] ) ? $u['cache_creation_input_tokens'] : 'n/a',
 				isset( $u['cache_read_input_tokens'] ) ? $u['cache_read_input_tokens'] : 'n/a'
 			) );
+			$usage_data = array(
+				'input_tokens'  => isset( $u['input_tokens'] ) ? $u['input_tokens'] : 0,
+				'output_tokens' => isset( $u['output_tokens'] ) ? $u['output_tokens'] : 0,
+			);
 		}
 
 		// Log key rate limit headers if present.
@@ -218,7 +223,14 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 			}
 		}
 
-		return $this->parse_response( $response, $messages, $headers );
+		$parsed = $this->parse_response( $response, $messages, $headers );
+
+		// Include usage data for token tracking
+		if ( $usage_data ) {
+			$parsed['usage'] = $usage_data;
+		}
+
+		return $parsed;
 	}
 
 	/**
