@@ -38,7 +38,7 @@
     let $frequencyPenalty, $frequencyPenaltyValue;
     let $presencePenalty, $presencePenaltyValue;
     let $advancedSaveIndicator;
-    let $enableSuggestions, $suggestionsCount;
+    let $enableSuggestions, $suggestionsCount, $explicitCaching;
 
     /**
      * Initialize the chat client
@@ -101,6 +101,7 @@
         $advancedSaveIndicator = $('#sflmcp-advanced-save-indicator');
         $enableSuggestions = $('#sflmcp-enable-suggestions');
         $suggestionsCount = $('#sflmcp-suggestions-count');
+        $explicitCaching = $('#sflmcp-explicit-caching');
     }
 
     /**
@@ -177,6 +178,12 @@
             });
             $suggestionsCount.on('input', function() {
                 state.advanced.suggestions_count = parseInt($(this).val()) || 3;
+                triggerAdvancedAutoSave();
+            });
+
+            // Explicit caching toggle
+            $explicitCaching.on('change', function() {
+                state.advanced.explicit_caching = $(this).is(':checked');
                 triggerAdvancedAutoSave();
             });
             
@@ -302,6 +309,7 @@
                 presence_penalty: $presencePenalty.val(),
                 enable_suggestions: $enableSuggestions.is(':checked') ? 1 : 0,
                 suggestions_count: $suggestionsCount.val(),
+                explicit_caching: $explicitCaching.is(':checked') ? 1 : 0,
                 adv_provider: $advProviderSelect.val(),
                 adv_model: $advModelSelect.val()
             },
@@ -610,6 +618,22 @@
      * Handle AI response
      */
     function handleAIResponse(response) {
+        console.log('[SFLMCP] handleAIResponse called', {
+            has_usage: !!response.usage,
+            usage: response.usage || null,
+            has_text: !!response.text,
+            has_tool_calls: !!(response.tool_calls && response.tool_calls.length),
+            tool_calls_count: response.tool_calls ? response.tool_calls.length : 0,
+            response_keys: Object.keys(response)
+        });
+
+        // Update token bars if usage data is present
+        if (response.usage) {
+            updateTokenBars(response.usage);
+        } else {
+            console.warn('[SFLMCP] No usage data in response!');
+        }
+
         // Update conversation history
         if (response.conversation) {
             state.conversation = response.conversation;
@@ -648,6 +672,94 @@
             // Finished
             finishProcessing();
         }
+    }
+
+    /**
+     * Update token usage bars with smooth animation
+     */
+    function updateTokenBars(usage) {
+        var MAX_TOKENS = 12000;
+        var $bars = $('#sflmcp-token-bars');
+        var $fill = $('#sflmcp-token-fill');
+        var $value = $('#sflmcp-token-value');
+        var $cachedFill = $('#sflmcp-token-cached-fill');
+        var $cachedValue = $('#sflmcp-token-cached-value');
+
+        if (!$bars.length) return;
+
+        var input = parseInt(usage.input_tokens, 10) || 0;
+        var output = parseInt(usage.output_tokens, 10) || 0;
+        var cached = parseInt(usage.cached_tokens, 10) || 0;
+        // Show non-cached tokens only (reflects actual billable cost)
+        var total = Math.max(0, input + output - cached);
+
+        console.log('[SFLMCP] updateTokenBars', {
+            raw_usage: usage,
+            parsed: { input: input, output: output, cached: cached },
+            total_billable: total,
+            formula: input + ' + ' + output + ' - ' + cached + ' = ' + total
+        });
+
+        // Show the bars container
+        $bars.show();
+
+        // Calculate percentages (capped at 100%)
+        var totalPct = Math.min((total / MAX_TOKENS) * 100, 100);
+        var cachedPct = Math.min((cached / MAX_TOKENS) * 100, 100);
+
+        // Determine color level
+        function getLevel(pct) {
+            if (pct <= 25) return 'sflmcp-level-low';
+            if (pct <= 50) return 'sflmcp-level-medium';
+            if (pct <= 75) return 'sflmcp-level-high';
+            return 'sflmcp-level-critical';
+        }
+
+        // Reset width to 0 for animation effect, then animate
+        $fill.css('width', '0%')
+            .removeClass('sflmcp-level-low sflmcp-level-medium sflmcp-level-high sflmcp-level-critical')
+            .addClass(getLevel(totalPct));
+
+        $cachedFill.css('width', '0%')
+            .removeClass('sflmcp-level-low sflmcp-level-medium sflmcp-level-high sflmcp-level-critical')
+            .addClass(getLevel(cachedPct));
+
+        // Trigger reflow then animate
+        $fill[0].offsetWidth; // force reflow
+        $cachedFill[0].offsetWidth;
+
+        requestAnimationFrame(function() {
+            $fill.css('width', totalPct + '%');
+            $cachedFill.css('width', cachedPct + '%');
+        });
+
+        // Animate the number count-up
+        animateCounter($value, total);
+        animateCounter($cachedValue, cached);
+    }
+
+    /**
+     * Animate a counter from current value to target
+     */
+    function animateCounter($el, target) {
+        var current = parseInt($el.text().replace(/,/g, ''), 10) || 0;
+        if (current === target) return;
+
+        var duration = 600;
+        var start = performance.now();
+
+        function step(now) {
+            var elapsed = now - start;
+            var progress = Math.min(elapsed / duration, 1);
+            // Ease-out cubic
+            var eased = 1 - Math.pow(1 - progress, 3);
+            var val = Math.round(current + (target - current) * eased);
+            $el.text(val.toLocaleString());
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            }
+        }
+        requestAnimationFrame(step);
     }
 
     /**

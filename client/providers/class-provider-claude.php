@@ -31,10 +31,11 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 	 * Claude 4.5 models that don't support both temperature and top_p
 	 */
 	const CLAUDE_45_MODELS = array(
-		'claude-4-6-opus-20260205',
-		'claude-4-6-sonnet-20260217',
-		'claude-4-5-haiku-20251015',
-		'claude-4-5-sonnet-20250914',
+		'claude-opus-4-6',
+		'claude-sonnet-4-6',
+		'claude-opus-4-5-20251101',
+		'claude-sonnet-4-5-20250929',
+		'claude-haiku-4-5-20251001',
 	);
 
 	/**
@@ -45,7 +46,7 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 	 */
 	public function send_message( $args ) {
 		$api_key       = $args['api_key'];
-		$model         = $args['model'] ?: 'claude-4-6-sonnet-20260217';
+		$model         = $args['model'] ?: 'claude-sonnet-4-6';
 		$message       = $args['message'];
 		$conversation  = $args['conversation'] ?? array();
 		$tools         = $args['tools'] ?? array();
@@ -195,9 +196,16 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 				isset( $u['cache_creation_input_tokens'] ) ? $u['cache_creation_input_tokens'] : 'n/a',
 				isset( $u['cache_read_input_tokens'] ) ? $u['cache_read_input_tokens'] : 'n/a'
 			) );
+			// Claude reports input_tokens as tokens AFTER the cache breakpoint (excludes cached).
+			// Normalize so input_tokens = total input (including cached), matching OpenAI/Gemini.
+			// Formula: total_input = input_tokens + cache_read + cache_creation.
+			$raw_input      = isset( $u['input_tokens'] ) ? (int) $u['input_tokens'] : 0;
+			$cache_read     = isset( $u['cache_read_input_tokens'] ) ? (int) $u['cache_read_input_tokens'] : 0;
+			$cache_creation = isset( $u['cache_creation_input_tokens'] ) ? (int) $u['cache_creation_input_tokens'] : 0;
 			$usage_data = array(
-				'input_tokens'  => isset( $u['input_tokens'] ) ? $u['input_tokens'] : 0,
-				'output_tokens' => isset( $u['output_tokens'] ) ? $u['output_tokens'] : 0,
+				'input_tokens'  => $raw_input + $cache_read + $cache_creation,
+				'output_tokens' => isset( $u['output_tokens'] ) ? (int) $u['output_tokens'] : 0,
+				'cached_tokens' => $cache_read,
 			);
 		}
 
@@ -223,9 +231,17 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 
 		$parsed = $this->parse_response( $response, $messages, $headers );
 
-		// Include usage data for token tracking
+		// Include usage data for token tracking — always provide even if API omits it
 		if ( $usage_data ) {
 			$parsed['usage'] = $usage_data;
+		} else {
+			$est_output = ! empty( $parsed['text'] ) ? (int) ceil( strlen( $parsed['text'] ) / 4 ) : 0;
+			$parsed['usage'] = array(
+				'input_tokens'  => 0,
+				'output_tokens' => $est_output,
+				'cached_tokens' => 0,
+			);
+			stifli_flex_mcp_log( '[Claude] Usage not reported by API, estimated output=' . $est_output );
 		}
 
 		return $parsed;

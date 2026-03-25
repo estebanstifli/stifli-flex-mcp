@@ -219,8 +219,20 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 			$parsed['usage'] = array(
 				'input_tokens'  => isset( $u['input_tokens'] ) ? $u['input_tokens'] : ( isset( $u['prompt_tokens'] ) ? $u['prompt_tokens'] : 0 ),
 				'output_tokens' => isset( $u['output_tokens'] ) ? $u['output_tokens'] : ( isset( $u['completion_tokens'] ) ? $u['completion_tokens'] : 0 ),
+				'cached_tokens' => 0,
 			);
-		}
+			if ( isset( $u['input_tokens_details']['cached_tokens'] ) ) {
+				$parsed['usage']['cached_tokens'] = $u['input_tokens_details']['cached_tokens'];
+			} elseif ( isset( $u['prompt_tokens_details']['cached_tokens'] ) ) {
+				$parsed['usage']['cached_tokens'] = $u['prompt_tokens_details']['cached_tokens'];
+			}		} else {
+			$est_output = ! empty( $parsed['text'] ) ? (int) ceil( strlen( $parsed['text'] ) / 4 ) : 0;
+			$parsed['usage'] = array(
+				'input_tokens'  => 0,
+				'output_tokens' => $est_output,
+				'cached_tokens' => 0,
+			);
+			stifli_flex_mcp_log( '[OpenAI] Usage not reported by API, estimated output=' . $est_output );		}
 
 		return $parsed;
 	}

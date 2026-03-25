@@ -148,7 +148,7 @@ class StifliFlexMcp_Client_Admin {
 			'sflmcp-client',
 			plugin_dir_url( __FILE__ ) . 'assets/client.js',
 			array( 'jquery' ),
-			'1.0.7',
+			'1.0.8',
 			true
 		);
 
@@ -231,6 +231,7 @@ class StifliFlexMcp_Client_Admin {
 			'presence_penalty'      => 0,
 			'enable_suggestions'    => true,
 			'suggestions_count'     => 3,
+			'explicit_caching'      => false,
 		);
 
 		$settings = get_option( self::OPTION_NAME . '_advanced', array() );
@@ -263,16 +264,18 @@ class StifliFlexMcp_Client_Admin {
 				'gpt-4o-mini'         => 'Legacy: GPT-4o Mini',
 			),
 			'claude' => array(
-				// Claude 4.6 Series (Current Generation — supports Thinking)
-				'claude-4-6-sonnet-20260217'  => 'Claude 4.6 Sonnet (Coding & Tools) [RECOMMENDED]',
-				'claude-4-6-opus-20260205'    => 'Claude 4.6 Opus (Deep Reasoning) [ADVANCED]',
-				'claude-4-5-haiku-20251015'   => 'Claude 4.5 Haiku (Fast & Economical) [FASTEST]',
-				'claude-4-5-sonnet-20250914'  => 'Claude 4.5 Sonnet (Stable Workhorse)',
-				// Hybrid Thinking (Legacy bridge)
-				'claude-3-7-sonnet-20250219'  => 'Claude 3.7 Sonnet (Hybrid Thinking)',
-				// Legacy / Maintenance
-				'claude-4-20250514'           => 'Legacy: Claude 4 Sonnet/Opus (2025-05-14)',
-				'claude-3-haiku-20240307'     => 'Legacy: Claude 3 Haiku (retiring Apr 2026)',
+				// Claude 4.6 Series (Current Generation — 1M context, 128K output, supports Thinking)
+				'claude-sonnet-4-6'              => 'Claude 4.6 Sonnet (Coding & Tools) [RECOMMENDED]',
+				'claude-opus-4-6'                => 'Claude 4.6 Opus (Deep Reasoning) [ADVANCED]',
+				// Claude 4.5 Series (200K–1M context, 64K output)
+				'claude-sonnet-4-5-20250929'     => 'Claude 4.5 Sonnet (Stable Workhorse)',
+				'claude-opus-4-5-20251101'       => 'Claude 4.5 Opus (Deep Analysis)',
+				'claude-haiku-4-5-20251001'      => 'Claude 4.5 Haiku (Fast & Economical) [FASTEST]',
+				// Claude 4.x Legacy
+				'claude-opus-4-1-20250805'       => 'Legacy: Claude 4.1 Opus',
+				'claude-opus-4-20250514'         => 'Legacy: Claude 4 Opus',
+				'claude-sonnet-4-20250514'       => 'Legacy: Claude 4 Sonnet',
+				'claude-3-haiku-20240307'        => 'Legacy: Claude 3 Haiku (retiring Apr 2026)',
 			),
 			'gemini' => array(
 				// Gemini 3.1 Series (Latest Generation)
@@ -450,6 +453,23 @@ class StifliFlexMcp_Client_Admin {
 				</div>
 			</div>
 			
+			<div class="sflmcp-token-bars" id="sflmcp-token-bars" style="display:none;">
+				<div class="sflmcp-token-row">
+					<span class="sflmcp-token-label"><?php esc_html_e( 'Tokens', 'stifli-flex-mcp' ); ?></span>
+					<div class="sflmcp-token-track">
+						<div class="sflmcp-token-fill" id="sflmcp-token-fill"></div>
+					</div>
+					<span class="sflmcp-token-value" id="sflmcp-token-value">0</span>
+				</div>
+				<div class="sflmcp-token-row">
+					<span class="sflmcp-token-label"><?php esc_html_e( 'Cached', 'stifli-flex-mcp' ); ?></span>
+					<div class="sflmcp-token-track">
+						<div class="sflmcp-token-fill sflmcp-token-fill-cached" id="sflmcp-token-cached-fill"></div>
+					</div>
+					<span class="sflmcp-token-value" id="sflmcp-token-cached-value">0</span>
+				</div>
+			</div>
+
 			<div class="sflmcp-chat-messages" id="sflmcp-chat-messages">
 				<div class="sflmcp-welcome-message">
 					<div class="sflmcp-welcome-icon">🤖</div>
@@ -614,6 +634,20 @@ class StifliFlexMcp_Client_Admin {
 					</th>
 				</tr>
 
+				<!-- Explicit Caching (Gemini only) -->
+				<tr class="sflmcp-model-param" data-providers="gemini">
+					<th scope="row">
+						<label for="sflmcp-explicit-caching"><?php esc_html_e( 'Explicit Caching', 'stifli-flex-mcp' ); ?></label>
+					</th>
+					<td>
+						<label class="sflmcp-toggle">
+							<input type="checkbox" id="sflmcp-explicit-caching" name="explicit_caching" value="1" <?php checked( $advanced['explicit_caching'] ); ?> />
+							<?php esc_html_e( 'Enable explicit context caching (Google Gemini)', 'stifli-flex-mcp' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Caches the system prompt and tool definitions server-side for guaranteed cost savings on repeated requests. Requires Gemini 2.5+ or 3.x models. The cache lives for 30 minutes and is recreated automatically.', 'stifli-flex-mcp' ); ?></p>
+					</td>
+				</tr>
+
 				<!-- Temperature -->
 				<tr class="sflmcp-model-param" data-providers="openai,claude,gemini">
 					<th scope="row">
@@ -721,6 +755,7 @@ class StifliFlexMcp_Client_Admin {
 			'presence_penalty'   => floatval( $_POST['presence_penalty'] ?? 0 ),
 			'enable_suggestions' => ! empty( $_POST['enable_suggestions'] ),
 			'suggestions_count'  => absint( $_POST['suggestions_count'] ?? 3 ),
+			'explicit_caching'   => ! empty( $_POST['explicit_caching'] ),
 		);
 
 		// Validate ranges
@@ -879,6 +914,7 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 			'top_p'         => $advanced['top_p'],
 			'frequency_penalty' => $advanced['frequency_penalty'],
 			'presence_penalty'  => $advanced['presence_penalty'],
+			'explicit_caching'  => ! empty( $advanced['explicit_caching'] ),
 		) );
 
 		if ( is_wp_error( $result ) ) {
