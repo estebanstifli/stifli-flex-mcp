@@ -66,7 +66,7 @@ class StifliFlexMcp_Client_Admin {
 	 * @param string $encrypted_text The encrypted value (iv:ciphertext).
 	 * @return string The decrypted plain text.
 	 */
-	private static function decrypt_value( $encrypted_text ) {
+	public static function decrypt_value( $encrypted_text ) {
 		if ( empty( $encrypted_text ) ) {
 			return '';
 		}
@@ -103,9 +103,13 @@ class StifliFlexMcp_Client_Admin {
 		add_action( 'wp_ajax_sflmcp_client_save_settings', array( $this, 'ajax_save_settings' ) );
 		add_action( 'wp_ajax_sflmcp_client_save_advanced', array( $this, 'ajax_save_advanced' ) );
 		add_action( 'wp_ajax_sflmcp_client_execute_tool', array( $this, 'ajax_execute_tool' ) );
+		add_action( 'wp_ajax_sflmcp_client_poll_tool', array( $this, 'ajax_poll_tool_status' ) );
 		add_action( 'wp_ajax_sflmcp_client_save_history', array( $this, 'ajax_save_history' ) );
 		add_action( 'wp_ajax_sflmcp_client_load_history', array( $this, 'ajax_load_history' ) );
 		add_action( 'wp_ajax_sflmcp_client_clear_history', array( $this, 'ajax_clear_history' ) );
+
+		// WP-Cron hook for async tool execution (fallback when fastcgi_finish_request is unavailable).
+		add_action( 'sflmcp_async_tool_exec', array( $this, 'execute_async_tool' ) );
 	}
 
 	/**
@@ -137,14 +141,14 @@ class StifliFlexMcp_Client_Admin {
 			'sflmcp-client',
 			plugin_dir_url( __FILE__ ) . 'assets/client.css',
 			array(),
-			'1.0.6'
+			'1.0.7'
 		);
 
 		wp_enqueue_script(
 			'sflmcp-client',
 			plugin_dir_url( __FILE__ ) . 'assets/client.js',
 			array( 'jquery' ),
-			'1.0.6',
+			'1.0.7',
 			true
 		);
 
@@ -241,36 +245,44 @@ class StifliFlexMcp_Client_Admin {
 	public function get_available_models() {
 		return array(
 			'openai' => array(
-				'gpt-5.2-chat-latest' => 'GPT-5.2 Instant (Dec 2025) [RECOMMENDED]',
+				// GPT-5.4 Series (Latest Flagship — Mar 2026)
+				'gpt-5.4'             => 'GPT-5.4 (Frontier, 1M context, Computer Use) [RECOMMENDED]',
+				'gpt-5.4-pro'         => 'GPT-5.4 Pro (High-stakes Professional) [ADVANCED]',
+				'gpt-5.4-mini'        => 'GPT-5.4 Mini (Fast, Low Latency) [EFFICIENT]',
+				'gpt-5.4-nano'        => 'GPT-5.4 Nano (Massive Scale, Low Cost)',
+				// GPT-5.3 Series
+				'gpt-5.3'             => 'GPT-5.3 (Stable Production)',
+				'gpt-5.3-mini'        => 'GPT-5.3 Mini (Balanced)',
+				// GPT-5.2 Series (Previous Gen)
+				'gpt-5.2-chat-latest' => 'GPT-5.2 Instant (Dec 2025)',
 				'gpt-5.2'             => 'GPT-5.2 Thinking (Adaptive Reasoning)',
-				'gpt-5'               => 'GPT-5',
-				'gpt-5-mini'          => 'GPT-5 Mini',
-				'gpt-5-nano'          => 'GPT-5 Nano',
-				'gpt-4o'              => 'GPT-4o',
-				'gpt-4o-mini'         => 'GPT-4o Mini',
+				// Legacy
+				'gpt-5'               => 'Legacy: GPT-5',
+				'gpt-5-mini'          => 'Legacy: GPT-5 Mini',
+				'gpt-4o'              => 'Legacy: GPT-4o',
+				'gpt-4o-mini'         => 'Legacy: GPT-4o Mini',
 			),
 			'claude' => array(
-				'claude-sonnet-4-5-20250929'  => 'Claude Sonnet 4.5 (2025-09-29) [RECOMMENDED]',
-				'claude-haiku-4-5-20251001'   => 'Claude Haiku 4.5 (2025-10-01) [FASTEST]',
-				'claude-opus-4-5-20251101'    => 'Claude Opus 4.5 (2025-11-01)',
-				'claude-sonnet-4-20250514'    => 'Claude Sonnet 4 (2025-05-14)',
-				'claude-opus-4-20250514'      => 'Claude Opus 4 (2025-05-14)',
-				'claude-opus-4-1-20250805'    => 'Claude Opus 4.1 (2025-08-05)',
-				'claude-haiku-4-5'            => 'Legacy: Claude Haiku 4.5 (alias)',
-				'claude-opus-4-5'             => 'Legacy: Claude Opus 4.5 (alias)',
-				'claude-opus-4-1'             => 'Legacy: Claude Opus 4.1 (alias)',
-				'claude-3-5-sonnet-20241022'  => 'Legacy: Claude 3.5 Sonnet (2024-10-22)',
-				'claude-3-5-sonnet-20240620'  => 'Legacy: Claude 3.5 Sonnet (2024-06-20)',
-				'claude-3-opus-20240229'      => 'Legacy: Claude 3 Opus (2024-02-29)',
-				'claude-3-sonnet-20240229'    => 'Legacy: Claude 3 Sonnet (2024-02-29)',
-				'claude-3-haiku'              => 'Legacy: Claude 3 Haiku (alias)',
+				// Claude 4.6 Series (Current Generation — supports Thinking)
+				'claude-4-6-sonnet-20260217'  => 'Claude 4.6 Sonnet (Coding & Tools) [RECOMMENDED]',
+				'claude-4-6-opus-20260205'    => 'Claude 4.6 Opus (Deep Reasoning) [ADVANCED]',
+				'claude-4-5-haiku-20251015'   => 'Claude 4.5 Haiku (Fast & Economical) [FASTEST]',
+				'claude-4-5-sonnet-20250914'  => 'Claude 4.5 Sonnet (Stable Workhorse)',
+				// Hybrid Thinking (Legacy bridge)
+				'claude-3-7-sonnet-20250219'  => 'Claude 3.7 Sonnet (Hybrid Thinking)',
+				// Legacy / Maintenance
+				'claude-4-20250514'           => 'Legacy: Claude 4 Sonnet/Opus (2025-05-14)',
+				'claude-3-haiku-20240307'     => 'Legacy: Claude 3 Haiku (retiring Apr 2026)',
 			),
 			'gemini' => array(
-				'gemini-2.5-pro'        => 'Gemini 2.5 Pro (Reasoning) [ADVANCED]',
-				'gemini-2.5-flash'      => 'Gemini 2.5 Flash (Balanced) [RECOMMENDED]',
-				'gemini-2.5-flash-lite' => 'Gemini 2.5 Flash-Lite (Fast) [EFFICIENT]',
-				'gemini-2.0-flash'      => 'Gemini 2.0 Flash (Agents)',
-				'gemini-2.0-flash-lite' => 'Gemini 2.0 Flash-Lite (Efficient)',
+				// Gemini 3.1 Series (Latest Generation)
+				'gemini-3.1-pro-preview'        => 'Gemini 3.1 Pro (Logic & Science) [ADVANCED]',
+				'gemini-3-flash-preview'        => 'Gemini 3 Flash (Speed + Frontier) [RECOMMENDED]',
+				'gemini-3.1-flash-lite-preview' => 'Gemini 3.1 Flash-Lite (Fastest, Low Latency)',
+				// Gemini 2.5 Series (Stable / Production)
+				'gemini-2.5-pro'                => 'Gemini 2.5 Pro (1M-2M context, Repo Analysis)',
+				'gemini-2.5-flash'              => 'Gemini 2.5 Flash (Low Cost Workhorse)',
+				'gemini-2.5-flash-lite'         => 'Gemini 2.5 Flash-Lite (Instant Responses) [EFFICIENT]',
 			),
 		);
 	}
@@ -1203,6 +1215,15 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 	/**
 	 * AJAX handler for executing a tool
 	 */
+	/**
+	 * Tools that are expected to run longer than typical HTTP timeouts (60s).
+	 * These are executed asynchronously via fastcgi_finish_request or WP-Cron,
+	 * and the JS polls for the result.
+	 *
+	 * @var string[]
+	 */
+	private static $async_tools = array( 'wp_generate_video' );
+
 	public function ajax_execute_tool() {
 		check_ajax_referer( 'sflmcp_client', 'nonce' );
 
@@ -1210,30 +1231,207 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
 
+		// Allow long-running tools (video generation can take 60-300s).
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged -- set_time_limit required for async video generation.
+		@set_time_limit( 0 );
+		ignore_user_abort( true );
+
 		$tool_name = sanitize_text_field( wp_unslash( $_POST['tool_name'] ?? '' ) );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- JSON data must be decoded raw, then sanitized after parsing
 		$arguments = isset( $_POST['arguments'] ) ? json_decode( wp_unslash( $_POST['arguments'] ), true ) : array();
 
 		if ( empty( $tool_name ) ) {
+			stifli_flex_mcp_log( '[AJAX] execute_tool: missing tool_name' );
 			wp_send_json_error( array( 'message' => __( 'Tool name is required', 'stifli-flex-mcp' ) ) );
 		}
 
 		global $stifliFlexMcp;
 
 		if ( ! isset( $stifliFlexMcp ) || ! isset( $stifliFlexMcp->model ) ) {
+			stifli_flex_mcp_log( '[AJAX] execute_tool: MCP model not available' );
 			wp_send_json_error( array( 'message' => __( 'MCP model not available', 'stifli-flex-mcp' ) ) );
 		}
 
-		// Execute the tool
+		// ── Async path for long-running tools ──────────────────────────────
+		if ( in_array( $tool_name, self::$async_tools, true ) ) {
+			$job_id = $this->start_async_tool( $tool_name, $arguments );
+			wp_send_json_success( array( 'async' => true, 'job_id' => $job_id ) );
+			return; // wp_send_json_success calls die(), but return for clarity.
+		}
+
+		// ── Sync path for fast tools ───────────────────────────────────────
+		stifli_flex_mcp_log( '[AJAX] execute_tool START (sync): ' . $tool_name );
+		$ajax_start = microtime( true );
+
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );
 
+		$elapsed = round( microtime( true ) - $ajax_start, 1 );
+		stifli_flex_mcp_log( '[AJAX] execute_tool DONE (sync): ' . $tool_name . ' elapsed=' . $elapsed . 's' );
+
 		if ( isset( $result['error'] ) ) {
+			$err_msg = $result['error']['message'] ?? __( 'Tool execution failed', 'stifli-flex-mcp' );
+			stifli_flex_mcp_log( '[AJAX] execute_tool ERROR: ' . $tool_name . ' => ' . $err_msg );
 			wp_send_json_error( array(
-				'message' => $result['error']['message'] ?? __( 'Tool execution failed', 'stifli-flex-mcp' ),
+				'message' => $err_msg,
 			) );
 		}
 
-		// Extract text content from result
+		$content = $this->extract_tool_content( $result );
+		stifli_flex_mcp_log( '[AJAX] execute_tool SUCCESS: ' . $tool_name . ' content_length=' . strlen( $content ) );
+		wp_send_json_success( array(
+			'success' => true,
+			'content' => $content,
+			'raw'     => $result['result'] ?? null,
+		) );
+	}
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Async tool helpers
+	// ────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Start a long-running tool asynchronously.
+	 * Saves job metadata in a transient, then triggers background execution
+	 * via fastcgi_finish_request (PHP-FPM) or WP-Cron as fallback.
+	 *
+	 * @param string $tool_name  Tool identifier.
+	 * @param array  $arguments  Tool arguments.
+	 * @return string Job UUID.
+	 */
+	private function start_async_tool( $tool_name, $arguments ) {
+		$job_id = wp_generate_uuid4();
+
+		set_transient( 'sflmcp_job_' . $job_id, array(
+			'status'  => 'running',
+			'user_id' => get_current_user_id(),
+			'tool'    => $tool_name,
+			'args'    => $arguments,
+			'started' => time(),
+		), 600 ); // 10 min TTL.
+
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			// PHP-FPM: execute in shutdown callback after the response is sent.
+			$self = $this;
+			register_shutdown_function( function () use ( $self, $job_id ) {
+				fastcgi_finish_request(); // Flush response to client, keep PHP alive.
+				$self->execute_async_tool( $job_id );
+			} );
+			stifli_flex_mcp_log( '[ASYNC] Job ' . $job_id . ' for ' . $tool_name . ' — using fastcgi_finish_request' );
+		} else {
+			// Fallback: schedule an immediate WP-Cron event.
+			wp_schedule_single_event( time(), 'sflmcp_async_tool_exec', array( $job_id ) );
+			spawn_cron();
+			stifli_flex_mcp_log( '[ASYNC] Job ' . $job_id . ' for ' . $tool_name . ' — using WP-Cron fallback' );
+		}
+
+		return $job_id;
+	}
+
+	/**
+	 * Background execution of a tool job. Called from shutdown hook or WP-Cron.
+	 *
+	 * @param string $job_id Job UUID.
+	 */
+	public function execute_async_tool( $job_id ) {
+		$job = get_transient( 'sflmcp_job_' . $job_id );
+		if ( ! $job || 'running' !== ( $job['status'] ?? '' ) ) {
+			stifli_flex_mcp_log( '[ASYNC] Job ' . $job_id . ' not found or already processed' );
+			return;
+		}
+
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged -- set_time_limit required for async video generation.
+		@set_time_limit( 0 );
+		ignore_user_abort( true );
+
+		// Restore user context (important for capability checks in tools).
+		wp_set_current_user( $job['user_id'] );
+		stifli_flex_mcp_log( '[ASYNC] Executing job ' . $job_id . ' tool=' . $job['tool'] . ' user=' . $job['user_id'] );
+
+		global $stifliFlexMcp;
+
+		if ( ! isset( $stifliFlexMcp ) || ! isset( $stifliFlexMcp->model ) ) {
+			$job['status'] = 'error';
+			$job['error']  = __( 'MCP model not available', 'stifli-flex-mcp' );
+			set_transient( 'sflmcp_job_' . $job_id, $job, 600 );
+			stifli_flex_mcp_log( '[ASYNC] Job ' . $job_id . ' failed: MCP model not available' );
+			return;
+		}
+
+		$start  = microtime( true );
+		$result = $stifliFlexMcp->model->dispatchTool( $job['tool'], $job['args'], null );
+		$elapsed = round( microtime( true ) - $start, 1 );
+
+		if ( isset( $result['error'] ) ) {
+			$job['status']   = 'error';
+			$job['error']    = $result['error']['message'] ?? __( 'Tool execution failed', 'stifli-flex-mcp' );
+			$job['finished'] = time();
+			set_transient( 'sflmcp_job_' . $job_id, $job, 600 );
+			stifli_flex_mcp_log( '[ASYNC] Job ' . $job_id . ' ERROR after ' . $elapsed . 's: ' . $job['error'] );
+			return;
+		}
+
+		$content = $this->extract_tool_content( $result );
+
+		$job['status']   = 'completed';
+		$job['content']  = $content;
+		$job['raw']      = $result['result'] ?? null;
+		$job['finished'] = time();
+		set_transient( 'sflmcp_job_' . $job_id, $job, 600 );
+		stifli_flex_mcp_log( '[ASYNC] Job ' . $job_id . ' SUCCESS after ' . $elapsed . 's content_length=' . strlen( $content ) );
+	}
+
+	/**
+	 * AJAX handler: poll for async tool result.
+	 */
+	public function ajax_poll_tool_status() {
+		check_ajax_referer( 'sflmcp_client', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$job_id = sanitize_text_field( wp_unslash( $_POST['job_id'] ?? '' ) );
+		if ( empty( $job_id ) ) {
+			wp_send_json_error( array( 'message' => 'Missing job_id' ) );
+		}
+
+		$job = get_transient( 'sflmcp_job_' . $job_id );
+		if ( ! $job ) {
+			wp_send_json_error( array( 'message' => 'Job not found or expired' ) );
+		}
+
+		if ( 'running' === $job['status'] ) {
+			wp_send_json_success( array(
+				'status'  => 'running',
+				'elapsed' => time() - ( $job['started'] ?? time() ),
+			) );
+		}
+
+		// Job finished (completed or error) — clean up transient.
+		delete_transient( 'sflmcp_job_' . $job_id );
+
+		if ( 'error' === $job['status'] ) {
+			wp_send_json_error( array(
+				'message' => $job['error'] ?? __( 'Tool execution failed', 'stifli-flex-mcp' ),
+			) );
+		}
+
+		// Completed.
+		wp_send_json_success( array(
+			'status'  => 'completed',
+			'success' => true,
+			'content' => $job['content'] ?? '',
+			'raw'     => $job['raw'] ?? null,
+		) );
+	}
+
+	/**
+	 * Extract text content from a dispatchTool result array.
+	 *
+	 * @param array $result Tool result from dispatchTool().
+	 * @return string Concatenated text content.
+	 */
+	private function extract_tool_content( $result ) {
 		$content = '';
 		if ( isset( $result['result']['content'] ) && is_array( $result['result']['content'] ) ) {
 			foreach ( $result['result']['content'] as $item ) {
@@ -1242,11 +1440,6 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 				}
 			}
 		}
-
-		wp_send_json_success( array(
-			'success' => true,
-			'content' => trim( $content ),
-			'raw'     => $result['result'] ?? null,
-		) );
+		return trim( $content );
 	}
 }

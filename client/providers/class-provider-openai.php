@@ -27,6 +27,12 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 	 * These are "reasoning" models that use adaptive reasoning instead.
 	 */
 	const REASONING_MODELS = array(
+		'gpt-5.4-pro',
+		'gpt-5.4',
+		'gpt-5.4-mini',
+		'gpt-5.4-nano',
+		'gpt-5.3',
+		'gpt-5.3-mini',
 		'gpt-5.2',
 		'gpt-5.2-chat-latest',
 		'gpt-5',
@@ -62,7 +68,7 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 	 */
 	public function send_message( $args ) {
 		$api_key       = $args['api_key'];
-		$model         = $args['model'] ?: 'gpt-5.2-chat-latest';
+		$model         = $args['model'] ?: 'gpt-5.4';
 		$message       = $args['message'];
 		$conversation  = $args['conversation'] ?? array();
 		$tools         = $args['tools'] ?? array();

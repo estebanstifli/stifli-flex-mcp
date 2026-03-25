@@ -899,17 +899,12 @@ class StifliFlexMcp_Event_Automation_Admin {
 	 * AJAX: Test automation with sample payload
 	 */
 	public function ajax_test_automation() {
-		// Log start
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( '[SFLMCP Events Test] Starting test automation' );
-		}
+		stifli_flex_mcp_log( '[SFLMCP Events Test] Starting test automation' );
 
 		check_ajax_referer( 'sflmcp_events_nonce', 'nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[SFLMCP Events Test] Permission denied' );
-			}
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Permission denied' );
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
 
@@ -919,16 +914,12 @@ class StifliFlexMcp_Event_Automation_Admin {
 		$tools_enabled = isset( $_POST['tools_enabled'] ) ? sanitize_text_field( wp_unslash( $_POST['tools_enabled'] ) ) : '[]';
 		$payload_json  = isset( $_POST['payload'] ) ? sanitize_text_field( wp_unslash( $_POST['payload'] ) ) : '{}';
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( '[SFLMCP Events Test] Trigger: ' . $trigger_id );
-			error_log( '[SFLMCP Events Test] Prompt length: ' . strlen( $prompt ) );
-			error_log( '[SFLMCP Events Test] Payload: ' . $payload_json );
-		}
+		stifli_flex_mcp_log( '[SFLMCP Events Test] Trigger: ' . $trigger_id );
+		stifli_flex_mcp_log( '[SFLMCP Events Test] Prompt length: ' . strlen( $prompt ) );
+		stifli_flex_mcp_log( '[SFLMCP Events Test] Payload: ' . $payload_json );
 
 		if ( empty( $trigger_id ) || empty( $prompt ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[SFLMCP Events Test] Missing trigger or prompt' );
-			}
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Missing trigger or prompt' );
 			wp_send_json_error( array( 'message' => __( 'Trigger and prompt are required', 'stifli-flex-mcp' ) ) );
 		}
 
@@ -947,9 +938,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 			$prompt
 		);
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( '[SFLMCP Events Test] Resolved prompt: ' . substr( $resolved_prompt, 0, 200 ) . '...' );
-		}
+		stifli_flex_mcp_log( '[SFLMCP Events Test] Resolved prompt: ' . substr( $resolved_prompt, 0, 200 ) . '...' );
 
 		// Create task object for execution
 		$task = (object) array(
@@ -966,20 +955,16 @@ class StifliFlexMcp_Event_Automation_Admin {
 		try {
 			require_once __DIR__ . '/class-automation-engine.php';
 			$engine = StifliFlexMcp_Automation_Engine::get_instance();
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[SFLMCP Events Test] Calling execute_task_internal' );
-			}
-			
+
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Calling execute_task_internal' );
+
 			$result = $engine->execute_task_internal( $task );
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[SFLMCP Events Test] Execution completed' );
-				error_log( '[SFLMCP Events Test] Response length: ' . strlen( $result['response'] ?? '' ) );
-				error_log( '[SFLMCP Events Test] Tools executed: ' . count( $result['tools_executed'] ?? array() ) );
-				if ( ! empty( $result['error'] ) ) {
-					error_log( '[SFLMCP Events Test] Error: ' . $result['error'] );
-				}
+
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Execution completed' );
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Response length: ' . strlen( $result['response'] ?? '' ) );
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Tools executed: ' . count( $result['tools_executed'] ?? array() ) );
+			if ( ! empty( $result['error'] ) ) {
+				stifli_flex_mcp_log( '[SFLMCP Events Test] Error: ' . $result['error'] );
 			}
 
 			wp_send_json_success( array(
@@ -990,10 +975,8 @@ class StifliFlexMcp_Event_Automation_Admin {
 				'error'           => $result['error'] ?? null,
 			) );
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[SFLMCP Events Test] Exception: ' . $e->getMessage() );
-				error_log( '[SFLMCP Events Test] Stack trace: ' . $e->getTraceAsString() );
-			}
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Exception: ' . $e->getMessage() );
+			stifli_flex_mcp_log( '[SFLMCP Events Test] Stack trace: ' . $e->getTraceAsString() );
 			wp_send_json_error( array( 'message' => 'Execution error: ' . $e->getMessage() ) );
 		}
 	}

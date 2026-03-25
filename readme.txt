@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, agent, gemini
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.1.0
+Stable tag: 2.2.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -24,7 +24,7 @@ No complex setup, no external tools required. Just add your API key and start ch
 The built-in AI Chat Agent gives you a powerful conversational interface to manage your entire WordPress site:
 
 * **Talk to your site** — "Show me the last 5 orders", "Create a blog post about SEO tips", "What plugins are installed?"
-* **Multi-provider** — Choose between OpenAI (GPT-4o, GPT-4.5), Anthropic (Claude 4 Opus/Sonnet, Haiku), or Google (Gemini 2.5 Pro/Flash)
+* **Multi-provider** — Choose between OpenAI (GPT-5, GPT-4), Anthropic (Claude 4 Opus/Sonnet, Haiku), or Google (Gemini 2.5 Pro/Flash)
 * **117+ tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, update settings, and much more
 * **Smart suggestions** — After each response, get contextual follow-up suggestions
 * **Conversation history** — Auto-saved across sessions with multi-tab support
@@ -45,8 +45,20 @@ Here are just a few examples of what you can ask your AI agent:
 * 📦 "Update the price of product #123 to $29.99"
 * 💬 "Show me all pending comments so I can review them"
 * 🧩 "What plugins are currently active?"
+* 🎨 "Generate a hero image for my latest blog post about technology"
+* 🎬 "Create a 5-second promotional video for my new product"
 
 The AI agent understands context, chains multiple operations, and works with your site's real data in real time.
+
+**🎨 AI Image & Video Generation**
+
+Generate stunning images and videos directly from your AI agent or the dedicated Multimedia Settings page:
+
+* **Image Generation** — "Generate a hero image for my blog post about AI" using OpenAI (gpt-image-1, DALL·E 2/3) or Google Gemini (Imagen 4)
+* **Video Generation** — "Create a 5-second product showcase video" using OpenAI Sora or Google Veo 2/3
+* **Auto-save to Media Library** — Generated images and videos are automatically saved and ready to use
+* **Multi-provider** — Choose your preferred provider and model per generation type
+* **Multimedia Settings** — Dedicated admin page to configure providers, API keys, default sizes, quality, and post-processing options
 
 **🚀 Extend With Custom Tools**
 
@@ -171,6 +183,7 @@ The agent has access to 117+ tools covering:
 
 * **Content** — Create, edit, delete posts, pages, and comments
 * **Media** — Upload, list, and manage images and files
+* **AI Generation** — Generate images (DALL·E, Imagen) and videos (Sora, Veo) with AI
 * **WooCommerce** — Products, orders, coupons, customers, shipping, taxes
 * **Taxonomies** — Categories, tags, custom taxonomies
 * **Settings** — Site options, menus, navigation
@@ -199,6 +212,28 @@ Yes! The plugin includes 61 WooCommerce tools. They activate automatically when 
 
 Absolutely! Go to **MCP Server → Custom Tools** and create PHP-powered tools that expose any plugin's functionality to your AI agent. Built-in examples included.
 
+= Can the AI generate images? =
+
+Yes! The `wp_generate_image` tool supports multiple providers:
+
+* **OpenAI** — gpt-image-1 (recommended), DALL·E 3, DALL·E 2
+* **Google Gemini** — Imagen 4
+
+Just ask your AI agent "Generate an image of..." or configure defaults in **StifLi Flex MCP → Multimedia Settings → Images**.
+
+= Can the AI generate videos? =
+
+Yes! The `wp_generate_video` tool supports:
+
+* **OpenAI Sora** — Text-to-video and image-to-video generation
+* **Google Veo** — Veo 2 and Veo 3 models
+
+Video generation runs asynchronously in the background. Configure providers and API keys in **StifLi Flex MCP → Multimedia Settings → Videos**.
+
+= Where do I configure API keys for image/video generation? =
+
+Go to **StifLi Flex MCP → Multimedia Settings**. API keys are shared between the Images and Videos tabs — enter your OpenAI or Gemini key once and it works for both.
+
 = What are WordPress Abilities? =
 
 WordPress 6.9 introduced the Abilities API, letting plugins register standardized capabilities. If you have plugins that support Abilities, StifLi Flex MCP can auto-discover and import them from **MCP Server → Abilities** tab.
@@ -219,6 +254,16 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 5. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 2.2.0 =
+* **🆕 AI Image Generation** — Generate images directly from your AI agent using `wp_generate_image`!
+* **🆕 AI Video Generation** — Generate videos with `wp_generate_video` using cutting-edge AI models!
+* New: wp_generate_image tool with multi-provider support (OpenAI gpt-image-1, DALL·E 2/3, Google Gemini Imagen 4)
+* New: wp_generate_video tool with multi-provider support (OpenAI Sora, Google Veo 2/3)
+* New: Multimedia Settings admin page with dedicated Images and Videos tabs
+* New: Post-processing options — auto-save generated media to Media Library, auto-insert into posts
+* New: Configurable default providers, models, image sizes, and quality settings
+
+
 = 2.1.0 =
 * **🆕 Automation Tasks** — Schedule AI tasks to run automatically on a recurring basis!
 * **🆕 Event Automations** — Trigger AI workflows when WordPress events occur (new post, new user, etc.)

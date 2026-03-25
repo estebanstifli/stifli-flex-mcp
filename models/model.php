@@ -169,6 +169,9 @@ class StifliFlexMcpModel {
             'wp_create_comment','wp_update_comment','wp_delete_comment',
             // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
             'wp_upload_image_from_url',
+            'wp_upload_image',
+            'wp_generate_image',
+            'wp_generate_video',
             // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
             'wp_update_option','wp_delete_option',
             'wp_update_post_meta','wp_delete_post_meta',
@@ -781,6 +784,43 @@ class StifliFlexMcpModel {
                         'required' => array('url'),
                     ),
                 ),
+
+                // AI Image Generation
+                'wp_generate_image' => array(
+                    'name' => 'wp_generate_image',
+                    'description' => 'Generate an image using AI and save it as a WordPress media attachment. Uses the configured AI provider (OpenAI/Gemini). Returns attachment ID, URL and medium-size URL. Supports size (square, landscape, portrait or aspect ratio like 16:9) and quality (low, medium, high for OpenAI).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'prompt'  => array('type' => 'string', 'description' => 'Detailed description of the image to generate'),
+                            'size'    => array('type' => 'string', 'description' => 'Image size: square (default), landscape, portrait, or aspect ratio like 16:9 for Gemini'),
+                            'quality' => array('type' => 'string', 'description' => 'Quality for OpenAI: low, medium (default), high'),
+                            'alt_text' => array('type' => 'string', 'description' => 'Alt text for the image attachment'),
+                            'title'   => array('type' => 'string', 'description' => 'Title for the image attachment'),
+                            'post_id' => array('type' => 'integer', 'description' => 'Optional post ID to attach the image to'),
+                        ),
+                        'required' => array('prompt'),
+                    ),
+                ),
+
+                // AI Video Generation
+                'wp_generate_video' => array(
+                    'name' => 'wp_generate_video',
+                    'description' => 'Generate a video using AI (Google Veo or OpenAI Sora) and save it as a WordPress media attachment. Video generation is asynchronous and may take 1-5 minutes. Returns attachment ID, URL, duration, and provider info. Configure defaults in Multimedia Settings.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'prompt'        => array('type' => 'string', 'description' => 'Detailed description of the video to generate. Be specific about scene, camera movement, lighting, style.'),
+                            'image_url'     => array('type' => 'string', 'description' => 'Optional source/start-frame image. Can be a URL or a WordPress attachment ID. Veo uses it as the first frame; Sora uses it as visual reference. Supported: JPEG, PNG.'),
+                            'image_end_url' => array('type' => 'string', 'description' => 'Optional end-frame image (Veo only). When both image_url and image_end_url are provided, Veo interpolates between the two frames. Can be a URL or attachment ID.'),
+                            'duration'      => array('type' => 'string', 'description' => 'Video duration in seconds: 5, 6, 8 (Veo), or 4, 8, 12 (Sora). Default from settings.'),
+                            'aspect_ratio'  => array('type' => 'string', 'description' => 'Aspect ratio: 16:9 (landscape), 9:16 (portrait/reels), 1:1 (square/Veo only). Default from settings.'),
+                            'title'         => array('type' => 'string', 'description' => 'Title for the video attachment in the Media Library'),
+                            'post_id'       => array('type' => 'integer', 'description' => 'Optional post ID to attach the video to'),
+                        ),
+                        'required' => array('prompt'),
+                    ),
+                ),
                 
                 // Pages
                 'wp_get_pages' => array(
@@ -1373,6 +1413,8 @@ class StifliFlexMcpModel {
             // media
             'wp_upload_image_from_url' => 'upload_files',
             'wp_upload_image' => 'upload_files',
+            'wp_generate_image' => 'upload_files',
+            'wp_generate_video' => 'upload_files',
             'wp_update_media_item' => 'upload_files',
             'wp_delete_media_item' => 'delete_posts',
             // plugins/themes
@@ -2303,6 +2345,1090 @@ class StifliFlexMcpModel {
                     $addResultText($r, 'Navigation menu #' . $args['menu_id'] . ' deleted');
                 }
                 break;
+            case 'wp_generate_image':
+                stifli_flex_mcp_log('wp_generate_image: === START ===');
+                $prompt = sanitize_text_field( $utils::getArrayValue( $args, 'prompt', '' ) );
+                if ( empty( $prompt ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: ERROR - prompt is empty');
+                    $r['error'] = array( 'code' => -42602, 'message' => 'prompt required' );
+                    break;
+                }
+                if ( ! current_user_can( 'upload_files' ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: ERROR - user lacks upload_files capability');
+                    $r['error'] = array( 'code' => 'permission_denied', 'message' => 'Insufficient permissions to upload files' );
+                    break;
+                }
+                $img_size    = sanitize_text_field( $utils::getArrayValue( $args, 'size', 'square' ) );
+                $img_quality = sanitize_text_field( $utils::getArrayValue( $args, 'quality', 'medium' ) );
+                $img_alt     = sanitize_text_field( $utils::getArrayValue( $args, 'alt_text', '' ) );
+                $img_title   = sanitize_text_field( $utils::getArrayValue( $args, 'title', '' ) );
+                $img_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                stifli_flex_mcp_log('wp_generate_image: prompt="' . substr( $prompt, 0, 120 ) . '" size=' . $img_size . ' quality=' . $img_quality . ' post_id=' . $img_post_id);
+
+                // Load multimedia settings (dedicated — independent from Chat Agent)
+                $mm_settings     = get_option( 'sflmcp_multimedia_settings', array() );
+                $provider        = ! empty( $mm_settings['image_provider'] ) ? $mm_settings['image_provider'] : 'openai';
+                stifli_flex_mcp_log('wp_generate_image: provider=' . $provider);
+
+                // Resolve API key: multimedia settings only (no Chat Agent fallback)
+                $encrypted_key = '';
+                if ( $provider === 'gemini' ) {
+                    $encrypted_key = ! empty( $mm_settings['gemini_api_key'] ) ? $mm_settings['gemini_api_key'] : '';
+                } else {
+                    $encrypted_key = ! empty( $mm_settings['openai_api_key'] ) ? $mm_settings['openai_api_key'] : '';
+                }
+
+                // Decrypt API key (same logic as StifliFlexMcp_Client_Admin)
+                $api_key = '';
+                if ( ! empty( $encrypted_key ) ) {
+                    if ( class_exists( 'StifliFlexMcp_Client_Admin' ) ) {
+                        $api_key = StifliFlexMcp_Client_Admin::decrypt_value( $encrypted_key );
+                    } else {
+                        $api_key = $encrypted_key; // fallback: may already be plain
+                    }
+                }
+                if ( empty( $api_key ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: ERROR - no API key configured for provider=' . $provider);
+                    $r['error'] = array( 'code' => -32603, 'message' => 'No AI API key configured. Go to StifLi Flex MCP > Multimedia Settings to set one.' );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_image: API key resolved (length=' . strlen( $api_key ) . ')');
+
+                $image_binary = false;
+                $mime_type    = 'image/png';
+                $gen_error    = '';
+
+                if ( $provider === 'gemini' ) {
+                    // --- Gemini image generation ---
+                    $gemini_model = ! empty( $mm_settings['gemini_model'] ) ? $mm_settings['gemini_model'] : 'gemini-2.5-flash-image';
+                    $default_ratio = ! empty( $mm_settings['gemini_aspect_ratio'] ) ? $mm_settings['gemini_aspect_ratio'] : '1:1';
+                    // Map size to Gemini aspect ratio
+                    $aspect_map = array(
+                        'square'    => '1:1',
+                        'landscape' => '16:9',
+                        'portrait'  => '9:16',
+                        'wide'      => '21:9',
+                    );
+                    $valid_ratios = array( '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9' );
+                    $aspect_ratio = isset( $aspect_map[ $img_size ] ) ? $aspect_map[ $img_size ] : ( in_array( $img_size, $valid_ratios, true ) ? $img_size : $default_ratio );
+
+                    // Imagen models use a different API (generateImages) vs Gemini flash (generateContent)
+                    $is_imagen = ( strpos( $gemini_model, 'imagen' ) === 0 );
+                    stifli_flex_mcp_log('wp_generate_image: Gemini model=' . $gemini_model . ' is_imagen=' . ( $is_imagen ? 'yes' : 'no' ) . ' aspect_ratio=' . $aspect_ratio);
+
+                    if ( $is_imagen ) {
+                        // --- Imagen 4 API ---
+                        $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $gemini_model . ':generateImages?key=' . $api_key;
+                        stifli_flex_mcp_log('wp_generate_image: Calling Imagen API...');
+                        $body    = array(
+                            'prompt' => $prompt,
+                            'config' => array(
+                                'numberOfImages' => 1,
+                                'aspectRatio'    => $aspect_ratio,
+                                'outputOptions'  => array(
+                                    'mimeType' => 'image/png',
+                                ),
+                            ),
+                        );
+                        $resp = wp_remote_post( $api_url, array(
+                            'headers' => array( 'Content-Type' => 'application/json' ),
+                            'body'    => wp_json_encode( $body ),
+                            'timeout' => 120,
+                        ) );
+                        if ( is_wp_error( $resp ) ) {
+                            $gen_error = 'Imagen API error: ' . $resp->get_error_message();
+                            stifli_flex_mcp_log('wp_generate_image: Imagen WP error: ' . $gen_error);
+                        } else {
+                            $http_code = wp_remote_retrieve_response_code( $resp );
+                            $resp_body = json_decode( wp_remote_retrieve_body( $resp ), true );
+                            stifli_flex_mcp_log('wp_generate_image: Imagen response HTTP ' . $http_code);
+                            if ( 200 !== $http_code ) {
+                                $gen_error = 'Imagen API error (HTTP ' . $http_code . '): ' . ( isset( $resp_body['error']['message'] ) ? $resp_body['error']['message'] : 'Unknown error' );
+                                stifli_flex_mcp_log('wp_generate_image: ' . $gen_error);
+                            } else {
+                                $b64_data = '';
+                                if ( isset( $resp_body['generatedImages'][0]['image']['imageBytes'] ) ) {
+                                    $b64_data  = $resp_body['generatedImages'][0]['image']['imageBytes'];
+                                    $mime_type = 'image/png';
+                                }
+                                if ( empty( $b64_data ) ) {
+                                    $gen_error = 'Imagen returned no image data.';
+                                } else {
+                                    // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated image binary.
+                                    $image_binary = base64_decode( $b64_data );
+                                    if ( false === $image_binary ) {
+                                        $gen_error    = 'Failed to decode Imagen base64 image data.';
+                                        $image_binary = false;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // --- Gemini Flash generateContent API ---
+                        $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $gemini_model . ':generateContent?key=' . $api_key;
+                        stifli_flex_mcp_log('wp_generate_image: Calling Gemini generateContent API...');
+                    $body    = array(
+                        'contents' => array(
+                            array(
+                                'parts' => array(
+                                    array( 'text' => $prompt ),
+                                ),
+                            ),
+                        ),
+                        'generationConfig' => array(
+                            'responseModalities' => array( 'IMAGE', 'TEXT' ),
+                            'imageConfig' => array(
+                                'aspectRatio' => $aspect_ratio,
+                            ),
+                        ),
+                    );
+                    $resp = wp_remote_post( $api_url, array(
+                        'headers' => array( 'Content-Type' => 'application/json' ),
+                        'body'    => wp_json_encode( $body ),
+                        'timeout' => 120,
+                    ) );
+                    if ( is_wp_error( $resp ) ) {
+                        $gen_error = 'Gemini API error: ' . $resp->get_error_message();
+                        stifli_flex_mcp_log('wp_generate_image: Gemini WP error: ' . $gen_error);
+                    } else {
+                        $http_code = wp_remote_retrieve_response_code( $resp );
+                        $resp_body = json_decode( wp_remote_retrieve_body( $resp ), true );
+                        stifli_flex_mcp_log('wp_generate_image: Gemini response HTTP ' . $http_code);
+                        if ( 200 !== $http_code ) {
+                            $gen_error = 'Gemini API error (HTTP ' . $http_code . '): ' . ( isset( $resp_body['error']['message'] ) ? $resp_body['error']['message'] : 'Unknown error' );
+                            stifli_flex_mcp_log('wp_generate_image: ' . $gen_error);
+                        } else {
+                            // Extract image from response
+                            $parts_arr = isset( $resp_body['candidates'][0]['content']['parts'] ) ? $resp_body['candidates'][0]['content']['parts'] : array();
+                            $b64_data  = '';
+                            foreach ( $parts_arr as $part ) {
+                                if ( isset( $part['inlineData']['data'] ) ) {
+                                    $b64_data  = $part['inlineData']['data'];
+                                    $mime_type = isset( $part['inlineData']['mimeType'] ) ? $part['inlineData']['mimeType'] : 'image/png';
+                                    break;
+                                } elseif ( isset( $part['inline_data']['data'] ) ) {
+                                    $b64_data  = $part['inline_data']['data'];
+                                    $mime_type = isset( $part['inline_data']['mime_type'] ) ? $part['inline_data']['mime_type'] : 'image/png';
+                                    break;
+                                }
+                            }
+                            if ( empty( $b64_data ) ) {
+                                $finish = isset( $resp_body['candidates'][0]['finishReason'] ) ? $resp_body['candidates'][0]['finishReason'] : 'UNKNOWN';
+                                if ( in_array( $finish, array( 'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT' ), true ) ) {
+                                    $gen_error = 'Gemini blocked image generation due to safety filters (reason: ' . $finish . ').';
+                                } else {
+                                    // Retry once with reinforced prompt
+                                    $retry_prompt = 'Generate an image based on this description (you MUST return an image, not text): ' . $prompt;
+                                    $body['contents'][0]['parts'][0]['text'] = $retry_prompt;
+                                    $resp2 = wp_remote_post( $api_url, array(
+                                        'headers' => array( 'Content-Type' => 'application/json' ),
+                                        'body'    => wp_json_encode( $body ),
+                                        'timeout' => 120,
+                                    ) );
+                                    if ( ! is_wp_error( $resp2 ) && 200 === wp_remote_retrieve_response_code( $resp2 ) ) {
+                                        $resp_body2 = json_decode( wp_remote_retrieve_body( $resp2 ), true );
+                                        $parts2     = isset( $resp_body2['candidates'][0]['content']['parts'] ) ? $resp_body2['candidates'][0]['content']['parts'] : array();
+                                        foreach ( $parts2 as $part ) {
+                                            if ( isset( $part['inlineData']['data'] ) ) {
+                                                $b64_data  = $part['inlineData']['data'];
+                                                $mime_type = isset( $part['inlineData']['mimeType'] ) ? $part['inlineData']['mimeType'] : 'image/png';
+                                                break;
+                                            } elseif ( isset( $part['inline_data']['data'] ) ) {
+                                                $b64_data  = $part['inline_data']['data'];
+                                                $mime_type = isset( $part['inline_data']['mime_type'] ) ? $part['inline_data']['mime_type'] : 'image/png';
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if ( empty( $b64_data ) ) {
+                                        $gen_error = 'Gemini returned no image data after retry (finishReason: ' . $finish . ').';
+                                    }
+                                }
+                            }
+                            if ( ! empty( $b64_data ) ) {
+                                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated image binary.
+                                $image_binary = base64_decode( $b64_data );
+                                if ( false === $image_binary ) {
+                                    $gen_error = 'Failed to decode Gemini base64 image data.';
+                                    $image_binary = false;
+                                }
+                            }
+                        }
+                    }
+                    } // end Gemini flash else
+                } else {
+                    // --- OpenAI image generation (configurable model with dall-e-3 fallback) ---
+                    stifli_flex_mcp_log('wp_generate_image: Using OpenAI provider');
+                    $oai_model      = ! empty( $mm_settings['openai_model'] ) ? $mm_settings['openai_model'] : 'gpt-image-1';
+                    $default_size   = ! empty( $mm_settings['openai_size'] ) ? $mm_settings['openai_size'] : 'square';
+                    $default_qual   = ! empty( $mm_settings['openai_quality'] ) ? $mm_settings['openai_quality'] : 'medium';
+                    $oai_style      = ! empty( $mm_settings['openai_style'] ) ? $mm_settings['openai_style'] : 'natural';
+                    $oai_bg         = ! empty( $mm_settings['openai_background'] ) ? $mm_settings['openai_background'] : 'auto';
+                    $oai_out_format = ! empty( $mm_settings['openai_output_format'] ) ? $mm_settings['openai_output_format'] : 'png';
+
+                    // Use tool arg if provided, otherwise use settings default
+                    $effective_size    = ( $img_size !== 'square' || ! empty( $args['size'] ) ) ? $img_size : $default_size;
+                    $effective_quality = ( $img_quality !== 'medium' || ! empty( $args['quality'] ) ) ? $img_quality : $default_qual;
+
+                    $size_map = array(
+                        'square'    => '1024x1024',
+                        'landscape' => '1536x1024',
+                        'portrait'  => '1024x1536',
+                    );
+                    $oai_size = isset( $size_map[ $effective_size ] ) ? $size_map[ $effective_size ] : '1024x1024';
+
+                    $quality_map = array(
+                        'low'      => 'low',
+                        'medium'   => 'medium',
+                        'high'     => 'high',
+                        'standard' => 'medium',
+                        'hd'       => 'high',
+                    );
+                    $oai_quality = isset( $quality_map[ $effective_quality ] ) ? $quality_map[ $effective_quality ] : 'medium';
+
+                    $oai_body = array(
+                        'prompt'  => $prompt,
+                        'n'       => 1,
+                        'size'    => $oai_size,
+                        'model'   => $oai_model,
+                        'quality' => $oai_quality,
+                    );
+
+                    // Add model-specific parameters
+                    if ( $oai_model === 'gpt-image-1' ) {
+                        $oai_body['output_format'] = $oai_out_format;
+                        if ( $oai_bg !== 'auto' ) {
+                            $oai_body['background'] = $oai_bg;
+                        }
+                    } elseif ( $oai_model === 'dall-e-3' ) {
+                        $oai_body['style'] = $oai_style;
+                        // DALL-E 3 only supports specific sizes
+                        $dalle3_sizes = array( '1024x1024', '1792x1024', '1024x1792' );
+                        if ( ! in_array( $oai_size, $dalle3_sizes, true ) ) {
+                            $dalle3_remap = array( '1536x1024' => '1792x1024', '1024x1536' => '1024x1792' );
+                            $oai_body['size'] = isset( $dalle3_remap[ $oai_size ] ) ? $dalle3_remap[ $oai_size ] : '1024x1024';
+                        }
+                        // DALL-E 3 uses standard/hd quality
+                        $dalle3_qual = array( 'high' => 'hd', 'medium' => 'standard', 'low' => 'standard' );
+                        $oai_body['quality'] = isset( $dalle3_qual[ $oai_quality ] ) ? $dalle3_qual[ $oai_quality ] : 'standard';
+                    }
+                    stifli_flex_mcp_log('wp_generate_image: OpenAI model=' . $oai_body['model'] . ' size=' . $oai_body['size'] . ' quality=' . $oai_body['quality']);
+                    $oai_resp = wp_remote_post( 'https://api.openai.com/v1/images/generations', array(
+                        'headers' => array(
+                            'Authorization' => 'Bearer ' . $api_key,
+                            'Content-Type'  => 'application/json',
+                        ),
+                        'body'    => wp_json_encode( $oai_body ),
+                        'timeout' => 120,
+                    ) );
+
+                    $oai_ok   = false;
+                    $oai_data = array();
+                    if ( is_wp_error( $oai_resp ) ) {
+                        $gen_error = 'OpenAI API error: ' . $oai_resp->get_error_message();
+                        stifli_flex_mcp_log('wp_generate_image: OpenAI WP error: ' . $gen_error);
+                    } else {
+                        $oai_http = wp_remote_retrieve_response_code( $oai_resp );
+                        $oai_json = json_decode( wp_remote_retrieve_body( $oai_resp ), true );
+
+                        // Fallback to DALL-E 3 if gpt-image-1 requires verification
+                        $must_verify = ( 403 === $oai_http )
+                            && isset( $oai_json['error']['message'] )
+                            && stripos( $oai_json['error']['message'], 'must be verified' ) !== false;
+
+                        if ( $must_verify && $oai_model !== 'dall-e-3' ) {
+                            $dalle3_size_map = array(
+                                '1536x1024' => '1792x1024',
+                                '1024x1536' => '1024x1792',
+                                '1024x1024' => '1024x1024',
+                            );
+                            $dalle3_quality_map = array(
+                                'high'   => 'hd',
+                                'medium' => 'standard',
+                                'low'    => 'standard',
+                            );
+                            $oai_body['model']   = 'dall-e-3';
+                            $oai_body['size']    = isset( $dalle3_size_map[ $oai_size ] ) ? $dalle3_size_map[ $oai_size ] : '1024x1024';
+                            $oai_body['quality'] = isset( $dalle3_quality_map[ $oai_quality ] ) ? $dalle3_quality_map[ $oai_quality ] : 'standard';
+                            $oai_body['style']   = $oai_style;
+                            unset( $oai_body['output_format'], $oai_body['background'] );
+
+                            $oai_resp = wp_remote_post( 'https://api.openai.com/v1/images/generations', array(
+                                'headers' => array(
+                                    'Authorization' => 'Bearer ' . $api_key,
+                                    'Content-Type'  => 'application/json',
+                                ),
+                                'body'    => wp_json_encode( $oai_body ),
+                                'timeout' => 120,
+                            ) );
+                            if ( ! is_wp_error( $oai_resp ) ) {
+                                $oai_http = wp_remote_retrieve_response_code( $oai_resp );
+                                $oai_json = json_decode( wp_remote_retrieve_body( $oai_resp ), true );
+                            } else {
+                                $gen_error = 'OpenAI DALL-E 3 fallback error: ' . $oai_resp->get_error_message();
+                            }
+                        }
+
+                        if ( empty( $gen_error ) ) {
+                            if ( 200 !== $oai_http || ! is_array( $oai_json ) ) {
+                                $err_msg = isset( $oai_json['error']['message'] ) ? $oai_json['error']['message'] : 'Unknown error';
+                                $gen_error = 'OpenAI API error (HTTP ' . $oai_http . '): ' . $err_msg;
+                            } else {
+                                $oai_data = isset( $oai_json['data'][0] ) ? $oai_json['data'][0] : array();
+                                $oai_ok   = true;
+                            }
+                        }
+                    }
+
+                    if ( $oai_ok ) {
+                        if ( ! empty( $oai_data['b64_json'] ) ) {
+                            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated image binary.
+                            $image_binary = base64_decode( $oai_data['b64_json'] );
+                            $mime_type    = 'image/png';
+                        } elseif ( ! empty( $oai_data['url'] ) ) {
+                            // DALL-E 3 returns a URL — download it
+                            $dl = wp_remote_get( $oai_data['url'], array( 'timeout' => 60 ) );
+                            if ( ! is_wp_error( $dl ) && 200 === wp_remote_retrieve_response_code( $dl ) ) {
+                                $image_binary = wp_remote_retrieve_body( $dl );
+                                $ct = wp_remote_retrieve_header( $dl, 'content-type' );
+                                if ( stripos( $ct, 'jpeg' ) !== false || stripos( $ct, 'jpg' ) !== false ) {
+                                    $mime_type = 'image/jpeg';
+                                } elseif ( stripos( $ct, 'webp' ) !== false ) {
+                                    $mime_type = 'image/webp';
+                                } else {
+                                    $mime_type = 'image/png';
+                                }
+                            } else {
+                                $gen_error = 'Failed to download generated image from OpenAI.';
+                            }
+                        } else {
+                            $gen_error = 'OpenAI response contained no image data (no b64_json or url).';
+                        }
+                    }
+                }
+
+                // Handle generation error
+                if ( false === $image_binary || empty( $image_binary ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: FAILED - ' . ( $gen_error ? $gen_error : 'unknown error' ));
+                    $r['error'] = array( 'code' => -32603, 'message' => $gen_error ? $gen_error : 'Image generation failed.' );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_image: Image binary received, size=' . strlen( $image_binary ) . ' bytes, mime=' . $mime_type);
+
+                // Save as WordPress media attachment
+                if ( ! function_exists( 'wp_upload_dir' ) ) {
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                }
+                if ( ! function_exists( 'media_handle_sideload' ) ) {
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                }
+
+                $ext_map  = array( 'image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp' );
+                $ext      = isset( $ext_map[ $mime_type ] ) ? $ext_map[ $mime_type ] : 'png';
+                $filename = 'ai-generated-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 6, false ) . '.' . $ext;
+
+                $upload_dir = wp_upload_dir();
+                $temp_file  = $upload_dir['path'] . '/' . wp_unique_filename( $upload_dir['path'], $filename );
+
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- writing temp binary from AI API to create media attachment.
+                if ( file_put_contents( $temp_file, $image_binary ) === false ) {
+                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to write image file' );
+                    break;
+                }
+
+                $file_array = array(
+                    'name'     => $filename,
+                    'tmp_name' => $temp_file,
+                );
+                $att_id = media_handle_sideload( $file_array, $img_post_id );
+
+                if ( is_wp_error( $att_id ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: Sideload error: ' . $att_id->get_error_message());
+                    wp_delete_file( $temp_file );
+                    $r['error'] = array( 'code' => 'upload_error', 'message' => $att_id->get_error_message() );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_image: Saved as attachment ID=' . $att_id);
+
+                // ── Post-processing: resize/compress if enabled ──
+                $pp_enabled = ! empty( $mm_settings['pp_enabled'] ) && '1' === $mm_settings['pp_enabled'];
+                if ( $pp_enabled ) {
+                    $att_file = get_attached_file( $att_id );
+                    if ( $att_file && file_exists( $att_file ) ) {
+                        $pp_max_w  = isset( $mm_settings['pp_max_width'] ) ? intval( $mm_settings['pp_max_width'] ) : 0;
+                        $pp_max_h  = isset( $mm_settings['pp_max_height'] ) ? intval( $mm_settings['pp_max_height'] ) : 0;
+                        $pp_qual   = isset( $mm_settings['pp_quality'] ) ? intval( $mm_settings['pp_quality'] ) : 82;
+                        $pp_format = ! empty( $mm_settings['pp_format'] ) ? $mm_settings['pp_format'] : 'original';
+
+                        $editor = wp_get_image_editor( $att_file );
+                        if ( ! is_wp_error( $editor ) ) {
+                            $editor->set_quality( $pp_qual );
+
+                            // Resize if limits are set
+                            if ( $pp_max_w > 0 || $pp_max_h > 0 ) {
+                                $cur_size = $editor->get_size();
+                                $needs_resize = false;
+                                if ( $pp_max_w > 0 && $cur_size['width'] > $pp_max_w ) {
+                                    $needs_resize = true;
+                                }
+                                if ( $pp_max_h > 0 && $cur_size['height'] > $pp_max_h ) {
+                                    $needs_resize = true;
+                                }
+                                if ( $needs_resize ) {
+                                    $editor->resize( $pp_max_w > 0 ? $pp_max_w : null, $pp_max_h > 0 ? $pp_max_h : null );
+                                }
+                            }
+
+                            // Determine save path/format
+                            $save_mime = null;
+                            if ( 'original' !== $pp_format ) {
+                                $format_mime_map = array( 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'png' => 'image/png' );
+                                $save_mime = isset( $format_mime_map[ $pp_format ] ) ? $format_mime_map[ $pp_format ] : null;
+                            }
+
+                            if ( $save_mime && $save_mime !== $mime_type ) {
+                                // Convert format: save new file and update attachment
+                                $new_ext  = ( 'image/jpeg' === $save_mime ) ? 'jpg' : ( ( 'image/webp' === $save_mime ) ? 'webp' : 'png' );
+                                $new_name = pathinfo( $att_file, PATHINFO_FILENAME ) . '.' . $new_ext;
+                                $new_path = pathinfo( $att_file, PATHINFO_DIRNAME ) . '/' . $new_name;
+                                $saved    = $editor->save( $new_path, $save_mime );
+                                if ( ! is_wp_error( $saved ) ) {
+                                    // Remove old file and update attachment
+                                    wp_delete_file( $att_file );
+                                    update_attached_file( $att_id, $saved['path'] );
+                                    $mime_type = $save_mime;
+                                    wp_update_post( array( 'ID' => $att_id, 'post_mime_type' => $save_mime ) );
+                                    // Regenerate metadata for the new file
+                                    if ( function_exists( 'wp_generate_attachment_metadata' ) ) {
+                                        $meta = wp_generate_attachment_metadata( $att_id, $saved['path'] );
+                                        wp_update_attachment_metadata( $att_id, $meta );
+                                    }
+                                }
+                            } else {
+                                // Same format: overwrite in place
+                                $saved = $editor->save( $att_file );
+                                if ( ! is_wp_error( $saved ) && function_exists( 'wp_generate_attachment_metadata' ) ) {
+                                    $meta = wp_generate_attachment_metadata( $att_id, $saved['path'] );
+                                    wp_update_attachment_metadata( $att_id, $meta );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Set alt text and title
+                if ( $img_alt ) {
+                    update_post_meta( $att_id, '_wp_attachment_image_alt', $img_alt );
+                }
+                if ( $img_title ) {
+                    wp_update_post( array( 'ID' => $att_id, 'post_title' => $img_title ) );
+                }
+
+                $att_url    = wp_get_attachment_url( $att_id );
+                $medium_url = '';
+                $medium_arr = wp_get_attachment_image_src( $att_id, 'medium' );
+                if ( $medium_arr ) {
+                    $medium_url = $medium_arr[0];
+                }
+
+                $result_data = array(
+                    'attachment_id'  => $att_id,
+                    'url'            => $att_url,
+                    'medium_url'     => $medium_url ? $medium_url : $att_url,
+                    'provider'       => $provider,
+                    'model'          => $provider === 'gemini' ? ( isset( $gemini_model ) ? $gemini_model : 'gemini' ) : ( isset( $oai_body['model'] ) ? $oai_body['model'] : 'openai' ),
+                    'post_processed' => $pp_enabled,
+                    'prompt'         => $prompt,
+                );
+                stifli_flex_mcp_log('wp_generate_image: === SUCCESS === attachment_id=' . $att_id . ' url=' . $att_url . ' provider=' . $provider . ' post_processed=' . ( $pp_enabled ? 'yes' : 'no' ));
+                $addResultText( $r, wp_json_encode( $result_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+
+                // Also add an image content block for MCP clients that support it
+                $r['result']['content'][] = array(
+                    'type'     => 'image',
+                    'data'     => $medium_url ? $medium_url : $att_url,
+                    'mimeType' => $mime_type,
+                );
+                stifli_flex_mcp_log('wp_generate_image: === END ===');
+                break;
+
+            case 'wp_generate_video':
+                stifli_flex_mcp_log('wp_generate_video: === START ===');
+                // Ensure PHP doesn't kill us during long generation + polling.
+                // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, Squiz.PHP.DiscouragedFunctions.Discouraged -- set_time_limit required for video generation (60-300s).
+                @set_time_limit( 0 );
+                ignore_user_abort( true );
+                $vid_prompt = sanitize_text_field( $utils::getArrayValue( $args, 'prompt', '' ) );
+                if ( empty( $vid_prompt ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: ERROR - prompt is empty');
+                    $r['error'] = array( 'code' => -42602, 'message' => 'prompt required' );
+                    break;
+                }
+                if ( ! current_user_can( 'upload_files' ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: ERROR - user lacks upload_files capability');
+                    $r['error'] = array( 'code' => 'permission_denied', 'message' => 'Insufficient permissions to upload files' );
+                    break;
+                }
+
+                // Load multimedia settings
+                $vid_mm      = get_option( 'sflmcp_multimedia_settings', array() );
+                $vid_provider = ! empty( $vid_mm['video_provider'] ) ? $vid_mm['video_provider'] : 'gemini';
+                $vid_duration = sanitize_text_field( $utils::getArrayValue( $args, 'duration', '' ) );
+                if ( empty( $vid_duration ) ) {
+                    $vid_duration = ! empty( $vid_mm['video_duration'] ) ? $vid_mm['video_duration'] : '5';
+                }
+                $vid_aspect = sanitize_text_field( $utils::getArrayValue( $args, 'aspect_ratio', '' ) );
+                if ( empty( $vid_aspect ) ) {
+                    $vid_aspect = ! empty( $vid_mm['video_aspect_ratio'] ) ? $vid_mm['video_aspect_ratio'] : '16:9';
+                }
+                $vid_title   = sanitize_text_field( $utils::getArrayValue( $args, 'title', '' ) );
+                $vid_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $vid_poll    = intval( ! empty( $vid_mm['video_poll_interval'] ) ? $vid_mm['video_poll_interval'] : 10 );
+                $vid_max_wait = intval( ! empty( $vid_mm['video_max_wait'] ) ? $vid_mm['video_max_wait'] : 300 );
+                stifli_flex_mcp_log('wp_generate_video: prompt="' . substr( $vid_prompt, 0, 120 ) . '" provider=' . $vid_provider . ' duration=' . $vid_duration . 's aspect=' . $vid_aspect . ' poll=' . $vid_poll . 's max_wait=' . $vid_max_wait . 's');
+
+                // ── Resolve optional reference images (source frame + end frame) ──
+                $vid_image_url     = sanitize_text_field( $utils::getArrayValue( $args, 'image_url', '' ) );
+                $vid_image_end_url = sanitize_text_field( $utils::getArrayValue( $args, 'image_end_url', '' ) );
+
+                /**
+                 * Helper: resolve an image reference to base64 + mime.
+                 * Accepts a URL (http/https) or a numeric WP attachment ID.
+                 * Returns array('data' => base64_string, 'mime' => 'image/jpeg') or null on failure.
+                 */
+                $resolveImageToBase64 = function ( $ref ) {
+                    if ( empty( $ref ) ) {
+                        return null;
+                    }
+                    $binary  = false;
+                    $img_mime = 'image/jpeg';
+
+                    if ( is_numeric( $ref ) ) {
+                        // WordPress attachment ID
+                        $file = get_attached_file( intval( $ref ) );
+                        if ( $file && file_exists( $file ) ) {
+                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local WP attachment for API upload.
+                            $binary  = file_get_contents( $file );
+                            $img_mime = wp_check_filetype( $file )['type'] ?: 'image/jpeg';
+                        }
+                    } elseif ( filter_var( $ref, FILTER_VALIDATE_URL ) ) {
+                        // External URL
+                        $dl = wp_remote_get( $ref, array( 'timeout' => 30 ) );
+                        if ( ! is_wp_error( $dl ) && 200 === wp_remote_retrieve_response_code( $dl ) ) {
+                            $binary  = wp_remote_retrieve_body( $dl );
+                            $ct      = wp_remote_retrieve_header( $dl, 'content-type' );
+                            if ( stripos( $ct, 'png' ) !== false ) {
+                                $img_mime = 'image/png';
+                            } elseif ( stripos( $ct, 'webp' ) !== false ) {
+                                $img_mime = 'image/webp';
+                            }
+                        }
+                    }
+                    if ( false === $binary || empty( $binary ) ) {
+                        return null;
+                    }
+                    // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding image for AI API.
+                    return array( 'data' => base64_encode( $binary ), 'mime' => $img_mime );
+                };
+
+                $vid_src_image = $resolveImageToBase64( $vid_image_url );
+                $vid_end_image = $resolveImageToBase64( $vid_image_end_url );
+                if ( $vid_src_image ) {
+                    stifli_flex_mcp_log('wp_generate_video: Source image resolved, mime=' . $vid_src_image['mime'] . ' base64_len=' . strlen( $vid_src_image['data'] ));
+                }
+                if ( $vid_end_image ) {
+                    stifli_flex_mcp_log('wp_generate_video: End image resolved, mime=' . $vid_end_image['mime'] . ' base64_len=' . strlen( $vid_end_image['data'] ));
+                }
+
+                // Resolve API key — shared key from multimedia settings (no separate video keys)
+                $vid_encrypted_key = '';
+                if ( 'gemini' === $vid_provider ) {
+                    $vid_encrypted_key = ! empty( $vid_mm['gemini_api_key'] ) ? $vid_mm['gemini_api_key'] : '';
+                } else {
+                    $vid_encrypted_key = ! empty( $vid_mm['openai_api_key'] ) ? $vid_mm['openai_api_key'] : '';
+                }
+                $vid_api_key = '';
+                if ( ! empty( $vid_encrypted_key ) ) {
+                    if ( class_exists( 'StifliFlexMcp_Client_Admin' ) ) {
+                        $vid_api_key = StifliFlexMcp_Client_Admin::decrypt_value( $vid_encrypted_key );
+                    } else {
+                        $vid_api_key = $vid_encrypted_key;
+                    }
+                }
+                if ( empty( $vid_api_key ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: ERROR - no API key configured for provider=' . $vid_provider);
+                    $r['error'] = array( 'code' => -32603, 'message' => 'No video AI API key configured. Go to StifLi Flex MCP > Multimedia > Videos to set one.' );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_video: API key resolved (length=' . strlen( $vid_api_key ) . ')');
+
+                $vid_binary   = false;
+                $vid_mime     = 'video/mp4';
+                $vid_gen_err  = '';
+                $vid_model_used = '';
+
+                if ( 'gemini' === $vid_provider ) {
+                    // ── Google Veo video generation ──
+                    $vid_gem_model = ! empty( $vid_mm['video_gemini_model'] ) ? $vid_mm['video_gemini_model'] : 'veo-3.0-generate-preview';
+                    $vid_model_used = $vid_gem_model;
+                    stifli_flex_mcp_log('wp_generate_video: Using Veo model=' . $vid_gem_model . ' src_image=' . ( $vid_src_image ? 'yes' : 'no' ) . ' end_image=' . ( $vid_end_image ? 'yes' : 'no' ));
+
+                    // Step 1: Submit generation request
+                    $veo_api_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $vid_gem_model . ':predictLongRunning?key=' . $vid_api_key;
+                    stifli_flex_mcp_log('wp_generate_video: Submitting Veo generation request...');
+
+                    // Build the instance object — add reference images when provided
+                    $veo_instance = array( 'prompt' => $vid_prompt );
+                    if ( $vid_src_image ) {
+                        $veo_instance['image'] = array(
+                            'bytesBase64Encoded' => $vid_src_image['data'],
+                            'mimeType'           => $vid_src_image['mime'],
+                        );
+                    }
+                    // End-frame for interpolation (Veo only)
+                    if ( $vid_end_image ) {
+                        $veo_instance['endImage'] = array(
+                            'bytesBase64Encoded' => $vid_end_image['data'],
+                            'mimeType'           => $vid_end_image['mime'],
+                        );
+                    }
+
+                    $veo_params = array(
+                        'aspectRatio'     => $vid_aspect,
+                        'durationSeconds' => intval( $vid_duration ),
+                    );
+                    // personGeneration is not supported when using image input
+                    if ( empty( $vid_src_image ) && empty( $vid_end_image ) ) {
+                        $veo_params['personGeneration'] = 'allow_all';
+                    }
+
+                    $veo_body = array(
+                        'instances'  => array( $veo_instance ),
+                        'parameters' => $veo_params,
+                    );
+                    $veo_resp = wp_remote_post( $veo_api_url, array(
+                        'headers' => array( 'Content-Type' => 'application/json' ),
+                        'body'    => wp_json_encode( $veo_body ),
+                        'timeout' => 60,
+                    ) );
+                    if ( is_wp_error( $veo_resp ) ) {
+                        $vid_gen_err = 'Veo API error: ' . $veo_resp->get_error_message();
+                        stifli_flex_mcp_log('wp_generate_video: Veo WP error: ' . $vid_gen_err);
+                    } else {
+                        $veo_http = wp_remote_retrieve_response_code( $veo_resp );
+                        $veo_json = json_decode( wp_remote_retrieve_body( $veo_resp ), true );
+                        stifli_flex_mcp_log('wp_generate_video: Veo submit response HTTP ' . $veo_http);
+                        if ( 200 !== $veo_http ) {
+                            $vid_gen_err = 'Veo API error (HTTP ' . $veo_http . '): ' . ( isset( $veo_json['error']['message'] ) ? $veo_json['error']['message'] : wp_remote_retrieve_body( $veo_resp ) );
+                            stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                        } else {
+                            // Extract operation name for polling
+                            $veo_op_name = isset( $veo_json['name'] ) ? $veo_json['name'] : '';
+                            if ( empty( $veo_op_name ) ) {
+                                $vid_gen_err = 'Veo did not return an operation name. Response: ' . wp_json_encode( $veo_json );
+                                stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                            } else {
+                                stifli_flex_mcp_log('wp_generate_video: Veo operation started: ' . $veo_op_name);
+                            }
+                        }
+                    }
+
+                    // Step 2: Poll for completion
+                    if ( empty( $vid_gen_err ) && ! empty( $veo_op_name ) ) {
+                        $veo_poll_url = 'https://generativelanguage.googleapis.com/v1beta/' . $veo_op_name . '?key=' . $vid_api_key;
+                        $veo_elapsed  = 0;
+                        $veo_done     = false;
+                        $veo_result   = null;
+                        stifli_flex_mcp_log('wp_generate_video: Starting Veo poll loop (interval=' . $vid_poll . 's, max=' . $vid_max_wait . 's)');
+
+                        while ( $veo_elapsed < $vid_max_wait ) {
+                            // phpcs:ignore WordPress.WP.AlternativeFunctions.sleep_sleep -- async poll wait for video generation.
+                            sleep( $vid_poll );
+                            $veo_elapsed += $vid_poll;
+
+                            $poll_resp = wp_remote_get( $veo_poll_url, array( 'timeout' => 30 ) );
+                            if ( is_wp_error( $poll_resp ) ) {
+                                continue; // retry
+                            }
+                            $poll_http = wp_remote_retrieve_response_code( $poll_resp );
+                            $poll_json = json_decode( wp_remote_retrieve_body( $poll_resp ), true );
+
+                            if ( 200 !== $poll_http ) {
+                                continue; // retry
+                            }
+
+                            $veo_is_done = isset( $poll_json['done'] ) && true === $poll_json['done'];
+                            if ( $veo_is_done ) {
+                                // Check for errors
+                                if ( isset( $poll_json['error'] ) ) {
+                                    $vid_gen_err = 'Veo generation failed: ' . ( isset( $poll_json['error']['message'] ) ? $poll_json['error']['message'] : wp_json_encode( $poll_json['error'] ) );
+                                    stifli_flex_mcp_log('wp_generate_video: Veo operation error: ' . $vid_gen_err);
+                                } else {
+                                    $veo_result = $poll_json;
+                                    stifli_flex_mcp_log('wp_generate_video: Veo operation completed after ' . $veo_elapsed . 's');
+                                }
+                                $veo_done = true;
+                                break;
+                            } else {
+                                stifli_flex_mcp_log('wp_generate_video: Veo poll ' . $veo_elapsed . 's/' . $vid_max_wait . 's - still processing...');
+                            }
+                        }
+
+                        if ( ! $veo_done && empty( $vid_gen_err ) ) {
+                            $vid_gen_err = 'Veo video generation timed out after ' . $vid_max_wait . ' seconds. The video may still be processing. Operation: ' . $veo_op_name;
+                            stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                        }
+                    }
+
+                    // Step 3: Extract video data
+                    if ( empty( $vid_gen_err ) && $veo_result ) {
+                        $veo_videos = array();
+                        // Response structure varies: response.generateVideoResponse.generatedSamples[] OR response.generatedSamples[]
+                        if ( isset( $veo_result['response']['generateVideoResponse']['generatedSamples'] ) ) {
+                            $veo_videos = $veo_result['response']['generateVideoResponse']['generatedSamples'];
+                        } elseif ( isset( $veo_result['response']['generatedSamples'] ) ) {
+                            $veo_videos = $veo_result['response']['generatedSamples'];
+                        } elseif ( isset( $veo_result['response']['predictions'] ) ) {
+                            $veo_videos = $veo_result['response']['predictions'];
+                        }
+
+                        // Check RAI filters at either nesting level
+                        $veo_rai = array();
+                        if ( isset( $veo_result['response']['generateVideoResponse']['raiMediaFilteredReasons'] ) ) {
+                            $veo_rai = $veo_result['response']['generateVideoResponse']['raiMediaFilteredReasons'];
+                        } elseif ( isset( $veo_result['response']['raiMediaFilteredReasons'] ) ) {
+                            $veo_rai = $veo_result['response']['raiMediaFilteredReasons'];
+                        }
+
+                        if ( empty( $veo_videos ) ) {
+                            if ( ! empty( $veo_rai[0] ) ) {
+                                $vid_gen_err = 'Veo blocked video generation due to safety filters: ' . $veo_rai[0];
+                            } else {
+                                $vid_gen_err = 'Veo returned no video data. Response: ' . wp_json_encode( $veo_result );
+                            }
+                            stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                        } else {
+                            stifli_flex_mcp_log('wp_generate_video: Veo returned ' . count( $veo_videos ) . ' video sample(s)');
+                            $first_video = $veo_videos[0];
+                            // Try encodedVideo (base64) first, then URI
+                            if ( isset( $first_video['video']['encodedVideo'] ) ) {
+                                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated video binary.
+                                $vid_binary = base64_decode( $first_video['video']['encodedVideo'] );
+                                if ( false === $vid_binary ) {
+                                    $vid_gen_err = 'Failed to decode Veo base64 video data.';
+                                    $vid_binary  = false;
+                                }
+                            } elseif ( isset( $first_video['video']['uri'] ) ) {
+                                // Download from URI — append API key for authenticated access
+                                $veo_dl_url = $first_video['video']['uri'];
+                                $veo_dl_url .= ( strpos( $veo_dl_url, '?' ) !== false ? '&' : '?' ) . 'key=' . $vid_api_key;
+                                stifli_flex_mcp_log('wp_generate_video: Downloading Veo video from URI...');
+                                $vid_dl = wp_remote_get( $veo_dl_url, array( 'timeout' => 120 ) );
+                                if ( is_wp_error( $vid_dl ) ) {
+                                    $vid_gen_err = 'Failed to download Veo video: ' . $vid_dl->get_error_message();
+                                } elseif ( 200 !== wp_remote_retrieve_response_code( $vid_dl ) ) {
+                                    $vid_gen_err = 'Failed to download Veo video (HTTP ' . wp_remote_retrieve_response_code( $vid_dl ) . ')';
+                                } else {
+                                    $vid_binary = wp_remote_retrieve_body( $vid_dl );
+                                }
+                            } elseif ( isset( $first_video['encodedVideo'] ) ) {
+                                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated video binary.
+                                $vid_binary = base64_decode( $first_video['encodedVideo'] );
+                                if ( false === $vid_binary ) {
+                                    $vid_gen_err = 'Failed to decode Veo base64 video data.';
+                                    $vid_binary  = false;
+                                }
+                            } elseif ( isset( $first_video['bytesBase64Encoded'] ) ) {
+                                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated video binary.
+                                $vid_binary = base64_decode( $first_video['bytesBase64Encoded'] );
+                                if ( false === $vid_binary ) {
+                                    $vid_gen_err = 'Failed to decode Veo base64 video data.';
+                                    $vid_binary  = false;
+                                }
+                            } else {
+                                $vid_gen_err = 'Veo video sample has no recognized data field. Keys: ' . implode( ', ', array_keys( $first_video ) );
+                            }
+                        }
+                    }
+                } else {
+                    // ── OpenAI Sora video generation ──
+                    $vid_oai_model = ! empty( $vid_mm['video_openai_model'] ) ? $vid_mm['video_openai_model'] : 'sora-2';
+                    $vid_model_used = $vid_oai_model;
+                    stifli_flex_mcp_log('wp_generate_video: Using Sora model=' . $vid_oai_model . ' src_image=' . ( $vid_src_image ? 'yes' : 'no' ));
+
+                    // Map aspect ratio to Sora size format (only sizes supported by the API)
+                    $sora_size_map = array(
+                        '16:9' => '1280x720',
+                        '9:16' => '720x1280',
+                    );
+                    $sora_size = isset( $sora_size_map[ $vid_aspect ] ) ? $sora_size_map[ $vid_aspect ] : '1280x720';
+
+                    // Map duration to Sora allowed seconds: "4", "8", "12"
+                    $vid_dur_int    = intval( $vid_duration );
+                    $sora_seconds_allowed = array( 4, 8, 12 );
+                    $sora_seconds   = '8'; // default
+                    $best_diff      = PHP_INT_MAX;
+                    foreach ( $sora_seconds_allowed as $s_val ) {
+                        $diff = abs( $vid_dur_int - $s_val );
+                        if ( $diff < $best_diff ) {
+                            $best_diff = $diff;
+                            $sora_seconds = (string) $s_val;
+                        }
+                    }
+
+                    // Step 1: Submit generation request via multipart/form-data
+                    $boundary = 'sflmcp' . wp_generate_password( 16, false );
+                    $multipart_body = '';
+
+                    // Add text fields
+                    $sora_fields = array(
+                        'model'   => $vid_oai_model,
+                        'prompt'  => $vid_prompt,
+                        'seconds' => $sora_seconds,
+                        'size'    => $sora_size,
+                    );
+                    foreach ( $sora_fields as $fname => $fval ) {
+                        $multipart_body .= '--' . $boundary . "\r\n";
+                        $multipart_body .= 'Content-Disposition: form-data; name="' . $fname . '"' . "\r\n\r\n";
+                        $multipart_body .= $fval . "\r\n";
+                    }
+
+                    // Image reference (multipart file upload)
+                    if ( $vid_src_image ) {
+                        $img_ext_map  = array( 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp' );
+                        $img_ext      = isset( $img_ext_map[ $vid_src_image['mime'] ] ) ? $img_ext_map[ $vid_src_image['mime'] ] : 'jpg';
+                        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding previously encoded image for multipart upload.
+                        $img_binary   = base64_decode( $vid_src_image['data'] );
+
+                        // Sora requires input_reference to match requested width x height exactly.
+                        $sora_dims  = explode( 'x', $sora_size );
+                        $target_w   = intval( $sora_dims[0] );
+                        $target_h   = intval( $sora_dims[1] );
+                        $gd_src     = @imagecreatefromstring( $img_binary );
+                        if ( $gd_src ) {
+                            $orig_w = imagesx( $gd_src );
+                            $orig_h = imagesy( $gd_src );
+                            if ( $orig_w !== $target_w || $orig_h !== $target_h ) {
+                                stifli_flex_mcp_log( 'wp_generate_video: Resizing reference image from ' . $orig_w . 'x' . $orig_h . ' to ' . $target_w . 'x' . $target_h );
+                                $gd_dst = imagecreatetruecolor( $target_w, $target_h );
+                                // Preserve transparency for PNG.
+                                imagealphablending( $gd_dst, false );
+                                imagesavealpha( $gd_dst, true );
+                                imagecopyresampled( $gd_dst, $gd_src, 0, 0, 0, 0, $target_w, $target_h, $orig_w, $orig_h );
+                                imagedestroy( $gd_src );
+                                // Output as JPEG for smaller size and broader compatibility.
+                                ob_start();
+                                imagejpeg( $gd_dst, null, 90 );
+                                $img_binary = ob_get_clean();
+                                imagedestroy( $gd_dst );
+                                $img_ext = 'jpg';
+                                $vid_src_image['mime'] = 'image/jpeg';
+                                stifli_flex_mcp_log( 'wp_generate_video: Resized image size=' . strlen( $img_binary ) . ' bytes' );
+                            } else {
+                                imagedestroy( $gd_src );
+                            }
+                        }
+
+                        $multipart_body .= '--' . $boundary . "\r\n";
+                        $multipart_body .= 'Content-Disposition: form-data; name="input_reference"; filename="reference.' . $img_ext . '"' . "\r\n";
+                        $multipart_body .= 'Content-Type: ' . $vid_src_image['mime'] . "\r\n\r\n";
+                        $multipart_body .= $img_binary . "\r\n";
+                    }
+
+                    $multipart_body .= '--' . $boundary . '--' . "\r\n";
+
+                    stifli_flex_mcp_log('wp_generate_video: Submitting Sora generation request (model=' . $vid_oai_model . ', size=' . $sora_size . ', seconds=' . $sora_seconds . ', payload=' . strlen( $multipart_body ) . ' bytes)...');
+                    // Increase timeout for large payloads (e.g. image file uploads)
+                    $sora_submit_timeout = strlen( $multipart_body ) > 500000 ? 120 : 60;
+                    $sora_resp = wp_remote_post( 'https://api.openai.com/v1/videos', array(
+                        'headers' => array(
+                            'Authorization' => 'Bearer ' . $vid_api_key,
+                            'Content-Type'  => 'multipart/form-data; boundary=' . $boundary,
+                        ),
+                        'body'    => $multipart_body,
+                        'timeout' => $sora_submit_timeout,
+                    ) );
+                    $sora_gen_id = '';
+                    if ( is_wp_error( $sora_resp ) ) {
+                        $vid_gen_err = 'Sora API error: ' . $sora_resp->get_error_message();
+                        stifli_flex_mcp_log('wp_generate_video: Sora WP error: ' . $vid_gen_err);
+                    } else {
+                        $sora_http = wp_remote_retrieve_response_code( $sora_resp );
+                        $sora_json = json_decode( wp_remote_retrieve_body( $sora_resp ), true );
+                        stifli_flex_mcp_log('wp_generate_video: Sora submit response HTTP ' . $sora_http);
+                        if ( $sora_http < 200 || $sora_http >= 300 ) {
+                            $sora_err_msg = '';
+                            if ( isset( $sora_json['error']['message'] ) ) {
+                                $sora_err_msg = $sora_json['error']['message'];
+                            } elseif ( is_array( $sora_json ) ) {
+                                $sora_err_msg = wp_json_encode( $sora_json );
+                            } else {
+                                $sora_err_msg = wp_remote_retrieve_body( $sora_resp );
+                            }
+                            $vid_gen_err = 'Sora API error (HTTP ' . $sora_http . '): ' . $sora_err_msg;
+                            stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                        } else {
+                            $sora_gen_id = isset( $sora_json['id'] ) ? $sora_json['id'] : '';
+                            if ( empty( $sora_gen_id ) ) {
+                                $vid_gen_err = 'Sora did not return a video ID. Response: ' . wp_json_encode( $sora_json );
+                                stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                            } else {
+                                $sora_status = isset( $sora_json['status'] ) ? $sora_json['status'] : 'unknown';
+                                stifli_flex_mcp_log('wp_generate_video: Sora generation started: ID=' . $sora_gen_id . ' status=' . $sora_status);
+                            }
+                        }
+                    }
+
+                    // Step 2: Poll for completion via GET /v1/videos/{video_id}
+                    if ( empty( $vid_gen_err ) && ! empty( $sora_gen_id ) ) {
+                        $sora_poll_url = 'https://api.openai.com/v1/videos/' . $sora_gen_id;
+                        $sora_elapsed  = 0;
+                        $sora_done     = false;
+                        stifli_flex_mcp_log('wp_generate_video: Starting Sora poll loop (interval=' . $vid_poll . 's, max=' . $vid_max_wait . 's)');
+
+                        while ( $sora_elapsed < $vid_max_wait ) {
+                            // phpcs:ignore WordPress.WP.AlternativeFunctions.sleep_sleep -- async poll wait for video generation.
+                            sleep( $vid_poll );
+                            $sora_elapsed += $vid_poll;
+
+                            $spoll = wp_remote_get( $sora_poll_url, array(
+                                'headers' => array( 'Authorization' => 'Bearer ' . $vid_api_key ),
+                                'timeout' => 15,
+                            ) );
+                            if ( is_wp_error( $spoll ) ) {
+                                stifli_flex_mcp_log('wp_generate_video: Sora poll error at ' . $sora_elapsed . 's: ' . $spoll->get_error_message());
+                                continue;
+                            }
+                            $spoll_json = json_decode( wp_remote_retrieve_body( $spoll ), true );
+                            $spoll_status = isset( $spoll_json['status'] ) ? $spoll_json['status'] : '';
+                            $spoll_progress = isset( $spoll_json['progress'] ) ? $spoll_json['progress'] : 0;
+
+                            if ( 'completed' === $spoll_status ) {
+                                $sora_done = true;
+                                stifli_flex_mcp_log('wp_generate_video: Sora completed after ' . $sora_elapsed . 's');
+                                break;
+                            } elseif ( 'failed' === $spoll_status ) {
+                                $fail_reason = '';
+                                if ( isset( $spoll_json['error']['message'] ) ) {
+                                    $fail_reason = $spoll_json['error']['message'];
+                                } elseif ( isset( $spoll_json['failure_reason'] ) ) {
+                                    $fail_reason = $spoll_json['failure_reason'];
+                                } else {
+                                    $fail_reason = 'Unknown failure';
+                                }
+                                $vid_gen_err = 'Sora video generation failed: ' . $fail_reason;
+                                stifli_flex_mcp_log('wp_generate_video: Sora failed: ' . $vid_gen_err);
+                                $sora_done = true;
+                                break;
+                            }
+                            // status is 'in_progress' or 'queued'
+                            stifli_flex_mcp_log('wp_generate_video: Sora poll ' . $sora_elapsed . 's/' . $vid_max_wait . 's - status=' . $spoll_status . ' progress=' . $spoll_progress . '%');
+                        }
+
+                        if ( ! $sora_done && empty( $vid_gen_err ) ) {
+                            $vid_gen_err = 'Sora video generation timed out after ' . $vid_max_wait . ' seconds. Video ID: ' . $sora_gen_id;
+                            stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                        }
+                    }
+
+                    // Step 3: Download the video via GET /v1/videos/{video_id}/content
+                    if ( empty( $vid_gen_err ) && ! empty( $sora_gen_id ) && $sora_done ) {
+                        $sora_dl_url = 'https://api.openai.com/v1/videos/' . $sora_gen_id . '/content';
+                        stifli_flex_mcp_log('wp_generate_video: Downloading Sora video from content endpoint...');
+                        $vid_dl = wp_remote_get( $sora_dl_url, array(
+                            'headers' => array( 'Authorization' => 'Bearer ' . $vid_api_key ),
+                            'timeout' => 120,
+                        ) );
+                        if ( is_wp_error( $vid_dl ) ) {
+                            $vid_gen_err = 'Failed to download Sora video: ' . $vid_dl->get_error_message();
+                            stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                        } else {
+                            $sora_dl_http = wp_remote_retrieve_response_code( $vid_dl );
+                            if ( 200 !== $sora_dl_http && 302 !== $sora_dl_http ) {
+                                $vid_gen_err = 'Failed to download Sora video (HTTP ' . $sora_dl_http . ')';
+                                stifli_flex_mcp_log('wp_generate_video: ' . $vid_gen_err);
+                            } else {
+                                $vid_binary = wp_remote_retrieve_body( $vid_dl );
+                                $vid_ct = wp_remote_retrieve_header( $vid_dl, 'content-type' );
+                                if ( stripos( $vid_ct, 'webm' ) !== false ) {
+                                    $vid_mime = 'video/webm';
+                                }
+                                stifli_flex_mcp_log('wp_generate_video: Sora video downloaded, size=' . strlen( $vid_binary ) . ' bytes, content-type=' . $vid_ct);
+                            }
+                        }
+                    }
+                }
+
+                // Handle generation error
+                if ( false === $vid_binary || empty( $vid_binary ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: FAILED - ' . ( $vid_gen_err ? $vid_gen_err : 'unknown error' ));
+                    $r['error'] = array( 'code' => -32603, 'message' => $vid_gen_err ? $vid_gen_err : 'Video generation failed.' );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_video: Video binary received, size=' . strlen( $vid_binary ) . ' bytes, mime=' . $vid_mime);
+
+                // Save as WordPress media attachment
+                if ( ! function_exists( 'wp_upload_dir' ) ) {
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                }
+                if ( ! function_exists( 'media_handle_sideload' ) ) {
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                }
+
+                $vid_ext_map  = array( 'video/mp4' => 'mp4', 'video/webm' => 'webm' );
+                $vid_ext      = isset( $vid_ext_map[ $vid_mime ] ) ? $vid_ext_map[ $vid_mime ] : 'mp4';
+                $vid_filename = 'ai-video-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 6, false ) . '.' . $vid_ext;
+
+                $vid_upload_dir = wp_upload_dir();
+                $vid_temp_file  = $vid_upload_dir['path'] . '/' . wp_unique_filename( $vid_upload_dir['path'], $vid_filename );
+
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- writing temp binary from AI API to create media attachment.
+                if ( file_put_contents( $vid_temp_file, $vid_binary ) === false ) {
+                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to write video file' );
+                    break;
+                }
+
+                $vid_file_array = array(
+                    'name'     => $vid_filename,
+                    'tmp_name' => $vid_temp_file,
+                    'type'     => $vid_mime,
+                );
+                $vid_att_id = media_handle_sideload( $vid_file_array, $vid_post_id );
+
+                if ( is_wp_error( $vid_att_id ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: Sideload error: ' . $vid_att_id->get_error_message());
+                    wp_delete_file( $vid_temp_file );
+                    $r['error'] = array( 'code' => 'upload_error', 'message' => $vid_att_id->get_error_message() );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_video: Saved as attachment ID=' . $vid_att_id);
+
+                // Set title
+                if ( $vid_title ) {
+                    wp_update_post( array( 'ID' => $vid_att_id, 'post_title' => $vid_title ) );
+                }
+
+                $vid_att_url = wp_get_attachment_url( $vid_att_id );
+
+                $vid_result_data = array(
+                    'attachment_id'    => $vid_att_id,
+                    'url'              => $vid_att_url,
+                    'provider'         => $vid_provider,
+                    'model'            => $vid_model_used,
+                    'duration'         => $vid_duration,
+                    'aspect_ratio'     => $vid_aspect,
+                    'mime_type'        => $vid_mime,
+                    'prompt'           => $vid_prompt,
+                    'has_source_image' => ! empty( $vid_src_image ),
+                    'has_end_image'    => ! empty( $vid_end_image ),
+                );
+                stifli_flex_mcp_log('wp_generate_video: === SUCCESS === attachment_id=' . $vid_att_id . ' url=' . $vid_att_url . ' provider=' . $vid_provider . ' model=' . $vid_model_used . ' duration=' . $vid_duration . 's');
+                $addResultText( $r, wp_json_encode( $vid_result_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                stifli_flex_mcp_log('wp_generate_video: === END ===');
+                break;
+
             case 'search':
                 $s = sanitize_text_field($utils::getArrayValue($args, 'q', $utils::getArrayValue($args, 'query', '')));
                 $limit = max(1, intval($utils::getArrayValue($args, 'limit', 10, 1)));

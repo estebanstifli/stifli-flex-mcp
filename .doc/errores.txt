@@ -1,30 +1,16 @@
-FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-automation-admin.php
+FILE: C:\Users\Esteban\Local Sites\l23\app\public\wp-content\plugins\stifli-flex-mcp\client\class-event-automation-admin.php
 Line	Column	Type	Code	Message
-377	120	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
-Learn more (opens in a new tab)
-433	90	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
-Learn more (opens in a new tab)
-
-FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-event-automation-admin.php
-Line	Column	Type	Code	Message
-386	120	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
-Learn more (opens in a new tab)
-
-FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\providers\class-provider-base.php
-Line	Column	Type	Code	Message
-155	32	ERROR	WordPress.WP.I18n.MissingTranslatorsComment	A function call to __() with texts containing placeholders was found, but was not accompanied by a "translators:" comment on the line above to clarify the meaning of the placeholders.
-Learn more (opens in a new tab)
-
-FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-automation-engine.php
-Line	Column	Type	Code	Message
-460	38	ERROR	WordPress.Security.EscapeOutput.ExceptionNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$response'.
-Learn more (opens in a new tab)
-566	38	ERROR	WordPress.Security.EscapeOutput.ExceptionNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$response'.
-Learn more (opens in a new tab)
-
-FILE: C:\Users\Esteban\Local Sites\woo1\app\public\wp-content\plugins\stifli-flex-mcp\client\class-client-admin.php
-Line	Column	Type	Code	Message
-421	29	ERROR	WordPress.Security.EscapeOutput.OutputNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$enabled_tools'.
-Learn more (opens in a new tab)
-422	29	ERROR	WordPress.Security.EscapeOutput.OutputNotEscaped	All output should be run through an escaping function (see the Security sections in the WordPress Developer Handbooks), found '$total_tools'.
-Learn more (opens in a new tab)
+904	4	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+911	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+923	4	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+924	4	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+925	4	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+930	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+951	4	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+971	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+977	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+978	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+979	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+981	6	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+994	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.
+995	5	WARNING	WordPress.PHP.DevelopmentFunctions.error_log_error_log	error_log() found. Debug code should not normally be used in production.

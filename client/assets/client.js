@@ -416,6 +416,13 @@
         
         let bodyHtml = '';
         
+        // Helper to wrap tool output in appropriate tag (div for images, pre for text)
+        function wrapOutput(formatted) {
+            var isHtml = formatted.indexOf('<img ') !== -1 || formatted.indexOf('<div ') !== -1;
+            var tag = isHtml ? 'div' : 'pre';
+            return '<' + tag + ' class="sflmcp-tool-result">' + formatted + '</' + tag + '>';
+        }
+        
         if (displayMode === 'full') {
             if (description) {
                 bodyHtml += '<div class="sflmcp-tool-description">' + escapeHtml(description) + '</div>';
@@ -423,7 +430,7 @@
             bodyHtml += '<div class="sflmcp-tool-status">' + (item.status === 'success' ? sflmcpClient.i18n.toolResult : sflmcpClient.i18n.toolDenied) + '</div>';
             bodyHtml += '<div class="sflmcp-tool-section"><strong>Input:</strong></div><pre class="sflmcp-tool-args">' + JSON.stringify(item.input, null, 2) + '</pre>';
             if (item.output) {
-                bodyHtml += '<div class="sflmcp-tool-section"><strong>Output:</strong></div><pre class="sflmcp-tool-result">' + formatToolOutput(item.output) + '</pre>';
+                bodyHtml += '<div class="sflmcp-tool-section"><strong>Output:</strong></div>' + wrapOutput(formatToolOutput(item.output));
             }
         } else if (displayMode === 'compact') {
             if (description) {
@@ -442,7 +449,7 @@
             }
             bodyHtml += '<pre class="sflmcp-tool-args">' + JSON.stringify(item.input, null, 2) + '</pre>';
             if (item.output) {
-                bodyHtml += '<pre class="sflmcp-tool-result">' + formatToolOutput(item.output) + '</pre>';
+                bodyHtml += wrapOutput(formatToolOutput(item.output));
             }
             bodyHtml += '</div>';
         }
@@ -465,13 +472,35 @@
      * Format tool output for display
      */
     function formatToolOutput(output) {
+        var text = '';
         if (typeof output === 'string') {
-            return escapeHtml(output);
+            text = output;
+        } else if (output && output.content) {
+            text = output.content;
+        } else {
+            text = JSON.stringify(output, null, 2);
         }
-        if (output && output.content) {
-            return escapeHtml(output.content);
+
+        // Detect wp_generate_image JSON result and render inline image
+        try {
+            var parsed = (typeof text === 'string') ? JSON.parse(text.trim()) : null;
+            if (parsed && parsed.medium_url && parsed.attachment_id) {
+                var imgUrl = parsed.medium_url || parsed.url;
+                var fullUrl = parsed.url || imgUrl;
+                return '<div class="sflmcp-generated-image">' +
+                    '<a href="' + escapeHtml(fullUrl) + '" target="_blank" rel="noopener">' +
+                    '<img src="' + escapeHtml(imgUrl) + '" alt="' + escapeHtml(parsed.prompt || 'AI generated image') + '" style="max-width:300px;max-height:300px;border-radius:8px;margin:8px 0;display:block;" />' +
+                    '</a>' +
+                    '<div style="font-size:11px;color:#666;margin-top:4px;">' +
+                    'ID: ' + parsed.attachment_id + ' | Provider: ' + escapeHtml(parsed.provider || 'unknown') +
+                    ' | <a href="' + escapeHtml(fullUrl) + '" target="_blank" rel="noopener">Full size</a>' +
+                    '</div></div>';
+            }
+        } catch (e) {
+            // Not JSON, render as text
         }
-        return JSON.stringify(output, null, 2);
+
+        return escapeHtml(text);
     }
 
     /**
@@ -821,13 +850,16 @@
     }
 
     /**
-     * Execute tool via AJAX
+     * Execute tool via AJAX (supports async long-running tools)
      */
     function executeToolViaAjax(toolCall) {
+        var ajaxStart = Date.now();
+        console.log('[SFLMCP] Tool AJAX start:', toolCall.name, new Date().toISOString());
         return new Promise((resolve, reject) => {
             $.ajax({
                 url: sflmcpClient.ajaxUrl,
                 method: 'POST',
+                timeout: 0,
                 data: {
                     action: 'sflmcp_client_execute_tool',
                     nonce: sflmcpClient.nonce,
@@ -835,17 +867,82 @@
                     arguments: JSON.stringify(toolCall.arguments)
                 },
                 success: function(response) {
-                    if (response.success) {
+                    var elapsed = Math.round((Date.now() - ajaxStart) / 1000);
+                    if (response.success && response.data && response.data.async) {
+                        // Long-running tool — switch to polling
+                        console.log('[SFLMCP] Tool is async, job_id:', response.data.job_id);
+                        pollToolResult(response.data.job_id, toolCall, resolve, reject);
+                    } else if (response.success) {
+                        console.log('[SFLMCP] Tool AJAX success:', toolCall.name, elapsed + 's');
                         resolve(response.data);
                     } else {
-                        reject(new Error(response.data.message));
+                        reject(new Error(response.data.message || 'Tool returned error'));
                     }
                 },
                 error: function(xhr, status, error) {
-                    reject(new Error(error || 'Tool execution failed'));
+                    var elapsed = Math.round((Date.now() - ajaxStart) / 1000);
+                    console.error('[SFLMCP] Tool AJAX error:', toolCall.name, elapsed + 's', 'status=' + status, 'httpStatus=' + xhr.status);
+                    reject(new Error('Tool execution failed (' + status + ' after ' + elapsed + 's: ' + (error || xhr.status || 'connection lost') + ')'));
                 }
             });
         });
+    }
+
+    /**
+     * Poll for async tool result until completed, failed, or timed out.
+     */
+    function pollToolResult(jobId, toolCall, resolve, reject) {
+        var POLL_INTERVAL = 5000;  // 5 seconds
+        var MAX_POLLS     = 72;    // 6 minutes max
+        var pollCount     = 0;
+
+        console.log('[SFLMCP] Starting async poll for', toolCall.name, 'job:', jobId);
+
+        function poll() {
+            if (state.isStopped) {
+                reject(new Error('Stopped by user'));
+                return;
+            }
+            pollCount++;
+            if (pollCount > MAX_POLLS) {
+                console.error('[SFLMCP] Async tool timed out after', MAX_POLLS * (POLL_INTERVAL / 1000), 's');
+                reject(new Error('Tool timed out after ' + MAX_POLLS * (POLL_INTERVAL / 1000) + 's'));
+                return;
+            }
+
+            $.ajax({
+                url: sflmcpClient.ajaxUrl,
+                method: 'POST',
+                data: {
+                    action: 'sflmcp_client_poll_tool',
+                    nonce: sflmcpClient.nonce,
+                    job_id: jobId
+                },
+                success: function(response) {
+                    if (response.success) {
+                        if (response.data.status === 'running') {
+                            var elapsed = response.data.elapsed || (pollCount * (POLL_INTERVAL / 1000));
+                            console.log('[SFLMCP] Async poll #' + pollCount, toolCall.name, 'still running', elapsed + 's');
+                            setTimeout(poll, POLL_INTERVAL);
+                        } else {
+                            // completed
+                            console.log('[SFLMCP] Async tool completed:', toolCall.name, response.data);
+                            resolve(response.data);
+                        }
+                    } else {
+                        // error from tool
+                        reject(new Error(response.data.message || 'Tool failed'));
+                    }
+                },
+                error: function(xhr, status) {
+                    // Network error — retry silently
+                    console.warn('[SFLMCP] Poll network error, retrying...', status);
+                    setTimeout(poll, POLL_INTERVAL);
+                }
+            });
+        }
+
+        setTimeout(poll, POLL_INTERVAL);
     }
 
     /**
@@ -920,7 +1017,7 @@
         const $header = $('<div class="sflmcp-tool-header"></div>');
         const $body = $('<div class="sflmcp-tool-body"></div>');
 
-        $header.html('<span class="dashicons dashicons-admin-tools"></span> <strong>' + escapeHtml(toolName) + '</strong>');
+        $header.html('<span class="dashicons dashicons-admin-tools"></span> <strong>' + escapeHtml(toolName) + '</strong>' + (type === 'executing' ? '<span class="sflmcp-tool-spinner"></span>' : ''));
         
         let bodyHtml = '';
         
@@ -980,21 +1077,28 @@
         const $lastTool = $chatMessages.find('.sflmcp-tool-message').last();
         $lastTool.removeClass('sflmcp-tool-executing').addClass('sflmcp-tool-' + type);
         
+        // Remove spinner from header
+        $lastTool.find('.sflmcp-tool-spinner').remove();
+        
         const $body = $lastTool.find('.sflmcp-tool-body');
+        const formatted = formatToolOutput(result);
+        // Use div instead of pre when output contains HTML (e.g. generated images)
+        const isHtml = formatted.indexOf('<img ') !== -1 || formatted.indexOf('<div ') !== -1;
+        const wrapTag = isHtml ? 'div' : 'pre';
         
         if (displayMode === 'full') {
             $body.find('.sflmcp-tool-status').text(sflmcpClient.i18n.toolResult);
             
             // Add result
-            const resultHtml = '<pre class="sflmcp-tool-result">' + 
-                formatToolOutput(result) + '</pre>';
+            const resultHtml = '<' + wrapTag + ' class="sflmcp-tool-result">' + 
+                formatted + '</' + wrapTag + '>';
             $body.append(resultHtml);
         } else if (displayMode === 'compact') {
             $body.find('.sflmcp-tool-status').html('✓ ' + escapeHtml(toolName));
         } else if (displayMode === 'hidden') {
             const $details = $body.find('.sflmcp-tool-details');
             $details.find('.sflmcp-tool-status').text(sflmcpClient.i18n.toolResult);
-            $details.append('<pre class="sflmcp-tool-result">' + formatToolOutput(result) + '</pre>');
+            $details.append('<' + wrapTag + ' class="sflmcp-tool-result">' + formatted + '</' + wrapTag + '>');
         }
         
         scrollToBottom();
@@ -1097,6 +1201,12 @@
         // Code blocks
         html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
         html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Images (markdown syntax: ![alt](url))
+        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:300px;max-height:300px;border-radius:8px;margin:8px 0;display:block;" />');
+        
+        // Links (markdown syntax: [text](url))
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
         
         // Bold
         html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

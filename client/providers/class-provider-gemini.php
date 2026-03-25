@@ -30,7 +30,7 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 	 */
 	public function send_message( $args ) {
 		$api_key       = $args['api_key'];
-		$model         = $args['model'] ?: 'gemini-2.5-flash';
+		$model         = $args['model'] ?: 'gemini-3-flash-preview';
 		$message       = $args['message'];
 		$conversation  = $args['conversation'] ?? array();
 		$tools         = $args['tools'] ?? array();

@@ -1,0 +1,347 @@
+/**
+ * Multimedia Settings Tab Styles
+ *
+ * @package StifliFlexMcp
+ * @since 2.1.1
+ */
+
+.sflmcp-multimedia-wrap {
+	max-width: 100%;
+}
+.sflmcp-multimedia-wrap .card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 20px 24px;
+	margin: 20px 0;
+	box-shadow: 0 1px 1px rgba(0,0,0,.04);
+	min-width: 0 !important;
+	max-width: none !important;
+}
+.sflmcp-multimedia-wrap .card h3 {
+	margin-top: 0;
+	font-size: 15px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.sflmcp-multimedia-wrap .provider-icon {
+	width: 22px;
+	height: 22px;
+	vertical-align: middle;
+}
+
+/* Provider sections */
+.sflmcp-provider-section {
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin: 12px 0;
+	background: #fafafa;
+}
+.sflmcp-provider-section.active {
+	border-color: #2271b1;
+	background: #f0f6fc;
+}
+.sflmcp-provider-section h4 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+/* Form rows */
+.sflmcp-multimedia-wrap .form-table th {
+	width: 200px;
+	font-weight: 500;
+}
+.sflmcp-multimedia-wrap .form-table td select,
+.sflmcp-multimedia-wrap .form-table td input[type="number"] {
+	min-width: 200px;
+}
+.sflmcp-multimedia-wrap .form-table td input[type="number"] {
+	width: 100px;
+}
+
+/* API key field */
+.sflmcp-api-key-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.sflmcp-api-key-field input[type="password"],
+.sflmcp-api-key-field input[type="text"] {
+	width: 350px;
+	font-family: monospace;
+}
+.sflmcp-api-key-toggle {
+	cursor: pointer;
+	padding: 3px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #f0f0f1;
+	line-height: 1;
+	min-height: 30px;
+	display: inline-flex;
+	align-items: center;
+}
+.sflmcp-api-key-toggle .dashicons {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+}
+.sflmcp-api-key-toggle:hover {
+	background: #dcdcde;
+}
+
+/* Post-processing section */
+.sflmcp-postprocess-section {
+	background: #fff8e5;
+	border-color: #dba617;
+}
+.sflmcp-postprocess-section.disabled {
+	opacity: 0.7;
+}
+.sflmcp-postprocess-fields {
+	margin-top: 10px;
+}
+.sflmcp-postprocess-fields.hidden {
+	display: none;
+}
+
+/* Range slider with value */
+.sflmcp-range-field {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.sflmcp-range-field input[type="range"] {
+	width: 200px;
+}
+.sflmcp-range-value {
+	min-width: 40px;
+	font-weight: 600;
+	color: #2271b1;
+}
+
+/* Notice / saved */
+.sflmcp-mm-notice {
+	display: none;
+	padding: 10px 14px;
+	margin: 10px 0;
+	border-radius: 4px;
+	font-weight: 500;
+}
+.sflmcp-mm-notice.success {
+	display: block;
+	background: #d4edda;
+	border: 1px solid #28a745;
+	color: #155724;
+}
+.sflmcp-mm-notice.error {
+	display: block;
+	background: #f8d7da;
+	border: 1px solid #dc3545;
+	color: #721c24;
+}
+
+/* Auto-save status indicator */
+.sflmcp-autosave-status {
+	display: none;
+	padding: 8px 16px;
+	margin: 16px 0 0;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	transition: opacity .3s;
+}
+.sflmcp-autosave-status .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+	vertical-align: text-bottom;
+	margin-right: 4px;
+}
+.sflmcp-autosave-status.saving {
+	display: inline-block;
+	color: #666;
+}
+.sflmcp-autosave-status.success {
+	display: inline-block;
+	color: #155724;
+}
+.sflmcp-autosave-status.error {
+	display: inline-block;
+	color: #721c24;
+}
+
+/* ── Inline per-field save indicator ────────────────────── */
+.sflmcp-field-indicator {
+	display: inline-block;
+	margin-left: 8px;
+	font-size: 14px;
+	vertical-align: middle;
+	opacity: 0;
+	transition: opacity .25s;
+}
+.sflmcp-field-indicator.visible {
+	opacity: 1;
+}
+.sflmcp-field-indicator .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+	vertical-align: text-bottom;
+}
+.sflmcp-field-indicator.saving .dashicons { color: #666; }
+.sflmcp-field-indicator.saved .dashicons  { color: #00a32a; }
+.sflmcp-field-indicator.error .dashicons  { color: #d63638; }
+
+/* ── Tool Enable/Disable toggle banner ──────────────────── */
+.sflmcp-tool-toggle-banner {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 20px;
+	margin: 24px 0 16px;
+	background: #f0f6fc;
+	border: 1px solid #2271b1;
+	border-radius: 6px;
+}
+.sflmcp-tool-toggle-banner.disabled {
+	background: #fef7f1;
+	border-color: #dba617;
+}
+.sflmcp-toggle-label {
+	font-size: 14px;
+}
+.sflmcp-toggle-label strong {
+	font-family: monospace;
+	font-size: 13px;
+}
+.sflmcp-toggle-status {
+	margin-left: auto;
+	font-size: 13px;
+	font-weight: 500;
+}
+
+/* iOS-style toggle switch */
+.sflmcp-toggle-switch {
+	position: relative;
+	display: inline-block;
+	width: 44px;
+	height: 24px;
+	flex-shrink: 0;
+}
+.sflmcp-toggle-switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+.sflmcp-toggle-slider {
+	position: absolute;
+	cursor: pointer;
+	inset: 0;
+	background-color: #ccc;
+	border-radius: 24px;
+	transition: .3s;
+}
+.sflmcp-toggle-slider::before {
+	content: "";
+	position: absolute;
+	height: 18px;
+	width: 18px;
+	left: 3px;
+	bottom: 3px;
+	background-color: #fff;
+	border-radius: 50%;
+	transition: .3s;
+}
+.sflmcp-toggle-switch input:checked + .sflmcp-toggle-slider {
+	background-color: #2271b1;
+}
+.sflmcp-toggle-switch input:checked + .sflmcp-toggle-slider::before {
+	transform: translateX(20px);
+}
+@keyframes sflmcp-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+.sflmcp-spin {
+	animation: sflmcp-spin .8s linear infinite;
+	display: inline-block;
+}
+
+/* Provider selector tabs */
+.sflmcp-provider-tabs {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+.sflmcp-provider-tab {
+	padding: 8px 16px;
+	border: 2px solid #c3c4c7;
+	border-radius: 6px;
+	background: #f6f7f7;
+	cursor: pointer;
+	font-weight: 500;
+	transition: all 0.2s;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.sflmcp-provider-tab:hover {
+	border-color: #2271b1;
+	background: #f0f6fc;
+}
+.sflmcp-provider-tab.active {
+	border-color: #2271b1;
+	background: #2271b1;
+	color: #fff;
+}
+.sflmcp-provider-tab .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+}
+
+/* Collapsible sections */
+.sflmcp-section-toggle {
+	cursor: pointer;
+	user-select: none;
+}
+.sflmcp-section-toggle .dashicons {
+	transition: transform 0.2s;
+}
+.sflmcp-section-toggle.collapsed .dashicons {
+	transform: rotate(-90deg);
+}
+
+/* Description text */
+.sflmcp-field-desc {
+	color: #646970;
+	font-style: italic;
+	font-size: 12px;
+	margin-top: 4px;
+}
+
+/* GD availability warning */
+.sflmcp-gd-warning {
+	background: #fff3cd;
+	border: 1px solid #ffc107;
+	color: #856404;
+	padding: 8px 12px;
+	border-radius: 4px;
+	font-size: 13px;
+	margin: 8px 0;
+}
+.sflmcp-gd-ok {
+	background: #d4edda;
+	border: 1px solid #28a745;
+	color: #155724;
+	padding: 8px 12px;
+	border-radius: 4px;
+	font-size: 13px;
+	margin: 8px 0;
+}

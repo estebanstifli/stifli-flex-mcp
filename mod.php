@@ -26,6 +26,7 @@ class StifliFlexMcp {
 		if (is_admin()) {
 			add_action('admin_menu', array($this, 'registerAdmin'));
 			add_action('admin_menu', array($this, 'registerMcpServerSubmenu'), 15);
+			add_action('admin_menu', array($this, 'registerMultimediaSubmenu'), 25);
 			add_action('admin_init', array($this, 'registerSettings'));
 			add_action('admin_enqueue_scripts', array($this, 'enqueueAdminScripts'));
 			// AJAX handlers for profiles management
@@ -52,6 +53,11 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_toggle_ability', array($this, 'ajax_toggle_ability'));
 			add_action('wp_ajax_sflmcp_delete_ability', array($this, 'ajax_delete_ability'));
 			add_action('wp_ajax_sflmcp_get_imported_abilities', array($this, 'ajax_get_imported_abilities'));
+			// AJAX handlers for Multimedia settings
+			add_action('wp_ajax_sflmcp_save_multimedia_settings', array($this, 'ajax_save_multimedia_settings'));
+			add_action('wp_ajax_sflmcp_load_multimedia_settings', array($this, 'ajax_load_multimedia_settings'));
+			add_action('wp_ajax_sflmcp_mm_toggle_tool', array($this, 'ajax_mm_toggle_tool'));
+			add_action('wp_ajax_sflmcp_mm_reveal_key', array($this, 'ajax_mm_reveal_key'));
 		}
 	}
 
@@ -984,6 +990,20 @@ class StifliFlexMcp {
 	}
 
 	/**
+	 * Register Multimedia submenu at priority 25 (after MCP Server at 15).
+	 */
+	public function registerMultimediaSubmenu() {
+		add_submenu_page(
+			'stifli-flex-mcp',
+			__('Multimedia', 'stifli-flex-mcp'),
+			__('Multimedia', 'stifli-flex-mcp'),
+			'manage_options',
+			'sflmcp-multimedia',
+			array($this, 'multimediaPage')
+		);
+	}
+
+	/**
 	 * Register settings used by the plugin
 	 */
 	public function registerSettings() {
@@ -994,6 +1014,12 @@ class StifliFlexMcp {
 	 * Enqueue admin scripts and styles
 	 */
 	public function enqueueAdminScripts($hook) {
+		// Load Multimedia page assets on its own page
+		if ($hook === 'stifli-flex-mcp_page_sflmcp-multimedia') {
+			$this->enqueueMultimediaAssets();
+			return;
+		}
+
 		// Only load on our MCP Server page
 		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server') {
 			return;
@@ -2538,6 +2564,790 @@ class StifliFlexMcp {
 		$html = ob_get_clean();
 
 		wp_send_json_success(array('html' => $html));
+	}
+
+	/**
+	 * Enqueue assets for the Multimedia submenu page.
+	 */
+	private function enqueueMultimediaAssets() {
+		wp_enqueue_style(
+			'sflmcp-admin-multimedia',
+			plugin_dir_url(__FILE__) . 'assets/admin-multimedia.css',
+			array(),
+			'1.3.0'
+		);
+		wp_enqueue_script(
+			'sflmcp-admin-multimedia',
+			plugin_dir_url(__FILE__) . 'assets/admin-multimedia.js',
+			array('jquery'),
+			'1.6.0',
+			true
+		);
+		wp_localize_script('sflmcp-admin-multimedia', 'sflmcpMultimedia', array(
+			'ajaxUrl' => admin_url('admin-ajax.php'),
+			'nonce'   => wp_create_nonce('sflmcp_multimedia'),
+			'i18n'    => array(
+				'saving'   => __('Saving...', 'stifli-flex-mcp'),
+				'saved'    => __('Saved', 'stifli-flex-mcp'),
+				'error'    => __('Error saving settings', 'stifli-flex-mcp'),
+				'loaded'   => __('Settings loaded', 'stifli-flex-mcp'),
+				'enabled'  => __('Enabled', 'stifli-flex-mcp'),
+				'disabled' => __('Disabled', 'stifli-flex-mcp'),
+			),
+		));
+	}
+
+	/**
+	 * Render the Multimedia admin page (standalone submenu).
+	 */
+	public function multimediaPage() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to view this page.', 'stifli-flex-mcp' ) );
+		}
+		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'images'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Multimedia Settings', 'stifli-flex-mcp' ); ?></h1>
+			<h2 class="nav-tab-wrapper">
+				<a href="?page=sflmcp-multimedia&tab=images" class="nav-tab <?php echo $active_tab === 'images' ? 'nav-tab-active' : ''; ?>">
+					🖼️ <?php esc_html_e( 'Images', 'stifli-flex-mcp' ); ?>
+				</a>
+				<a href="?page=sflmcp-multimedia&tab=videos" class="nav-tab <?php echo $active_tab === 'videos' ? 'nav-tab-active' : ''; ?>">
+					🎬 <?php esc_html_e( 'Videos', 'stifli-flex-mcp' ); ?>
+				</a>
+			</h2>
+			<?php
+			if ( $active_tab === 'videos' ) {
+				$this->renderVideoSettingsTab();
+			} else {
+				$this->renderMultimediaTab();
+			}
+			?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Get multimedia settings with defaults.
+	 *
+	 * @return array Settings array merged with defaults.
+	 */
+	private function getMultimediaSettings() {
+		$defaults = array(
+			'image_provider'       => 'openai',
+			// OpenAI image settings
+			'openai_api_key'       => '',
+			'openai_model'         => 'gpt-image-1',
+			'openai_quality'       => 'medium',
+			'openai_size'          => 'square',
+			'openai_style'         => 'natural',
+			'openai_background'    => 'auto',
+			'openai_output_format' => 'png',
+			// Gemini image settings
+			'gemini_api_key'       => '',
+			'gemini_model'         => 'gemini-2.5-flash-image',
+			'gemini_aspect_ratio'  => '1:1',
+			// Post-processing
+			'pp_enabled'           => '1',
+			'pp_max_width'         => 1024,
+			'pp_max_height'        => 1024,
+			'pp_quality'           => 80,
+			'pp_format'            => 'original',
+			// Video settings
+			'video_provider'       => 'gemini',
+			'video_gemini_model'   => 'veo-3.0-generate-preview',
+			'video_openai_model'   => 'sora-2',
+			'video_duration'       => '5',
+			'video_aspect_ratio'   => '16:9',
+			'video_resolution'     => '720p',
+			'video_poll_interval'  => 10,
+			'video_max_wait'       => 300,
+		);
+		$saved = get_option( 'sflmcp_multimedia_settings', array() );
+		return wp_parse_args( $saved, $defaults );
+	}
+
+	/**
+	 * Create a partial display mask for an encrypted API key.
+	 *
+	 * Decrypts the stored key, then returns a masked version showing the first
+	 * few characters and last 4, with bullets in between matching the real length.
+	 * Example: "sk-proj-••••••••••••••••abcd"
+	 *
+	 * @param string $encrypted_value The encrypted (or empty) key from settings.
+	 * @return string Partial mask for display, or empty string if no key stored.
+	 */
+	private function maskApiKeyForDisplay( $encrypted_value ) {
+		if ( empty( $encrypted_value ) ) {
+			return '';
+		}
+
+		// Decrypt to get real key
+		$plain = '';
+		if ( class_exists( 'StifliFlexMcp_Client_Admin' ) ) {
+			$plain = StifliFlexMcp_Client_Admin::decrypt_value( $encrypted_value );
+		} else {
+			$plain = $encrypted_value;
+		}
+
+		if ( empty( $plain ) ) {
+			return '';
+		}
+
+		$len = strlen( $plain );
+
+		// Very short keys: just show bullets
+		if ( $len <= 8 ) {
+			return str_repeat( '•', $len );
+		}
+
+		// Show first 4 chars + bullets + last 4 chars
+		$prefix    = substr( $plain, 0, 4 );
+		$suffix    = substr( $plain, -4 );
+		$mid_count = max( 4, $len - 8 );
+		return $prefix . str_repeat( '•', $mid_count ) . $suffix;
+	}
+
+	/**
+	 * Render Multimedia Settings Tab
+	 */
+	private function renderMultimediaTab() {
+		$s       = $this->getMultimediaSettings();
+		$has_gd  = extension_loaded( 'gd' );
+		$gd_info = $has_gd ? gd_info() : array();
+
+		// Build partial display strings for API keys (e.g. "sk-••••••••xxxx")
+		$openai_display = $this->maskApiKeyForDisplay( $s['openai_api_key'] );
+		$gemini_display = $this->maskApiKeyForDisplay( $s['gemini_api_key'] );
+
+		?>
+		<div class="sflmcp-multimedia-wrap">
+
+			<!-- ─── Tool Enable/Disable ─────────────────────── -->
+			<div class="sflmcp-tool-toggle-banner" data-tool="wp_generate_image">
+				<label class="sflmcp-toggle-switch">
+					<input type="checkbox" id="sflmcp_mm_tool_image_toggle" class="sflmcp-mm-tool-toggle" data-tool="wp_generate_image">
+					<span class="sflmcp-toggle-slider"></span>
+				</label>
+				<span class="sflmcp-toggle-label">
+					<strong>wp_generate_image</strong> — <?php esc_html_e( 'Enable this tool for MCP clients and AI agents', 'stifli-flex-mcp' ); ?>
+				</span>
+				<span class="sflmcp-toggle-status"></span>
+			</div>
+			<p class="description sflmcp-pricing-notice" style="margin: -8px 0 12px 60px; color: #826200; background: #fff8e1; border-left: 4px solid #ffb900; padding: 8px 12px;">
+				<span class="dashicons dashicons-info" style="color:#ffb900;font-size:16px;vertical-align:middle;margin-right:4px;"></span>
+				<?php esc_html_e( 'Approximate cost per image: OpenAI GPT Image 1: $0.01–$0.25 (varies by quality: low/medium/high and size). DALL·E 3: $0.04–$0.12. DALL·E 2: ~$0.02. Google Imagen 4: $0.02 (fast), $0.04 (standard), $0.06 (ultra). Prices may change — please consult each provider\'s pricing page for up-to-date rates.', 'stifli-flex-mcp' ); ?>
+			</p>
+
+			<h2><?php esc_html_e( 'Image Generation Settings', 'stifli-flex-mcp' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Configure defaults for AI image generation (wp_generate_image tool). These settings are used when generating images via MCP tools or the Chat Agent. Tool arguments can override size and quality per-request.', 'stifli-flex-mcp' ); ?>
+			</p>
+
+			<div id="sflmcp-mm-notice" class="sflmcp-mm-notice"></div>
+
+			<form id="sflmcp-multimedia-form">
+
+				<!-- ─── Image Provider ───────────────────────────── -->
+				<div class="card">
+					<h3>🖼️ <?php esc_html_e( 'Image Generation Provider', 'stifli-flex-mcp' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'Select which AI provider to use for image generation. Each provider has its own API key and configuration.', 'stifli-flex-mcp' ); ?></p>
+
+					<input type="hidden" id="sflmcp_mm_image_provider" name="image_provider" value="<?php echo esc_attr( $s['image_provider'] ); ?>">
+
+					<div class="sflmcp-provider-tabs" style="margin-top:12px;">
+						<div class="sflmcp-provider-tab <?php echo $s['image_provider'] === 'openai' ? 'active' : ''; ?>" data-provider="openai">
+							<span class="dashicons dashicons-format-image"></span> OpenAI
+						</div>
+						<div class="sflmcp-provider-tab <?php echo $s['image_provider'] === 'gemini' ? 'active' : ''; ?>" data-provider="gemini">
+							<span class="dashicons dashicons-admin-customizer"></span> Gemini
+						</div>
+					</div>
+				</div>
+
+				<!-- ─── OpenAI Settings ──────────────────────────── -->
+				<div id="sflmcp-panel-openai" class="sflmcp-provider-panel card" style="<?php echo $s['image_provider'] !== 'openai' ? 'display:none;' : ''; ?>">
+					<h3><span class="dashicons dashicons-format-image"></span> <?php esc_html_e( 'OpenAI Image Settings', 'stifli-flex-mcp' ); ?></h3>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'API Key', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_openai_key" class="sflmcp-shared-apikey" data-key="openai_api_key" value="<?php echo esc_attr( $openai_display ); ?>" placeholder="sk-..." autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc">
+									<?php esc_html_e( 'Shared OpenAI key for image and video generation. Independent from Chat Agent settings.', 'stifli-flex-mcp' ); ?>
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_openai_model">
+									<option value="gpt-image-1" <?php selected( $s['openai_model'], 'gpt-image-1' ); ?>>gpt-image-1 (<?php esc_html_e( 'Latest, best quality', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="dall-e-3" <?php selected( $s['openai_model'], 'dall-e-3' ); ?>>DALL·E 3 (<?php esc_html_e( 'Stable, no verification needed', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="dall-e-2" <?php selected( $s['openai_model'], 'dall-e-2' ); ?>>DALL·E 2 (<?php esc_html_e( 'Legacy, cheapest', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Default Quality', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_openai_quality">
+									<option value="low" <?php selected( $s['openai_quality'], 'low' ); ?>><?php esc_html_e( 'Low (fastest, cheapest)', 'stifli-flex-mcp' ); ?></option>
+									<option value="medium" <?php selected( $s['openai_quality'], 'medium' ); ?>><?php esc_html_e( 'Medium (balanced)', 'stifli-flex-mcp' ); ?></option>
+									<option value="high" <?php selected( $s['openai_quality'], 'high' ); ?>><?php esc_html_e( 'High (best quality, slowest)', 'stifli-flex-mcp' ); ?></option>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Default Size', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_openai_size">
+									<option value="square" <?php selected( $s['openai_size'], 'square' ); ?>><?php esc_html_e( 'Square (1024×1024)', 'stifli-flex-mcp' ); ?></option>
+									<option value="landscape" <?php selected( $s['openai_size'], 'landscape' ); ?>><?php esc_html_e( 'Landscape (1536×1024)', 'stifli-flex-mcp' ); ?></option>
+									<option value="portrait" <?php selected( $s['openai_size'], 'portrait' ); ?>><?php esc_html_e( 'Portrait (1024×1536)', 'stifli-flex-mcp' ); ?></option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'The tool can override this per-request via the "size" argument.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Style', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_openai_style">
+									<option value="natural" <?php selected( $s['openai_style'], 'natural' ); ?>><?php esc_html_e( 'Natural (photorealistic)', 'stifli-flex-mcp' ); ?></option>
+									<option value="vivid" <?php selected( $s['openai_style'], 'vivid' ); ?>><?php esc_html_e( 'Vivid (hyper-real, dramatic)', 'stifli-flex-mcp' ); ?></option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Only applies to DALL·E 3.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Background', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_openai_background">
+									<option value="auto" <?php selected( $s['openai_background'], 'auto' ); ?>><?php esc_html_e( 'Auto', 'stifli-flex-mcp' ); ?></option>
+									<option value="transparent" <?php selected( $s['openai_background'], 'transparent' ); ?>><?php esc_html_e( 'Transparent', 'stifli-flex-mcp' ); ?></option>
+									<option value="opaque" <?php selected( $s['openai_background'], 'opaque' ); ?>><?php esc_html_e( 'Opaque', 'stifli-flex-mcp' ); ?></option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Only for gpt-image-1. Use Transparent for logos/icons with PNG output.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Output Format', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_openai_format">
+									<option value="png" <?php selected( $s['openai_output_format'], 'png' ); ?>>PNG (<?php esc_html_e( 'lossless, supports transparency', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="jpeg" <?php selected( $s['openai_output_format'], 'jpeg' ); ?>>JPEG (<?php esc_html_e( 'smaller file, no transparency', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="webp" <?php selected( $s['openai_output_format'], 'webp' ); ?>>WebP (<?php esc_html_e( 'modern, best compression', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Only for gpt-image-1. DALL·E models always return PNG.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<!-- ─── Gemini Settings ──────────────────────────── -->
+				<div id="sflmcp-panel-gemini" class="sflmcp-provider-panel card" style="<?php echo $s['image_provider'] !== 'gemini' ? 'display:none;' : ''; ?>">
+					<h3><span class="dashicons dashicons-admin-customizer"></span> <?php esc_html_e( 'Gemini Image Settings', 'stifli-flex-mcp' ); ?></h3>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'API Key', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_gemini_key" class="sflmcp-shared-apikey" data-key="gemini_api_key" value="<?php echo esc_attr( $gemini_display ); ?>" placeholder="AIza..." autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc">
+									<?php esc_html_e( 'Shared Gemini key for image and video generation. Independent from Chat Agent settings.', 'stifli-flex-mcp' ); ?>
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_gemini_model">
+									<option value="gemini-2.5-flash-image" <?php selected( $s['gemini_model'], 'gemini-2.5-flash-image' ); ?>>gemini-2.5-flash-image (<?php esc_html_e( 'Fast, native generation', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="imagen-4.0-generate-001" <?php selected( $s['gemini_model'], 'imagen-4.0-generate-001' ); ?>>Imagen 4 Standard (<?php esc_html_e( 'High fidelity', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="imagen-4.0-fast-generate-001" <?php selected( $s['gemini_model'], 'imagen-4.0-fast-generate-001' ); ?>>Imagen 4 Fast (<?php esc_html_e( 'Fastest', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="imagen-4.0-ultra-generate-001" <?php selected( $s['gemini_model'], 'imagen-4.0-ultra-generate-001' ); ?>>Imagen 4 Ultra (<?php esc_html_e( 'Best quality', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Default Aspect Ratio', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_gemini_aspect">
+									<option value="1:1" <?php selected( $s['gemini_aspect_ratio'], '1:1' ); ?>>1:1 (<?php esc_html_e( 'Square', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="16:9" <?php selected( $s['gemini_aspect_ratio'], '16:9' ); ?>>16:9 (<?php esc_html_e( 'Landscape', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="9:16" <?php selected( $s['gemini_aspect_ratio'], '9:16' ); ?>>9:16 (<?php esc_html_e( 'Portrait', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="4:3" <?php selected( $s['gemini_aspect_ratio'], '4:3' ); ?>>4:3 (<?php esc_html_e( 'Classic', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="3:4" <?php selected( $s['gemini_aspect_ratio'], '3:4' ); ?>>3:4 (<?php esc_html_e( 'Portrait Classic', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="3:2" <?php selected( $s['gemini_aspect_ratio'], '3:2' ); ?>>3:2</option>
+									<option value="2:3" <?php selected( $s['gemini_aspect_ratio'], '2:3' ); ?>>2:3</option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'The tool can override this per-request via the "size" argument.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<!-- ─── Post-Processing ──────────────────────────── -->
+				<div class="card sflmcp-postprocess-section <?php echo $s['pp_enabled'] !== '1' ? 'disabled' : ''; ?>">
+					<h3>⚙️ <?php esc_html_e( 'Image Post-Processing', 'stifli-flex-mcp' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'Automatically compress/resize AI-generated images before saving to the Media Library. Uses GD or the WordPress image editor.', 'stifli-flex-mcp' ); ?></p>
+
+					<?php if ( $has_gd ) : ?>
+						<div class="sflmcp-gd-ok">
+							✅ <?php
+							/* translators: %s: GD library version string */
+							echo esc_html( sprintf( __( 'GD Library available (version: %s). JPEG, PNG, and WebP processing supported.', 'stifli-flex-mcp' ), isset( $gd_info['GD Version'] ) ? $gd_info['GD Version'] : 'unknown' ) ); ?>
+						</div>
+					<?php else : ?>
+						<div class="sflmcp-gd-warning">
+							⚠️ <?php esc_html_e( 'GD Library not detected. Post-processing will use the WordPress image editor (Imagick or fallback).', 'stifli-flex-mcp' ); ?>
+						</div>
+					<?php endif; ?>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Enable Post-Processing', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<label>
+									<input type="checkbox" id="sflmcp_mm_pp_enabled" <?php checked( $s['pp_enabled'], '1' ); ?>>
+									<?php esc_html_e( 'Compress and/or resize images after generation', 'stifli-flex-mcp' ); ?>
+								</label>
+							</td>
+						</tr>
+					</table>
+
+					<div class="sflmcp-postprocess-fields <?php echo $s['pp_enabled'] !== '1' ? 'hidden' : ''; ?>">
+						<table class="form-table">
+							<tr>
+								<th><?php esc_html_e( 'Max Width (px)', 'stifli-flex-mcp' ); ?></th>
+								<td>
+									<input type="number" id="sflmcp_mm_pp_max_width" value="<?php echo esc_attr( $s['pp_max_width'] ); ?>" min="256" max="4096" step="1">
+									<p class="sflmcp-field-desc"><?php esc_html_e( 'Images wider than this will be proportionally resized. Set 0 for no limit.', 'stifli-flex-mcp' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th><?php esc_html_e( 'Max Height (px)', 'stifli-flex-mcp' ); ?></th>
+								<td>
+									<input type="number" id="sflmcp_mm_pp_max_height" value="<?php echo esc_attr( $s['pp_max_height'] ); ?>" min="256" max="4096" step="1">
+									<p class="sflmcp-field-desc"><?php esc_html_e( 'Images taller than this will be proportionally resized. Set 0 for no limit.', 'stifli-flex-mcp' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th><?php esc_html_e( 'Compression Quality', 'stifli-flex-mcp' ); ?></th>
+								<td>
+									<div class="sflmcp-range-field">
+										<input type="range" id="sflmcp_mm_pp_quality" min="30" max="100" value="<?php echo esc_attr( $s['pp_quality'] ); ?>">
+										<span id="sflmcp_mm_pp_quality_val" class="sflmcp-range-value"><?php echo esc_html( $s['pp_quality'] ); ?>%</span>
+									</div>
+									<p class="sflmcp-field-desc"><?php esc_html_e( 'JPEG/WebP quality. Lower = smaller file, less detail. 75-85 is recommended.', 'stifli-flex-mcp' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th><?php esc_html_e( 'Convert Format', 'stifli-flex-mcp' ); ?></th>
+								<td>
+									<select id="sflmcp_mm_pp_format">
+										<option value="original" <?php selected( $s['pp_format'], 'original' ); ?>><?php esc_html_e( 'Keep Original Format', 'stifli-flex-mcp' ); ?></option>
+										<option value="jpeg" <?php selected( $s['pp_format'], 'jpeg' ); ?>><?php esc_html_e( 'Convert to JPEG (smallest, no transparency)', 'stifli-flex-mcp' ); ?></option>
+										<option value="webp" <?php selected( $s['pp_format'], 'webp' ); ?>><?php esc_html_e( 'Convert to WebP (modern, good compression)', 'stifli-flex-mcp' ); ?></option>
+										<option value="png" <?php selected( $s['pp_format'], 'png' ); ?>><?php esc_html_e( 'Convert to PNG (lossless, preserves transparency)', 'stifli-flex-mcp' ); ?></option>
+									</select>
+								</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+
+				<div id="sflmcp-mm-autosave-status" class="sflmcp-autosave-status"></div>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render Video Settings Tab
+	 */
+	private function renderVideoSettingsTab() {
+		$s = $this->getMultimediaSettings();
+
+		// Build partial display strings for API keys (same shared keys as image tab)
+		$openai_display = $this->maskApiKeyForDisplay( $s['openai_api_key'] );
+		$gemini_display = $this->maskApiKeyForDisplay( $s['gemini_api_key'] );
+		?>
+		<div class="sflmcp-multimedia-wrap">
+
+			<!-- ─── Tool Enable/Disable ─────────────────────── -->
+			<div class="sflmcp-tool-toggle-banner" data-tool="wp_generate_video">
+				<label class="sflmcp-toggle-switch">
+					<input type="checkbox" id="sflmcp_mm_tool_video_toggle" class="sflmcp-mm-tool-toggle" data-tool="wp_generate_video">
+					<span class="sflmcp-toggle-slider"></span>
+				</label>
+				<span class="sflmcp-toggle-label">
+					<strong>wp_generate_video</strong> — <?php esc_html_e( 'Enable this tool for MCP clients and AI agents', 'stifli-flex-mcp' ); ?>
+				</span>
+				<span class="sflmcp-toggle-status"></span>
+			</div>
+			<p class="description sflmcp-pricing-notice" style="margin: -8px 0 12px 60px; color: #826200; background: #fff8e1; border-left: 4px solid #ffb900; padding: 8px 12px;">
+				<span class="dashicons dashicons-info" style="color:#ffb900;font-size:16px;vertical-align:middle;margin-right:4px;"></span>
+				<?php esc_html_e( 'Approximate cost per video: OpenAI Sora is billed per second — sora-2: $0.10/s, sora-2-pro: $0.30–$0.50/s (e.g. a 5s video costs $0.50–$2.50). Google Veo 2: $0.35/video, Veo 3: $0.15–$0.40/video, Veo 3.1: $0.15–$0.60/video (varies by resolution). Video generation is significantly more expensive than images. Prices may change — please consult each provider\'s pricing page for up-to-date rates.', 'stifli-flex-mcp' ); ?>
+			</p>
+
+			<h2><?php esc_html_e( 'Video Generation Settings', 'stifli-flex-mcp' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Configure defaults for AI video generation (wp_generate_video tool). Video generation is asynchronous — the tool submits the request, polls for completion, then saves the result as a WordPress media attachment.', 'stifli-flex-mcp' ); ?>
+			</p>
+
+			<div id="sflmcp-mm-notice" class="sflmcp-mm-notice"></div>
+
+			<form id="sflmcp-multimedia-form-video" class="sflmcp-multimedia-form">
+
+				<!-- ─── Video Provider ────────────────────────────── -->
+				<div class="card">
+					<h3>🎬 <?php esc_html_e( 'Video Generation Provider', 'stifli-flex-mcp' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'Select which AI provider to use for video generation. Each has its own API key, models, and pricing.', 'stifli-flex-mcp' ); ?></p>
+
+					<input type="hidden" id="sflmcp_mm_video_provider" name="video_provider" value="<?php echo esc_attr( $s['video_provider'] ); ?>">
+
+					<div class="sflmcp-provider-tabs" style="margin-top:12px;">
+						<div class="sflmcp-provider-tab <?php echo $s['video_provider'] === 'gemini' ? 'active' : ''; ?>" data-provider="gemini">
+							<span class="dashicons dashicons-admin-customizer"></span> Google Veo
+						</div>
+						<div class="sflmcp-provider-tab <?php echo $s['video_provider'] === 'openai' ? 'active' : ''; ?>" data-provider="openai">
+							<span class="dashicons dashicons-video-alt3"></span> OpenAI Sora
+						</div>
+					</div>
+				</div>
+
+				<!-- ─── Gemini / Veo Settings ──────────────────────── -->
+				<div id="sflmcp-panel-gemini" class="sflmcp-provider-panel card" style="<?php echo $s['video_provider'] !== 'gemini' ? 'display:none;' : ''; ?>">
+					<h3><span class="dashicons dashicons-admin-customizer"></span> <?php esc_html_e( 'Google Veo Settings', 'stifli-flex-mcp' ); ?></h3>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'API Key', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_video_gemini_key" class="sflmcp-shared-apikey" data-key="gemini_api_key" value="<?php echo esc_attr( $gemini_display ); ?>" placeholder="AIza..." autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc">
+									<?php esc_html_e( 'Same Gemini key used for image generation. Changes here update the shared key.', 'stifli-flex-mcp' ); ?>
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_video_gemini_model">
+									<option value="veo-3.0-generate-preview" <?php selected( $s['video_gemini_model'], 'veo-3.0-generate-preview' ); ?>>Veo 3 Preview (<?php esc_html_e( 'Latest, best quality with audio', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="veo-2.0-generate-001" <?php selected( $s['video_gemini_model'], 'veo-2.0-generate-001' ); ?>>Veo 2 (<?php esc_html_e( 'Stable, 480p-720p', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Veo 3 generates videos up to 8s with audio. Veo 2 generates silent video.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<!-- ─── OpenAI / Sora Settings ──────────────────── -->
+				<div id="sflmcp-panel-openai" class="sflmcp-provider-panel card" style="<?php echo $s['video_provider'] !== 'openai' ? 'display:none;' : ''; ?>">
+					<h3><span class="dashicons dashicons-video-alt3"></span> <?php esc_html_e( 'OpenAI Sora Settings', 'stifli-flex-mcp' ); ?></h3>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'API Key', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_video_openai_key" class="sflmcp-shared-apikey" data-key="openai_api_key" value="<?php echo esc_attr( $openai_display ); ?>" placeholder="sk-..." autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc">
+									<?php esc_html_e( 'Same OpenAI key used for image generation. Changes here update the shared key.', 'stifli-flex-mcp' ); ?>
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_video_openai_model">
+									<option value="sora-2" <?php selected( $s['video_openai_model'], 'sora-2' ); ?>>Sora 2 (<?php esc_html_e( 'Fast, flexible, good quality', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="sora-2-pro" <?php selected( $s['video_openai_model'], 'sora-2-pro' ); ?>>Sora 2 Pro (<?php esc_html_e( 'Higher quality, slower', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<!-- ─── Common Video Settings ────────────────────── -->
+				<div class="card">
+					<h3>⚙️ <?php esc_html_e( 'Default Video Parameters', 'stifli-flex-mcp' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'These defaults are used when the tool is called without explicit arguments. The tool can override per-request.', 'stifli-flex-mcp' ); ?></p>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Duration', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_video_duration">
+									<option value="4" <?php selected( $s['video_duration'], '4' ); ?>>4s (<?php esc_html_e( 'Sora only', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="5" <?php selected( $s['video_duration'], '5' ); ?>>5s (<?php esc_html_e( 'Veo only', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="6" <?php selected( $s['video_duration'], '6' ); ?>>6s (<?php esc_html_e( 'Veo only', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="8" <?php selected( $s['video_duration'], '8' ); ?>>8s</option>
+									<option value="12" <?php selected( $s['video_duration'], '12' ); ?>>12s (<?php esc_html_e( 'Sora only', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Default video length. Veo supports 5-8s, Sora supports 4, 8, or 12s. Nearest valid value is used per provider.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Aspect Ratio', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_video_aspect">
+									<option value="16:9" <?php selected( $s['video_aspect_ratio'], '16:9' ); ?>>16:9 (<?php esc_html_e( 'Landscape / YouTube', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="9:16" <?php selected( $s['video_aspect_ratio'], '9:16' ); ?>>9:16 (<?php esc_html_e( 'Portrait / Reels', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="1:1" <?php selected( $s['video_aspect_ratio'], '1:1' ); ?>>1:1 (<?php esc_html_e( 'Square', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Resolution', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_video_resolution">
+									<option value="480p" <?php selected( $s['video_resolution'], '480p' ); ?>>480p (<?php esc_html_e( 'Faster, smaller files', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="720p" <?php selected( $s['video_resolution'], '720p' ); ?>>720p (<?php esc_html_e( 'Balanced', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="1080p" <?php selected( $s['video_resolution'], '1080p' ); ?>>1080p (<?php esc_html_e( 'Full HD', 'stifli-flex-mcp' ); ?>)</option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Not all providers support all resolutions. Veo supports up to 720p. Sora uses 1280x720 / 720x1280.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<!-- ─── Async Parameters ─────────────────────────── -->
+				<div class="card">
+					<h3>⏱ <?php esc_html_e( 'Generation Timeout', 'stifli-flex-mcp' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'Video generation is asynchronous. The tool polls the provider API until completion or timeout.', 'stifli-flex-mcp' ); ?></p>
+
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Poll Interval (seconds)', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<input type="number" id="sflmcp_mm_video_poll" value="<?php echo esc_attr( $s['video_poll_interval'] ); ?>" min="5" max="60" step="1">
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'How often to check if the video is ready. Lower = faster detection but more API calls.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Max Wait (seconds)', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<input type="number" id="sflmcp_mm_video_max_wait" value="<?php echo esc_attr( $s['video_max_wait'] ); ?>" min="60" max="600" step="10">
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Maximum time to wait for video generation. Typical: 1-5 minutes. If exceeded, the tool returns an error.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<div id="sflmcp-mm-autosave-status" class="sflmcp-autosave-status"></div>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
+	 * AJAX handler: Save multimedia settings.
+	 */
+	public function ajax_save_multimedia_settings() {
+		check_ajax_referer( 'sflmcp_multimedia', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		// Allowed values for enum fields
+		$allowed_enums = array(
+			'image_provider'       => array( 'openai', 'gemini' ),
+			'openai_model'         => array( 'gpt-image-1', 'dall-e-3', 'dall-e-2' ),
+			'openai_quality'       => array( 'low', 'medium', 'high' ),
+			'openai_size'          => array( 'square', 'landscape', 'portrait' ),
+			'openai_style'         => array( 'natural', 'vivid' ),
+			'openai_background'    => array( 'auto', 'transparent', 'opaque' ),
+			'openai_output_format' => array( 'png', 'jpeg', 'webp' ),
+			'gemini_model'         => array( 'gemini-2.5-flash-image', 'imagen-4.0-generate-001', 'imagen-4.0-fast-generate-001', 'imagen-4.0-ultra-generate-001' ),
+			'gemini_aspect_ratio'  => array( '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3' ),
+			'pp_format'            => array( 'original', 'jpeg', 'webp', 'png' ),
+			'video_provider'       => array( 'gemini', 'openai' ),
+			'video_gemini_model'   => array( 'veo-3.0-generate-preview', 'veo-2.0-generate-001' ),
+			'video_openai_model'   => array( 'sora-2', 'sora-2-pro' ),
+			'video_duration'       => array( '4', '5', '6', '8', '12' ),
+			'video_aspect_ratio'   => array( '16:9', '9:16', '1:1' ),
+			'video_resolution'     => array( '480p', '720p', '1080p' ),
+		);
+
+		// Numeric fields: key => array( min, max )
+		$numeric_fields = array(
+			'pp_max_width'         => array( 0, 4096 ),
+			'pp_max_height'        => array( 0, 4096 ),
+			'pp_quality'           => array( 30, 100 ),
+			'video_poll_interval'  => array( 5, 60 ),
+			'video_max_wait'       => array( 60, 600 ),
+		);
+
+		// Start from existing settings (partial merge — only update fields present in POST)
+		$settings = get_option( 'sflmcp_multimedia_settings', array() );
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce verified above via check_ajax_referer
+
+		// Update enum fields only if present in POST
+		foreach ( $allowed_enums as $key => $values ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$val = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+				if ( in_array( $val, $values, true ) ) {
+					$settings[ $key ] = $val;
+				}
+			}
+		}
+
+		// Update checkbox field
+		if ( isset( $_POST['pp_enabled'] ) ) {
+			$settings['pp_enabled'] = sanitize_text_field( wp_unslash( $_POST['pp_enabled'] ) ) === '1' ? '1' : '0';
+		}
+
+		// Update numeric fields only if present in POST
+		foreach ( $numeric_fields as $key => $range ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$settings[ $key ] = max( $range[0], min( $range[1], intval( $_POST[ $key ] ) ) );
+			}
+		}
+
+		// Handle API keys — only update if user entered a real value (not the masked placeholder)
+		$api_key_fields = array( 'openai_api_key', 'gemini_api_key' );
+		foreach ( $api_key_fields as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$raw = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
+				// Skip if empty or contains bullet chars (masked value, not a real new key)
+				if ( ! empty( $raw ) && strpos( $raw, '•' ) === false ) {
+					if ( class_exists( 'StifliFlexMcp_Client_Admin' ) ) {
+						$ref = new ReflectionMethod( 'StifliFlexMcp_Client_Admin', 'encrypt_value' );
+						$ref->setAccessible( true );
+						$settings[ $key ] = $ref->invoke( null, $raw );
+					} else {
+						$settings[ $key ] = $raw;
+					}
+				}
+				// If empty or masked, keep existing value — do not touch $settings[$key]
+			}
+		}
+
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+		update_option( 'sflmcp_multimedia_settings', $settings );
+
+		wp_send_json_success( array( 'message' => __( 'Settings saved', 'stifli-flex-mcp' ) ) );
+	}
+
+	/**
+	 * AJAX handler: Load multimedia settings.
+	 */
+	public function ajax_load_multimedia_settings() {
+		check_ajax_referer( 'sflmcp_multimedia', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$s = $this->getMultimediaSettings();
+
+		// Mask API keys — partial reveal (first 4 + bullets + last 4 chars)
+		$api_keys = array( 'openai_api_key', 'gemini_api_key' );
+		foreach ( $api_keys as $key ) {
+			$s[ $key ] = $this->maskApiKeyForDisplay( $s[ $key ] );
+		}
+
+		// Include tool enabled/disabled status from wp_sflmcp_tools.
+		global $wpdb;
+		$tools_table = $wpdb->prefix . 'sflmcp_tools';
+		$tool_names  = array( 'wp_generate_image', 'wp_generate_video' );
+		foreach ( $tool_names as $tname ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$enabled = $wpdb->get_var( $wpdb->prepare(
+				"SELECT enabled FROM {$tools_table} WHERE tool_name = %s LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$tname
+			) );
+			$s[ 'tool_enabled_' . $tname ] = ( '1' === $enabled || 1 === (int) $enabled ) ? '1' : '0';
+		}
+
+		wp_send_json_success( $s );
+	}
+
+	/**
+	 * AJAX handler: Reveal a full decrypted API key (admin only).
+	 */
+	public function ajax_mm_reveal_key() {
+		check_ajax_referer( 'sflmcp_multimedia', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$key_name = sanitize_text_field( wp_unslash( $_POST['key_name'] ?? '' ) );
+		$allowed  = array( 'openai_api_key', 'gemini_api_key' );
+		if ( ! in_array( $key_name, $allowed, true ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid key name', 'stifli-flex-mcp' ) ) );
+		}
+
+		$settings  = $this->getMultimediaSettings();
+		$encrypted = isset( $settings[ $key_name ] ) ? $settings[ $key_name ] : '';
+
+		if ( empty( $encrypted ) ) {
+			wp_send_json_success( array( 'key' => '' ) );
+		}
+
+		$plain = '';
+		if ( class_exists( 'StifliFlexMcp_Client_Admin' ) ) {
+			$plain = StifliFlexMcp_Client_Admin::decrypt_value( $encrypted );
+		} else {
+			$plain = $encrypted;
+		}
+
+		wp_send_json_success( array( 'key' => $plain ) );
+	}
+
+	/**
+	 * AJAX handler: Toggle a multimedia tool on/off by tool_name.
+	 */
+	public function ajax_mm_toggle_tool() {
+		check_ajax_referer( 'sflmcp_multimedia', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$tool_name = sanitize_text_field( wp_unslash( $_POST['tool_name'] ?? '' ) );
+		$enabled   = isset( $_POST['enabled'] ) ? intval( $_POST['enabled'] ) : -1;
+
+		$allowed = array( 'wp_generate_image', 'wp_generate_video' );
+		if ( ! in_array( $tool_name, $allowed, true ) || ! in_array( $enabled, array( 0, 1 ), true ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid parameters', 'stifli-flex-mcp' ) ) );
+		}
+
+		global $wpdb;
+		$tools_table = $wpdb->prefix . 'sflmcp_tools';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->update(
+			$tools_table,
+			array( 'enabled' => $enabled, 'updated_at' => current_time( 'mysql', true ) ),
+			array( 'tool_name' => $tool_name ),
+			array( '%d', '%s' ),
+			array( '%s' )
+		);
+
+		// Sync to active profile.
+		$this->syncToolToActiveProfile( $tool_name, $enabled );
+
+		wp_send_json_success( array( 'tool_name' => $tool_name, 'enabled' => $enabled ) );
 	}
 
 	/**

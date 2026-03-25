@@ -31,12 +31,10 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 	 * Claude 4.5 models that don't support both temperature and top_p
 	 */
 	const CLAUDE_45_MODELS = array(
-		'claude-sonnet-4-5-20250929',
-		'claude-haiku-4-5-20251001',
-		'claude-opus-4-5-20251101',
-		'claude-haiku-4-5',
-		'claude-opus-4-5',
-		'claude-sonnet-4-5',
+		'claude-4-6-opus-20260205',
+		'claude-4-6-sonnet-20260217',
+		'claude-4-5-haiku-20251015',
+		'claude-4-5-sonnet-20250914',
 	);
 
 	/**
@@ -47,7 +45,7 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 	 */
 	public function send_message( $args ) {
 		$api_key       = $args['api_key'];
-		$model         = $args['model'] ?: 'claude-sonnet-4-5-20250929';
+		$model         = $args['model'] ?: 'claude-4-6-sonnet-20260217';
 		$message       = $args['message'];
 		$conversation  = $args['conversation'] ?? array();
 		$tools         = $args['tools'] ?? array();
