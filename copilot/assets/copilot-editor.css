@@ -1,0 +1,105 @@
+/**
+ * StifLi Flex MCP — Copilot Editor Keep/Undo Banner Styles
+ *
+ * @since 2.3.0
+ */
+
+/* ── Keep / Undo floating banner ────────────────────────────── */
+
+.sflmcp-keepundo-banner {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    z-index: 160001; /* above copilot widget */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: #1e1e1e;
+    color: #f0f0f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+}
+
+.sflmcp-keepundo-banner.sflmcp-keepundo-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.sflmcp-keepundo-label {
+    margin-right: 4px;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sflmcp-keepundo-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.sflmcp-keepundo-btn:active {
+    transform: scale(0.96);
+}
+
+/* Keep button — green */
+.sflmcp-keepundo-keep {
+    background: #2ea043;
+    color: #fff;
+}
+
+.sflmcp-keepundo-keep:hover {
+    background: #3fb950;
+}
+
+/* Undo button — amber/warning */
+.sflmcp-keepundo-undo {
+    background: #d29922;
+    color: #fff;
+}
+
+.sflmcp-keepundo-undo:hover {
+    background: #e3b341;
+}
+
+/* ── Multiple banners stack upward ──────────────────────────── */
+
+.sflmcp-keepundo-banner:nth-last-of-type(2) {
+    bottom: 130px;
+}
+
+.sflmcp-keepundo-banner:nth-last-of-type(3) {
+    bottom: 180px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+    .sflmcp-keepundo-banner {
+        left: 10px;
+        right: 10px;
+        transform: translateY(20px);
+        width: auto;
+    }
+
+    .sflmcp-keepundo-banner.sflmcp-keepundo-visible {
+        transform: translateY(0);
+    }
+}

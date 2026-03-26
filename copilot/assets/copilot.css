@@ -68,7 +68,7 @@
     flex-direction: column;
     width: 380px;
     max-width: calc(100vw - 48px);
-    height: 520px;
+    height: 600px;
     max-height: calc(100vh - 130px);
     background: #fff;
     border-radius: 12px;
@@ -106,6 +106,12 @@
     background: linear-gradient(135deg, #2271b1 0%, #135e96 100%);
     color: #fff;
     flex-shrink: 0;
+    cursor: grab;
+    user-select: none;
+}
+
+.sflmcp-copilot-header.sflmcp-dragging {
+    cursor: grabbing;
 }
 
 .sflmcp-copilot-title {

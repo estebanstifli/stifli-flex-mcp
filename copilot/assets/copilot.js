@@ -37,19 +37,40 @@
      *
      * Each function returns a plain object (or null) with
      * contextual data scraped from the current admin page.
+     * The data is sent as page_context and injected into the
+     * system prompt so the AI always has full context.
      * ------------------------------------------------------- */
     var ContextCollectors = {
 
         /**
-         * Post / Page / CPT editor (both Gutenberg & Classic).
+         * Detect editor type: 'gutenberg', 'classic', or false.
+         */
+        editorType: function () {
+            if (typeof wp !== 'undefined' && wp.data && wp.data.select && wp.data.select('core/editor')) {
+                return 'gutenberg';
+            }
+            if (typeof tinyMCE !== 'undefined' && tinyMCE.get('content')) {
+                return 'classic';
+            }
+            if ($('#title').length && $('#content').length) {
+                return 'classic';
+            }
+            return false;
+        },
+
+        /**
+         * Post / Page / CPT editor — enriched with block-level detail.
          */
         postEditor: function () {
-            var base = sflmcpCopilot.screen.base;
-            if (base !== 'post') {
+            if (sflmcpCopilot.screen.base !== 'post') {
                 return null;
             }
 
+            var editorType = this.editorType();
+            if (!editorType) { return null; }
+
             var data = {
+                editor_type: editorType,
                 post_type: sflmcpCopilot.screen.postType || 'post',
                 id: '',
                 title: '',
@@ -59,12 +80,15 @@
                 slug: '',
                 categories: '',
                 tags: '',
+                blocks: null,
+                featured_image: '',
             };
 
-            // Gutenberg (block editor).
-            if (typeof wp !== 'undefined' && wp.data && wp.data.select && wp.data.select('core/editor')) {
+            if (editorType === 'gutenberg') {
                 var editor = wp.data.select('core/editor');
-                var post   = editor.getCurrentPost() || {};
+                var blockEditor = wp.data.select('core/block-editor');
+                var post = editor.getCurrentPost() || {};
+
                 data.id      = post.id || '';
                 data.title   = editor.getEditedPostAttribute('title') || '';
                 data.content = editor.getEditedPostContent() || '';
@@ -72,10 +96,8 @@
                 data.status  = editor.getEditedPostAttribute('status') || '';
                 data.slug    = editor.getEditedPostAttribute('slug') || '';
 
-                // Categories / tags names (they come as IDs, resolve them if available).
+                // Resolve category names.
                 var catIds = editor.getEditedPostAttribute('categories') || [];
-                var tagIds = editor.getEditedPostAttribute('tags') || [];
-
                 if (wp.data.select('core') && catIds.length) {
                     var cats = [];
                     catIds.forEach(function (id) {
@@ -84,6 +106,9 @@
                     });
                     data.categories = cats.join(', ');
                 }
+
+                // Resolve tag names.
+                var tagIds = editor.getEditedPostAttribute('tags') || [];
                 if (wp.data.select('core') && tagIds.length) {
                     var tags = [];
                     tagIds.forEach(function (id) {
@@ -93,80 +118,149 @@
                     data.tags = tags.join(', ');
                 }
 
-                return data;
-            }
-
-            // Classic Editor fallback.
-            var $title = $('#title');
-            if ($title.length) {
-                data.id    = $('#post_ID').val() || '';
-                data.title = $title.val() || '';
-                data.slug  = $('#editable-post-name-full').text() || '';
-
-                // TinyMCE content.
-                if (typeof tinyMCE !== 'undefined' && tinyMCE.get('content')) {
-                    data.content = tinyMCE.get('content').getContent();
-                } else {
-                    data.content = $('#content').val() || '';
+                // Featured image.
+                var featId = editor.getEditedPostAttribute('featured_media');
+                if (featId) {
+                    var media = wp.data.select('core').getMedia(featId);
+                    data.featured_image = media ? (media.source_url || '') : '(ID: ' + featId + ')';
                 }
-                data.excerpt = $('#excerpt').val() || '';
 
-                // Categories (checked checkboxes).
-                var cats = [];
-                $('#categorychecklist input:checked').each(function () {
-                    cats.push($(this).parent().text().trim());
-                });
-                data.categories = cats.join(', ');
-
-                // Tags.
-                data.tags = $('.tagchecklist span').map(function () {
-                    return $(this).text().replace(/\s*X\s*$/, '').trim();
-                }).get().join(', ');
-
-                data.status = $('#post_status').val() || ($('#original_post_status').val() || '');
+                // Block-level detail for the AI to reference by index.
+                if (blockEditor) {
+                    var rawBlocks = blockEditor.getBlocks() || [];
+                    data.blocks = rawBlocks.map(function (b, i) {
+                        var info = {
+                            index: i,
+                            type: b.name || 'unknown',
+                        };
+                        // Extract text content from common block attributes.
+                        if (b.attributes) {
+                            if (b.attributes.content) {
+                                info.content = b.attributes.content;
+                            }
+                            if (b.attributes.citation) {
+                                info.citation = b.attributes.citation;
+                            }
+                            if (b.attributes.value) {
+                                info.value = b.attributes.value;
+                            }
+                            if (b.attributes.url) {
+                                info.url = b.attributes.url;
+                            }
+                            if (b.attributes.alt) {
+                                info.alt = b.attributes.alt;
+                            }
+                            if (b.attributes.caption) {
+                                info.caption = b.attributes.caption;
+                            }
+                            if (b.attributes.level) {
+                                info.level = b.attributes.level; // heading level h1-h6
+                            }
+                            if (b.attributes.values) {
+                                info.values = b.attributes.values; // list items
+                            }
+                        }
+                        // Inner blocks (columns, groups, etc.) — first level only.
+                        if (b.innerBlocks && b.innerBlocks.length) {
+                            info.innerBlockCount = b.innerBlocks.length;
+                        }
+                        return info;
+                    });
+                }
 
                 return data;
             }
 
-            return null;
+            // Classic Editor.
+            var $title = $('#title');
+            if (!$title.length) { return null; }
+
+            data.id    = $('#post_ID').val() || '';
+            data.title = $title.val() || '';
+            data.slug  = $('#editable-post-name-full').text() || '';
+
+            if (typeof tinyMCE !== 'undefined' && tinyMCE.get('content')) {
+                data.content = tinyMCE.get('content').getContent();
+            } else {
+                data.content = $('#content').val() || '';
+            }
+            data.excerpt = $('#excerpt').val() || '';
+
+            var cats = [];
+            $('#categorychecklist input:checked').each(function () {
+                cats.push($(this).parent().text().trim());
+            });
+            data.categories = cats.join(', ');
+
+            data.tags = $('.tagchecklist span').map(function () {
+                return $(this).text().replace(/\s*X\s*$/, '').trim();
+            }).get().join(', ');
+
+            data.status = $('#post_status').val() || ($('#original_post_status').val() || '');
+
+            return data;
         },
 
         /**
          * WooCommerce Product editor.
          */
         wcProduct: function () {
-            var base     = sflmcpCopilot.screen.base;
-            var postType = sflmcpCopilot.screen.postType;
-            if (base !== 'post' || postType !== 'product') {
+            if (sflmcpCopilot.screen.base !== 'post' || sflmcpCopilot.screen.postType !== 'product') {
                 return null;
             }
 
             var data = {
                 id: $('#post_ID').val() || '',
                 name: '',
-                price: '',
+                regular_price: '',
+                sale_price: '',
                 sku: '',
                 stock: '',
+                stock_status: '',
+                weight: '',
+                length: '',
+                width: '',
+                height: '',
                 short_description: '',
+                product_type: '',
+                categories: '',
+                tags: '',
             };
 
-            // Gutenberg product editor.
-            if (typeof wp !== 'undefined' && wp.data && wp.data.select && wp.data.select('core/editor')) {
+            var editorType = ContextCollectors.editorType();
+            if (editorType === 'gutenberg') {
                 var editor = wp.data.select('core/editor');
                 data.name = editor.getEditedPostAttribute('title') || '';
             } else {
                 data.name = $('#title').val() || '';
             }
 
-            data.price             = $('#_regular_price').val() || $('#_price').val() || '';
-            data.sku               = $('#_sku').val() || '';
-            data.stock             = $('#_stock').val() || '';
+            data.regular_price    = $('#_regular_price').val() || '';
+            data.sale_price       = $('#_sale_price').val() || '';
+            data.sku              = $('#_sku').val() || '';
+            data.stock            = $('#_stock').val() || '';
+            data.stock_status     = $('#_stock_status').val() || '';
+            data.weight           = $('#_weight').val() || '';
+            data.length           = $('#_length').val() || '';
+            data.width            = $('#_width').val() || '';
+            data.height           = $('#_height').val() || '';
             data.short_description = $('#excerpt').val() || '';
+            data.product_type     = $('#product-type').val() || '';
 
-            // If nothing was collected, don't bother.
-            if (!data.name && !data.price) {
-                return null;
-            }
+            // Product categories.
+            var cats = [];
+            $('#product_catchecklist input:checked, #taxonomy-product_cat input:checked').each(function () {
+                cats.push($(this).parent().text().trim());
+            });
+            data.categories = cats.join(', ');
+
+            // Product tags.
+            var tagEl = $('.tagchecklist[id*="product_tag"] span, #product_tag .tagchecklist span');
+            data.tags = tagEl.map(function () {
+                return $(this).text().replace(/\s*X\s*$/, '').trim();
+            }).get().join(', ');
+
+            if (!data.name && !data.regular_price) { return null; }
             return data;
         },
 
@@ -175,7 +269,6 @@
          */
         wcOrder: function () {
             var screenId = sflmcpCopilot.screen.id;
-            // HPOS uses woocommerce_page_wc-orders, legacy uses shop_order.
             if (screenId !== 'woocommerce_page_wc-orders' && screenId !== 'shop_order') {
                 return null;
             }
@@ -190,7 +283,6 @@
             data.status = $('#order_status').val() || $('select[name="order_status"]').val() || '';
             data.total  = $('#_order_total').val() || $('.woocommerce-order-data__meta .order_number').text().trim() || '';
 
-            // Item names.
             var items = [];
             $('.woocommerce_order_items .order_item .wc-order-item-name, #order_line_items .name a').each(function () {
                 items.push($(this).text().trim());
@@ -202,11 +294,10 @@
         },
 
         /**
-         * Media Library (list / grid view).
+         * Media Library.
          */
         mediaLibrary: function () {
-            var screenId = sflmcpCopilot.screen.id;
-            if (screenId !== 'upload') {
+            if (sflmcpCopilot.screen.id !== 'upload') {
                 return null;
             }
             var count = $('.attachments .attachment.selected, .wp-list-table .check-column input:checked').length;
@@ -281,6 +372,7 @@
             { label: '♿ Alt text for images',             prompt: 'Generate descriptive alt text for all images in this post to improve accessibility.' },
             { label: '📋 Summarize',                       prompt: 'Summarize this post content into a short, digestible overview (3-4 sentences).' },
             { label: '🔍 SEO review',                      prompt: 'Review this post for SEO best practices and suggest improvements.' },
+            { label: '🖼️ Generate image',                  prompt: 'Generate an image that matches the topic of this post and set it as the featured image.' },
         ],
         'product': [
             { label: '✍️ Improve description',             prompt: 'Rewrite the short description of this product to be more compelling and conversion-oriented.' },
@@ -288,6 +380,7 @@
             { label: '💰 Price analysis',                  prompt: 'Based on the product description, does the price seem appropriate? Give a brief analysis.' },
             { label: '📋 Generate bullet points',          prompt: 'Generate 5 concise bullet points highlighting the key features and benefits of this product.' },
             { label: '🔍 SEO optimize',                    prompt: 'Suggest an SEO-optimized product title and meta description for this product.' },
+            { label: '🖼️ Generate product image',          prompt: 'Generate a professional product image based on this product description and set it as the featured image.' },
         ],
         'order': [
             { label: '📊 Order summary',                   prompt: 'Summarize this order: items, totals, and current status.' },
@@ -459,12 +552,22 @@
 
     /**
      * Execute all tool calls sequentially, then feed all results back at once.
+     * Local tools (copilot_*) run in the browser; remote tools go via AJAX.
      */
     function executeAllTools(toolCalls) {
         var results = [];
         var index = 0;
         state.busy = true;
         $send.prop('disabled', true);
+
+        function pushResult(tc, name, output) {
+            results.push({
+                tool_use_id: tc.tool_use_id || tc.id || '',
+                call_id:     tc.call_id || tc.id || '',
+                name:        name,
+                output:      output,
+            });
+        }
 
         function next() {
             if (index >= toolCalls.length) {
@@ -475,6 +578,22 @@
 
             var tc = toolCalls[index];
             var name = tc.name || tc.function || '';
+
+            // ── Local tool: execute in browser via copilot-editor bridge ──
+            if (name.indexOf('copilot_') === 0 && window.SflmcpCopilotEditor) {
+                addMessage('tool', '✏️ <em>' + escapeHtml(name) + '</em>');
+                try {
+                    var localResult = window.SflmcpCopilotEditor.execute(name, tc.arguments || {});
+                    pushResult(tc, name, localResult);
+                } catch (err) {
+                    pushResult(tc, name, { error: err.message || 'Local tool failed' });
+                }
+                index++;
+                next();
+                return;
+            }
+
+            // ── Remote tool: execute via AJAX ──
             addMessage('tool', '🔧 <em>' + escapeHtml(name) + '…</em>');
 
             $.ajax({
@@ -493,22 +612,12 @@
                     } else {
                         output = { error: (res.data && res.data.message) || 'Tool execution failed' };
                     }
-                    results.push({
-                        tool_use_id: tc.tool_use_id || tc.id || '',
-                        call_id:     tc.call_id || tc.id || '',
-                        name:        name,
-                        output:      output,
-                    });
+                    pushResult(tc, name, output);
                     index++;
                     next();
                 },
                 error: function () {
-                    results.push({
-                        tool_use_id: tc.tool_use_id || tc.id || '',
-                        call_id:     tc.call_id || tc.id || '',
-                        name:        name,
-                        output:      { error: 'Network error executing tool' },
-                    });
+                    pushResult(tc, name, { error: 'Network error executing tool' });
                     index++;
                     next();
                 },
@@ -615,6 +724,53 @@
 
         // Render context-aware quick actions.
         renderQuickActions();
+
+        // ── Drag support — drag by the header bar ──
+        (function () {
+            var $header = $panel.find('.sflmcp-copilot-header');
+            var dragging = false;
+            var startX, startY, origLeft, origTop;
+
+            $header.on('mousedown', function (e) {
+                // Ignore clicks on the close button.
+                if ($(e.target).closest('.sflmcp-copilot-close').length) return;
+
+                dragging = true;
+                $header.addClass('sflmcp-dragging');
+
+                // Switch widget to position-based layout on first drag.
+                var offset = $widget[0].getBoundingClientRect();
+                $widget.css({
+                    right: 'auto',
+                    bottom: 'auto',
+                    left: offset.left + 'px',
+                    top: offset.top + 'px',
+                });
+
+                startX = e.clientX;
+                startY = e.clientY;
+                origLeft = offset.left;
+                origTop  = offset.top;
+
+                e.preventDefault();
+            });
+
+            $(document).on('mousemove', function (e) {
+                if (!dragging) return;
+                var dx = e.clientX - startX;
+                var dy = e.clientY - startY;
+                $widget.css({
+                    left: Math.max(0, origLeft + dx) + 'px',
+                    top:  Math.max(0, origTop + dy) + 'px',
+                });
+            });
+
+            $(document).on('mouseup', function () {
+                if (!dragging) return;
+                dragging = false;
+                $header.removeClass('sflmcp-dragging');
+            });
+        })();
     });
 
 })(jQuery);

@@ -20,10 +20,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class StifliFlexMcp_Copilot_Admin {
 
 	/** Asset version — bump when JS/CSS change. */
-	const ASSET_VERSION = '1.0.0';
+	const ASSET_VERSION = '1.1.0';
 
 	/** Nonce action used by all Copilot AJAX calls. */
 	const NONCE_ACTION = 'sflmcp_copilot';
+
+	/** Option key for Copilot-specific settings. */
+	const OPTION_KEY = 'sflmcp_copilot_options';
 
 	/* ----------------------------------------------------------
 	 * Bootstrap
@@ -33,9 +36,31 @@ class StifliFlexMcp_Copilot_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_footer',          array( $this, 'render_widget' ) );
 
+		// Admin menu — add "AI Copilot" submenu below MCP Server.
+		add_action( 'admin_menu', array( $this, 'register_admin_menu' ), 22 );
+
 		// AJAX.
 		add_action( 'wp_ajax_sflmcp_copilot_chat', array( $this, 'ajax_chat' ) );
 		add_action( 'wp_ajax_sflmcp_copilot_execute_tool', array( $this, 'ajax_execute_tool' ) );
+		add_action( 'wp_ajax_sflmcp_copilot_save_settings', array( $this, 'ajax_save_settings' ) );
+	}
+
+	/* ----------------------------------------------------------
+	 * Copilot settings
+	 * ---------------------------------------------------------- */
+
+	/**
+	 * Get Copilot settings with defaults.
+	 *
+	 * @return array { enabled: bool, tools_mode: 'local'|'local_mcp_subset'|'local_mcp_full' }
+	 */
+	public function get_copilot_settings() {
+		$defaults = array(
+			'enabled'    => true,
+			'tools_mode' => 'local', // 'local' | 'local_mcp_subset' | 'local_mcp_full'
+		);
+		$saved = get_option( self::OPTION_KEY, array() );
+		return wp_parse_args( $saved, $defaults );
 	}
 
 	/* ----------------------------------------------------------
@@ -50,6 +75,12 @@ class StifliFlexMcp_Copilot_Admin {
 		// Only load when the user has configured an API key.
 		$settings = $this->get_chat_settings();
 		if ( empty( $settings['api_key'] ) ) {
+			return;
+		}
+
+		// Check if Copilot is enabled.
+		$copilot_settings = $this->get_copilot_settings();
+		if ( empty( $copilot_settings['enabled'] ) ) {
 			return;
 		}
 
@@ -68,8 +99,34 @@ class StifliFlexMcp_Copilot_Admin {
 			true
 		);
 
-		// Build minimal quick-actions map per screen (JS will pick the right ones).
+		// Editor bridge — load on post/page editor screens (Gutenberg or Classic).
 		$screen = get_current_screen();
+		$is_editor = $screen && ( $screen->base === 'post' || $screen->base === 'page' );
+
+		if ( $is_editor ) {
+			wp_enqueue_style(
+				'sflmcp-copilot-editor',
+				plugin_dir_url( __FILE__ ) . 'assets/copilot-editor.css',
+				array( 'sflmcp-copilot' ),
+				self::ASSET_VERSION
+			);
+
+			$editor_deps = array( 'jquery', 'sflmcp-copilot' );
+			// Add Gutenberg dependencies when available.
+			if ( function_exists( 'register_block_type' ) ) {
+				$editor_deps[] = 'wp-data';
+				$editor_deps[] = 'wp-blocks';
+				$editor_deps[] = 'wp-block-editor';
+			}
+
+			wp_enqueue_script(
+				'sflmcp-copilot-editor',
+				plugin_dir_url( __FILE__ ) . 'assets/copilot-editor.js',
+				$editor_deps,
+				self::ASSET_VERSION,
+				true
+			);
+		}
 
 		wp_localize_script( 'sflmcp-copilot', 'sflmcpCopilot', array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
@@ -99,6 +156,12 @@ class StifliFlexMcp_Copilot_Admin {
 	public function render_widget() {
 		$settings = $this->get_chat_settings();
 		if ( empty( $settings['api_key'] ) ) {
+			return;
+		}
+
+		// Check if Copilot is enabled.
+		$copilot_settings = $this->get_copilot_settings();
+		if ( empty( $copilot_settings['enabled'] ) ) {
 			return;
 		}
 		?>
@@ -175,8 +238,31 @@ class StifliFlexMcp_Copilot_Admin {
 		// Build context-aware system prompt.
 		$system_prompt = $this->build_system_prompt( $page_context, $advanced['system_prompt'] );
 
-		// Get MCP tools (same set as the full chat) for context-based actions.
-		$tools = $this->get_mcp_tools();
+		// Determine which tools to expose based on Copilot settings.
+		$copilot_opts = $this->get_copilot_settings();
+		$tools_mode   = $copilot_opts['tools_mode'] ?? 'local';
+
+		$tools = array();
+
+		// Local editor tools (always included when on an editor page).
+		$local_tools = $this->get_local_editor_tools( $page_context );
+		if ( ! empty( $local_tools ) ) {
+			$tools = $local_tools;
+		}
+
+		if ( $tools_mode === 'local_mcp_subset' ) {
+			$tools = array_merge( $tools, $this->get_mcp_tools_subset( $page_context ) );
+		} elseif ( $tools_mode === 'local_mcp_full' ) {
+			$tools = array_merge( $tools, $this->get_mcp_tools() );
+		}
+
+		// Always include wp_generate_image in the editor when available (needed for image tools).
+		if ( ! empty( $page_context['post'] ) && $tools_mode === 'local' ) {
+			$img_tool = $this->get_single_mcp_tool( 'wp_generate_image' );
+			if ( $img_tool ) {
+				$tools[] = $img_tool;
+			}
+		}
 
 		// Trim conversation to last 6 tool cycles to keep the copilot lightweight.
 		$conversation = $this->trim_conversation( $conversation, 6 );
@@ -190,7 +276,7 @@ class StifliFlexMcp_Copilot_Admin {
 			'tool_result'      => $tool_result,
 			'system_prompt'    => $system_prompt,
 			'temperature'      => $advanced['temperature'],
-			'max_tokens'       => min( (int) $advanced['max_tokens'], 2048 ), // cap for copilot
+			'max_tokens'       => min( (int) $advanced['max_tokens'], 4096 ), // cap for copilot
 			'top_p'            => $advanced['top_p'],
 			'frequency_penalty' => $advanced['frequency_penalty'],
 			'presence_penalty'  => $advanced['presence_penalty'],
@@ -237,6 +323,12 @@ class StifliFlexMcp_Copilot_Admin {
 		}
 
 		$parts[] = 'You have access to MCP tools to read and modify WordPress/WooCommerce data. Use them when the user asks you to make changes. IMPORTANT: Execute only ONE tool at a time.';
+
+		// Local editor tool instructions (only when on a post/page editor).
+		if ( ! empty( $ctx['post'] ) ) {
+			$parts[] = 'EDITOR TOOLS: You have local "copilot_*" tools that modify the editor visually (title, excerpt, slug, status, categories, tags, content, blocks, images). These are INSTANT and do NOT save to the database — the user will see the change in real-time and can Keep or Undo it. ALWAYS prefer copilot_* tools over wp_update_post or similar MCP tools when the user wants to edit the current post/page. For block operations: block_index is 0-based and corresponds to the block indices shown in the context above.';
+			$parts[] = 'IMAGE WORKFLOW: To generate an image and place it in the post, use this 2-step flow: (1) Call wp_generate_image with the prompt and the current post_id — this returns attachment_id and url. (2) Then call copilot_set_featured_image (to set as featured) or copilot_insert_image_block (to place it in the content at a specific position). Example: "generate a cat image and put it after the 3rd paragraph" → wp_generate_image → copilot_insert_image_block with position=3.';
+		}
 		$parts[] = 'Answer in the same language the user writes in.';
 
 		return implode( "\n\n", array_filter( $parts ) );
@@ -256,18 +348,19 @@ class StifliFlexMcp_Copilot_Admin {
 		// Post editor context.
 		if ( ! empty( $ctx['post'] ) && is_array( $ctx['post'] ) ) {
 			$p = $ctx['post'];
-			$lines[] = sprintf( 'Editing %s (#%s): "%s"',
+			$editor_type = sanitize_text_field( $p['editor_type'] ?? 'unknown' );
+			$lines[] = sprintf( 'Editing %s (#%s): "%s"  [editor: %s]',
 				sanitize_text_field( $p['post_type'] ?? 'post' ),
 				absint( $p['id'] ?? 0 ),
-				sanitize_text_field( $p['title'] ?? '' )
+				sanitize_text_field( $p['title'] ?? '' ),
+				$editor_type
 			);
-			if ( ! empty( $p['content'] ) ) {
-				// Truncate content to ~2000 chars to save tokens.
-				$content = wp_strip_all_tags( wp_unslash( $p['content'] ) );
-				if ( mb_strlen( $content ) > 2000 ) {
-					$content = mb_substr( $content, 0, 2000 ) . '… [truncated]';
-				}
-				$lines[] = 'Content: ' . $content;
+
+			if ( ! empty( $p['status'] ) ) {
+				$lines[] = 'Status: ' . sanitize_text_field( $p['status'] );
+			}
+			if ( ! empty( $p['slug'] ) ) {
+				$lines[] = 'Slug: ' . sanitize_text_field( $p['slug'] );
 			}
 			if ( ! empty( $p['excerpt'] ) ) {
 				$lines[] = 'Excerpt: ' . sanitize_text_field( $p['excerpt'] );
@@ -278,11 +371,47 @@ class StifliFlexMcp_Copilot_Admin {
 			if ( ! empty( $p['tags'] ) ) {
 				$lines[] = 'Tags: ' . sanitize_text_field( $p['tags'] );
 			}
-			if ( ! empty( $p['status'] ) ) {
-				$lines[] = 'Status: ' . sanitize_text_field( $p['status'] );
+			if ( ! empty( $p['featured_image'] ) ) {
+				$lines[] = 'Featured image: ' . esc_url( $p['featured_image'] );
 			}
-			if ( ! empty( $p['slug'] ) ) {
-				$lines[] = 'Slug: ' . sanitize_text_field( $p['slug'] );
+
+			// Block-level content (Gutenberg) — much richer than raw content.
+			if ( ! empty( $p['blocks'] ) && is_array( $p['blocks'] ) ) {
+				$lines[] = '';
+				$lines[] = 'BLOCKS (' . count( $p['blocks'] ) . ' total):';
+				foreach ( $p['blocks'] as $b ) {
+					$idx  = absint( $b['index'] ?? 0 );
+					$type = sanitize_text_field( $b['type'] ?? 'unknown' );
+					$text = '';
+
+					// Build a concise preview of the block content.
+					if ( ! empty( $b['content'] ) ) {
+						$text = wp_strip_all_tags( wp_unslash( $b['content'] ) );
+					} elseif ( ! empty( $b['value'] ) ) {
+						$text = wp_strip_all_tags( wp_unslash( $b['value'] ) );
+					} elseif ( ! empty( $b['citation'] ) ) {
+						$text = wp_strip_all_tags( wp_unslash( $b['citation'] ) );
+					} elseif ( ! empty( $b['url'] ) ) {
+						$text = esc_url( $b['url'] );
+					}
+
+					$extra = '';
+					if ( ! empty( $b['level'] ) ) {
+						$extra .= ' H' . absint( $b['level'] );
+					}
+					if ( ! empty( $b['alt'] ) ) {
+						$extra .= ' alt="' . sanitize_text_field( $b['alt'] ) . '"';
+					}
+					if ( ! empty( $b['innerBlockCount'] ) ) {
+						$extra .= ' (' . absint( $b['innerBlockCount'] ) . ' inner blocks)';
+					}
+
+					$lines[] = sprintf( '  [%d] %s%s: %s', $idx, $type, $extra, $text );
+				}
+			} elseif ( ! empty( $p['content'] ) ) {
+				// Classic editor fallback — full plain content.
+				$content = wp_strip_all_tags( wp_unslash( $p['content'] ) );
+				$lines[] = 'Content: ' . $content;
 			}
 		}
 
@@ -296,15 +425,45 @@ class StifliFlexMcp_Copilot_Admin {
 			if ( isset( $pr['price'] ) ) {
 				$lines[] = 'Price: ' . sanitize_text_field( $pr['price'] );
 			}
+			if ( isset( $pr['regular_price'] ) ) {
+				$lines[] = 'Regular price: ' . sanitize_text_field( $pr['regular_price'] );
+			}
+			if ( isset( $pr['sale_price'] ) ) {
+				$lines[] = 'Sale price: ' . sanitize_text_field( $pr['sale_price'] );
+			}
 			if ( isset( $pr['sku'] ) ) {
 				$lines[] = 'SKU: ' . sanitize_text_field( $pr['sku'] );
 			}
 			if ( isset( $pr['stock'] ) ) {
 				$lines[] = 'Stock: ' . sanitize_text_field( $pr['stock'] );
 			}
+			if ( isset( $pr['stock_status'] ) ) {
+				$lines[] = 'Stock status: ' . sanitize_text_field( $pr['stock_status'] );
+			}
+			if ( isset( $pr['product_type'] ) ) {
+				$lines[] = 'Product type: ' . sanitize_text_field( $pr['product_type'] );
+			}
+			if ( isset( $pr['weight'] ) ) {
+				$lines[] = 'Weight: ' . sanitize_text_field( $pr['weight'] );
+			}
+			$dims = array();
+			foreach ( array( 'length', 'width', 'height' ) as $dk ) {
+				if ( ! empty( $pr[ $dk ] ) ) {
+					$dims[] = $dk . ': ' . sanitize_text_field( $pr[ $dk ] );
+				}
+			}
+			if ( $dims ) {
+				$lines[] = 'Dimensions: ' . implode( ', ', $dims );
+			}
+			if ( ! empty( $pr['categories'] ) ) {
+				$lines[] = 'Categories: ' . sanitize_text_field( $pr['categories'] );
+			}
+			if ( ! empty( $pr['tags'] ) ) {
+				$lines[] = 'Tags: ' . sanitize_text_field( $pr['tags'] );
+			}
 			if ( ! empty( $pr['short_description'] ) ) {
 				$desc = wp_strip_all_tags( wp_unslash( $pr['short_description'] ) );
-				$lines[] = 'Short description: ' . mb_substr( $desc, 0, 500 );
+				$lines[] = 'Short description: ' . $desc;
 			}
 		}
 
@@ -417,6 +576,415 @@ class StifliFlexMcp_Copilot_Admin {
 	}
 
 	/**
+	 * Get local editor tool definitions (copilot_*).
+	 *
+	 * These tools execute in the browser (via copilot-editor.js), NOT server-side.
+	 * We include them in the tool list so the AI knows about them and can call them.
+	 *
+	 * @param array $ctx Page context from JS.
+	 * @return array Tool schemas (empty if not on an editor page).
+	 */
+	private function get_local_editor_tools( $ctx ) {
+		// Only register editor tools when we're actually on a post editor.
+		if ( empty( $ctx['post'] ) ) {
+			return array();
+		}
+
+		$is_gutenberg = ( ( $ctx['post']['editor_type'] ?? '' ) === 'gutenberg' );
+
+		$tools = array();
+
+		$tools[] = array(
+			'name'        => 'copilot_set_title',
+			'description' => 'Set the post/page title in the editor. The change is visual and immediate — the user will see Keep/Undo buttons.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'title' => array( 'type' => 'string', 'description' => 'The new title' ),
+				),
+				'required' => array( 'title' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_set_excerpt',
+			'description' => 'Set the post/page excerpt in the editor.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'excerpt' => array( 'type' => 'string', 'description' => 'The new excerpt text' ),
+				),
+				'required' => array( 'excerpt' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_set_slug',
+			'description' => 'Set the post/page URL slug in the editor.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'slug' => array( 'type' => 'string', 'description' => 'The new slug (URL-safe)' ),
+				),
+				'required' => array( 'slug' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_set_status',
+			'description' => 'Change the post status (draft, publish, pending, private).',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'status' => array( 'type' => 'string', 'enum' => array( 'draft', 'publish', 'pending', 'private' ), 'description' => 'The new status' ),
+				),
+				'required' => array( 'status' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_set_categories',
+			'description' => 'Set the post categories by name. Replaces current selection.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'categories' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Array of category names' ),
+				),
+				'required' => array( 'categories' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_set_tags',
+			'description' => 'Set the post tags by name.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'tags' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'description' => 'Array of tag names' ),
+				),
+				'required' => array( 'tags' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_replace_content',
+			'description' => 'Replace the entire post content. Provide full HTML or block markup. Use this when rewriting the whole content.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'content' => array( 'type' => 'string', 'description' => 'The new HTML content (can include block markup for Gutenberg)' ),
+				),
+				'required' => array( 'content' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_find_replace',
+			'description' => 'Find and replace text in the post content. Works across all blocks (Gutenberg) or the full HTML (Classic). Case-sensitive.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'search'  => array( 'type' => 'string', 'description' => 'The text to find' ),
+					'replace' => array( 'type' => 'string', 'description' => 'The replacement text' ),
+				),
+				'required' => array( 'search', 'replace' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_insert_block',
+			'description' => 'Insert a new block at a given position. In Classic Editor, appends a paragraph at the end.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'content'    => array( 'type' => 'string', 'description' => 'Block text/HTML content' ),
+					'block_type' => array( 'type' => 'string', 'description' => 'Block type (e.g. core/paragraph, core/heading, core/image, core/list). Default: core/paragraph' ),
+					'position'   => array( 'type' => 'integer', 'description' => 'Insert at this 0-based block index. Omit to append at end.' ),
+					'level'      => array( 'type' => 'integer', 'description' => 'Heading level (2-6) — only for core/heading blocks' ),
+				),
+				'required' => array( 'content' ),
+			),
+		);
+
+		// Gutenberg-only block tools.
+		if ( $is_gutenberg ) {
+			$tools[] = array(
+				'name'        => 'copilot_update_block',
+				'description' => 'Update the text content of a specific block by its 0-based index. Gutenberg only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'block_index' => array( 'type' => 'integer', 'description' => 'The 0-based block index (see BLOCKS list in context)' ),
+						'content'     => array( 'type' => 'string', 'description' => 'The new text/HTML content for the block' ),
+					),
+					'required' => array( 'block_index', 'content' ),
+				),
+			);
+
+			$tools[] = array(
+				'name'        => 'copilot_delete_block',
+				'description' => 'Delete a specific block by its 0-based index. Gutenberg only.',
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'block_index' => array( 'type' => 'integer', 'description' => 'The 0-based block index to delete' ),
+					),
+					'required' => array( 'block_index' ),
+				),
+			);
+		}
+
+		// Image tools — available in both editors.
+		$tools[] = array(
+			'name'        => 'copilot_set_featured_image',
+			'description' => 'Set the featured image (post thumbnail) from a WordPress media attachment ID. Use after wp_generate_image to set the generated image as featured.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'attachment_id' => array( 'type' => 'integer', 'description' => 'The WordPress media attachment ID' ),
+				),
+				'required' => array( 'attachment_id' ),
+			),
+		);
+
+		$tools[] = array(
+			'name'        => 'copilot_insert_image_block',
+			'description' => 'Insert an image into the post content at a specific position. In Gutenberg, creates an image block. In Classic, inserts an <img> tag. Use after wp_generate_image to place the image in the content.',
+			'inputSchema' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'url'           => array( 'type' => 'string', 'description' => 'The image URL' ),
+					'attachment_id' => array( 'type' => 'integer', 'description' => 'Optional WordPress attachment ID' ),
+					'alt'           => array( 'type' => 'string', 'description' => 'Alt text for the image' ),
+					'caption'       => array( 'type' => 'string', 'description' => 'Optional image caption' ),
+					'position'      => array( 'type' => 'integer', 'description' => 'Block index to insert at (0-based). Omit to append at end. Gutenberg only.' ),
+				),
+				'required' => array( 'url' ),
+			),
+		);
+
+		return $tools;
+	}
+
+	/**
+	 * Get a relevant subset of MCP tools based on the current page context.
+	 *
+	 * @param array $ctx Page context from JS.
+	 * @return array
+	 */
+	private function get_mcp_tools_subset( $ctx ) {
+		$all = $this->get_mcp_tools();
+		if ( empty( $all ) ) {
+			return array();
+		}
+
+		// Define which tool prefixes are relevant per context.
+		$relevant_prefixes = array(
+			'mcp_ping',          // always useful
+			'wp_get_posts',
+			'wp_get_taxonomies',
+			'wp_get_terms',
+			'wp_get_media',
+			'wp_get_users',
+		);
+
+		// Post editor context — add post/taxonomy/media tools.
+		if ( ! empty( $ctx['post'] ) ) {
+			$relevant_prefixes = array_merge( $relevant_prefixes, array(
+				'wp_create_post',
+				'wp_update_post',
+				'wp_get_post_meta',
+				'wp_set_post_meta',
+				'wp_create_term',
+				'wp_create_tag',
+				'wp_upload',
+				'wp_get_categories',
+				'wp_get_tags',
+				'aiwu_image',
+				'wp_generate_image',
+			) );
+		}
+
+		// WooCommerce product context — add product tools.
+		if ( ! empty( $ctx['product'] ) ) {
+			$relevant_prefixes = array_merge( $relevant_prefixes, array(
+				'wc_get_products',
+				'wc_update_product',
+				'wc_get_product_categories',
+				'wc_get_product_tags',
+				'wc_create_product',
+				'wp_generate_image',
+			) );
+		}
+
+		// WooCommerce order context.
+		if ( ! empty( $ctx['order'] ) ) {
+			$relevant_prefixes = array_merge( $relevant_prefixes, array(
+				'wc_get_orders',
+				'wc_update_order',
+				'wc_get_order_notes',
+				'wc_create_order_note',
+			) );
+		}
+
+		$subset = array();
+		foreach ( $all as $tool ) {
+			foreach ( $relevant_prefixes as $prefix ) {
+				if ( strpos( $tool['name'], $prefix ) === 0 || $tool['name'] === $prefix ) {
+					$subset[] = $tool;
+					break;
+				}
+			}
+		}
+
+		return $subset;
+	}
+
+	/* ----------------------------------------------------------
+	 * Admin Menu — AI Copilot settings page
+	 * ---------------------------------------------------------- */
+
+	/**
+	 * Register the "AI Copilot" submenu under StifLi Flex MCP.
+	 */
+	public function register_admin_menu() {
+		add_submenu_page(
+			'stifli-flex-mcp',
+			__( 'AI Copilot', 'stifli-flex-mcp' ),
+			__( 'AI Copilot', 'stifli-flex-mcp' ),
+			'manage_options',
+			'sflmcp-copilot',
+			array( $this, 'render_settings_page' )
+		);
+	}
+
+	/**
+	 * Render the AI Copilot settings page.
+	 */
+	public function render_settings_page() {
+		$opts = $this->get_copilot_settings();
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'AI Copilot Settings', 'stifli-flex-mcp' ); ?></h1>
+
+			<div id="sflmcp-copilot-settings-notice" style="display:none;" class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Settings saved.', 'stifli-flex-mcp' ); ?></p>
+			</div>
+
+			<form id="sflmcp-copilot-settings-form" method="post">
+				<?php wp_nonce_field( 'sflmcp_copilot_settings', 'sflmcp_copilot_settings_nonce' ); ?>
+				<table class="form-table" role="presentation">
+
+					<!-- Enabled toggle -->
+					<tr>
+						<th scope="row">
+							<label for="sflmcp-copilot-enabled"><?php esc_html_e( 'AI Copilot', 'stifli-flex-mcp' ); ?></label>
+						</th>
+						<td>
+							<label>
+								<input type="checkbox" id="sflmcp-copilot-enabled" name="enabled" value="1" <?php checked( $opts['enabled'] ); ?>>
+								<?php esc_html_e( 'Enable the floating AI Copilot widget on all admin pages', 'stifli-flex-mcp' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'When disabled, the copilot bubble will not appear anywhere.', 'stifli-flex-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+					<!-- Tools mode -->
+					<tr>
+						<th scope="row">
+							<label for="sflmcp-copilot-tools-mode"><?php esc_html_e( 'Available Tools', 'stifli-flex-mcp' ); ?></label>
+						</th>
+						<td>
+							<select id="sflmcp-copilot-tools-mode" name="tools_mode">
+								<option value="local" <?php selected( $opts['tools_mode'], 'local' ); ?>>
+									<?php esc_html_e( 'Only local editor tools (by context)', 'stifli-flex-mcp' ); ?>
+								</option>
+								<option value="local_mcp_subset" <?php selected( $opts['tools_mode'], 'local_mcp_subset' ); ?>>
+									<?php esc_html_e( 'Local + relevant MCP tools subset', 'stifli-flex-mcp' ); ?>
+								</option>
+								<option value="local_mcp_full" <?php selected( $opts['tools_mode'], 'local_mcp_full' ); ?>>
+									<?php esc_html_e( 'Local + all MCP tools (default profile)', 'stifli-flex-mcp' ); ?>
+								</option>
+							</select>
+							<p class="description">
+								<?php esc_html_e( 'Controls which tools are available to the AI when using the Copilot.', 'stifli-flex-mcp' ); ?>
+								<br>
+								<strong><?php esc_html_e( 'Local only:', 'stifli-flex-mcp' ); ?></strong>
+								<?php esc_html_e( 'Fast visual editor tools (title, content, blocks, categories, etc.). No server calls for tool execution. Recommended for best performance.', 'stifli-flex-mcp' ); ?>
+								<br>
+								<strong><?php esc_html_e( 'Local + subset:', 'stifli-flex-mcp' ); ?></strong>
+								<?php esc_html_e( 'Adds a context-aware subset of MCP tools (posts, taxonomies, media, products, orders) to the local tools.', 'stifli-flex-mcp' ); ?>
+								<br>
+								<strong><?php esc_html_e( 'Local + all MCP:', 'stifli-flex-mcp' ); ?></strong>
+								<?php esc_html_e( 'Full access to all enabled MCP tools. Uses more AI context tokens and may be slower.', 'stifli-flex-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+
+				</table>
+
+				<?php submit_button( __( 'Save Settings', 'stifli-flex-mcp' ), 'primary', 'sflmcp-copilot-save' ); ?>
+			</form>
+		</div>
+
+		<script>
+		jQuery(function($) {
+			$('#sflmcp-copilot-settings-form').on('submit', function(e) {
+				e.preventDefault();
+				var $btn = $(this).find('#sflmcp-copilot-save');
+				$btn.prop('disabled', true);
+
+				$.post(ajaxurl, {
+					action: 'sflmcp_copilot_save_settings',
+					nonce:  $('#sflmcp_copilot_settings_nonce').val(),
+					enabled: $('#sflmcp-copilot-enabled').is(':checked') ? '1' : '0',
+					tools_mode: $('#sflmcp-copilot-tools-mode').val()
+				}, function(res) {
+					$btn.prop('disabled', false);
+					if (res.success) {
+						$('#sflmcp-copilot-settings-notice').slideDown().delay(3000).slideUp();
+					} else {
+						alert(res.data && res.data.message ? res.data.message : 'Error saving settings');
+					}
+				}).fail(function() {
+					$btn.prop('disabled', false);
+					alert('Network error');
+				});
+			});
+		});
+		</script>
+		<?php
+	}
+
+	/**
+	 * AJAX handler to save Copilot settings.
+	 */
+	public function ajax_save_settings() {
+		check_ajax_referer( 'sflmcp_copilot_settings', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$enabled    = ! empty( $_POST['enabled'] );
+		$tools_mode = sanitize_text_field( wp_unslash( $_POST['tools_mode'] ?? 'local' ) );
+
+		$valid_modes = array( 'local', 'local_mcp_subset', 'local_mcp_full' );
+		if ( ! in_array( $tools_mode, $valid_modes, true ) ) {
+			$tools_mode = 'local';
+		}
+
+		update_option( self::OPTION_KEY, array(
+			'enabled'    => $enabled,
+			'tools_mode' => $tools_mode,
+		) );
+
+		wp_send_json_success();
+	}
+
+	/**
 	 * Get the full MCP tool list.
 	 *
 	 * @return array
@@ -438,6 +1006,29 @@ class StifliFlexMcp_Copilot_Admin {
 			);
 		}
 		return $tools;
+	}
+
+	/**
+	 * Retrieve a single MCP tool definition by name.
+	 */
+	private function get_single_mcp_tool( $name ) {
+		global $stifliFlexMcp;
+
+		if ( ! isset( $stifliFlexMcp, $stifliFlexMcp->model ) ) {
+			return null;
+		}
+
+		$all = $stifliFlexMcp->model->getToolsList();
+		foreach ( $all as $tool ) {
+			if ( ( $tool['name'] ?? '' ) === $name ) {
+				return array(
+					'name'        => $tool['name'],
+					'description' => $tool['description'] ?? '',
+					'inputSchema' => $tool['inputSchema'] ?? array( 'type' => 'object', 'properties' => new stdClass() ),
+				);
+			}
+		}
+		return null;
 	}
 
 	/**
