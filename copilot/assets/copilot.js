@@ -366,8 +366,9 @@
 
     var QuickActions = {
         'post': [
-            { label: '🏷️ Generate tags',                  prompt: 'Analyze the content of this post and suggest 5-8 relevant tags.' },
-            { label: '📝 Write excerpt',                   prompt: 'Write a compelling excerpt (under 160 chars) for this post optimized for SEO.' },
+            { label: '⚡ Optimize content',                prompt: 'Optimize the design and structure of this post to make it more attractive and professional. Improve visual hierarchy using headings, lists, bold text, and separators where appropriate. Reorganize the content so it flows better and is easier to read. Apply the changes directly.' },
+            { label: '🏷️ Generate tags',                  prompt: 'Analyze the content of this post, generate 5-8 relevant tags and set them directly using the copilot_set_tags tool.' },
+            { label: '📝 Write excerpt',                   prompt: 'Write a compelling excerpt (under 160 chars) for this post optimized for SEO and set it directly using the copilot_set_excerpt tool.' },
             { label: '💡 Suggest titles',                  prompt: 'Suggest 3 alternative, more engaging titles for this post.' },
             { label: '♿ Alt text for images',             prompt: 'Generate descriptive alt text for all images in this post to improve accessibility.' },
             { label: '📋 Summarize',                       prompt: 'Summarize this post content into a short, digestible overview (3-4 sentences).' },

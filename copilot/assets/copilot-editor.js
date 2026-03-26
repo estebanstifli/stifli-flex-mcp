@@ -47,6 +47,124 @@
     }
 
     /* =====================================================================
+     * Highlight & scroll helpers
+     * =================================================================== */
+
+    /**
+     * Inject the .sflmcp-ai-changed CSS rule into a document (main or iframe)
+     * if not already present.
+     */
+    function ensureHighlightCSS(doc) {
+        if (!doc || doc.getElementById('sflmcp-ai-changed-css')) return;
+        var style = doc.createElement('style');
+        style.id = 'sflmcp-ai-changed-css';
+        style.textContent =
+            '.sflmcp-ai-changed{' +
+            'box-shadow:0 0 0 2px #2ea043 !important;' +
+            'border-radius:3px;' +
+            'transition:box-shadow .3s ease;' +
+            '}';
+        (doc.head || doc.documentElement).appendChild(style);
+    }
+
+    /**
+     * Try to find a DOM element from an array of CSS selectors.
+     * Checks the main document first, then any editor iframes.
+     *
+     * @param {string[]} selectors  CSS selectors to try in order.
+     * @returns {Element|null}
+     */
+    function findElement(selectors) {
+        var i, el;
+        for (i = 0; i < selectors.length; i++) {
+            el = document.querySelector(selectors[i]);
+            if (el) return el;
+        }
+        // Check inside iframes (e.g. Classic Editor TinyMCE iframe).
+        var iframes = document.querySelectorAll('iframe');
+        for (var f = 0; f < iframes.length; f++) {
+            try {
+                var idoc = iframes[f].contentDocument || iframes[f].contentWindow.document;
+                if (!idoc) continue;
+                for (i = 0; i < selectors.length; i++) {
+                    el = idoc.querySelector(selectors[i]);
+                    if (el) return el;
+                }
+            } catch (_) { /* cross-origin — skip */ }
+        }
+        return null;
+    }
+
+    /**
+     * Find a Gutenberg block element by clientId.
+     * Checks inside the editor canvas iframe first (where actual content lives),
+     * then falls back to the main document (List View, etc.).
+     *
+     * @param {string} clientId  Block clientId.
+     * @returns {Element|null}
+     */
+    function findBlockElement(clientId) {
+        var selector = '[data-block="' + clientId + '"]';
+        // 1. Try editor canvas iframe (modern Gutenberg renders content here).
+        var iframe = document.querySelector('iframe[name="editor-canvas"]');
+        if (iframe) {
+            try {
+                var idoc = iframe.contentDocument || iframe.contentWindow.document;
+                if (idoc) {
+                    var el = idoc.querySelector(selector);
+                    if (el) return el;
+                }
+            } catch (_) { /* cross-origin */ }
+        }
+        // 2. Fallback: main document (older WP or non-iframe Gutenberg).
+        return document.querySelector(selector);
+    }
+
+    /**
+     * Add a green highlight to an element, auto-remove after a timeout.
+     *
+     * @param {Element} el        Target element.
+     * @param {number}  [ms=5000] Duration in ms.
+     */
+    function highlightElement(el, ms) {
+        if (!el) return;
+        ensureHighlightCSS(el.ownerDocument || document);
+        el.classList.add('sflmcp-ai-changed');
+        setTimeout(function () {
+            el.classList.remove('sflmcp-ai-changed');
+        }, ms || 5000);
+    }
+
+    /**
+     * Remove the highlight class from all elements matching an array of selectors.
+     *
+     * @param {string[]} selectors
+     */
+    function clearHighlightSelectors(selectors) {
+        if (!selectors || !selectors.length) return;
+        selectors.forEach(function (sel) {
+            try {
+                document.querySelectorAll(sel).forEach(function (el) {
+                    el.classList.remove('sflmcp-ai-changed');
+                });
+            } catch (_) { /* invalid selector — skip */ }
+        });
+    }
+
+    /**
+     * Scroll to the first visible element matching any of the given selectors.
+     *
+     * @param {string[]} selectors
+     */
+    function scrollToField(selectors) {
+        var el = findElement(selectors);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            highlightElement(el);
+        }
+    }
+
+    /* =====================================================================
      * Keep / Undo banner
      * =================================================================== */
 
@@ -55,10 +173,11 @@
     /**
      * Show a Keep/Undo banner connected to an undo callback.
      *
-     * @param {string}   label    Short text describing the change.
-     * @param {Function} undoFn   Called when user clicks Undo.
+     * @param {string}     label      Short text describing the change.
+     * @param {Function}   undoFn     Called when user clicks Undo.
+     * @param {string[]}   [highlights] CSS selectors whose highlights to clear on dismiss.
      */
-    function showKeepUndo(label, undoFn) {
+    function showKeepUndo(label, undoFn, highlights) {
         bannerCounter++;
         var id = 'sflmcp-keepundo-' + bannerCounter;
 
@@ -80,6 +199,7 @@
         var undo = banner.querySelector('.sflmcp-keepundo-undo');
 
         function remove() {
+            clearHighlightSelectors(highlights);
             banner.classList.remove('sflmcp-keepundo-visible');
             setTimeout(function () {
                 if (banner.parentNode) banner.parentNode.removeChild(banner);
@@ -113,13 +233,21 @@
         var title = args.title;
         if (typeof title !== 'string') return { error: 'title is required' };
 
+        var titleSelectors = [
+            '.editor-post-title__input',
+            '.editor-post-title textarea',
+            '#title',
+            'h1.wp-block-post-title',
+        ];
+
         var et = editorType();
         if (et === 'gutenberg') {
             var prev = gbSelect('core/editor').getEditedPostAttribute('title');
             gbDispatch('core/editor').editPost({ title: title });
+            scrollToField(titleSelectors);
             showKeepUndo('Title changed', function () {
                 gbDispatch('core/editor').editPost({ title: prev });
-            });
+            }, titleSelectors);
             return { success: true, message: 'Title set to: ' + title };
         }
         if (et === 'classic') {
@@ -128,10 +256,11 @@
             var oldVal = el.value;
             el.value = title;
             el.dispatchEvent(new Event('input', { bubbles: true }));
+            scrollToField(titleSelectors);
             showKeepUndo('Title changed', function () {
                 el.value = oldVal;
                 el.dispatchEvent(new Event('input', { bubbles: true }));
-            });
+            }, titleSelectors);
             return { success: true, message: 'Title set to: ' + title };
         }
         return { error: 'No editor detected' };
@@ -143,10 +272,29 @@
         var excerpt = args.excerpt;
         if (typeof excerpt !== 'string') return { error: 'excerpt is required' };
 
+        var excerptSelectors = [
+            '.editor-post-excerpt textarea',
+            '.editor-post-excerpt',
+            '#excerpt',
+            'textarea[id="excerpt"]',
+        ];
+
         var et = editorType();
         if (et === 'gutenberg') {
             var prev = gbSelect('core/editor').getEditedPostAttribute('excerpt');
             gbDispatch('core/editor').editPost({ excerpt: excerpt });
+
+            // Modern Gutenberg: the excerpt panel has .editor-post-excerpt__dropdown
+            // inside a VStack parent — highlight the parent container.
+            var excerptDropdown = document.querySelector('.editor-post-excerpt__dropdown');
+            if (excerptDropdown && excerptDropdown.parentElement) {
+                var excerptContainer = excerptDropdown.parentElement;
+                excerptContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                highlightElement(excerptContainer);
+            } else {
+                scrollToField(excerptSelectors);
+            }
+
             showKeepUndo('Excerpt changed', function () {
                 gbDispatch('core/editor').editPost({ excerpt: prev });
             });
@@ -158,10 +306,11 @@
             var oldVal = el.value;
             el.value = excerpt;
             el.dispatchEvent(new Event('input', { bubbles: true }));
+            scrollToField(excerptSelectors);
             showKeepUndo('Excerpt changed', function () {
                 el.value = oldVal;
                 el.dispatchEvent(new Event('input', { bubbles: true }));
-            });
+            }, excerptSelectors);
             return { success: true, message: 'Excerpt updated' };
         }
         return { error: 'No editor detected' };
@@ -356,17 +505,24 @@
                 }
             });
 
+            var tagSelectors = [
+                '.editor-post-taxonomies__hierarchical-terms-list',
+                '.components-form-token-field',
+                '.components-form-token-field__input',
+                '.tag-cloud-link',
+            ];
+
             if (promises.length === 0) {
                 // All tags existed — apply immediately.
                 gbDispatch('core/editor').editPost({ tags: ids });
+                scrollToField(tagSelectors);
                 showKeepUndo('Tags updated', function () {
                     gbDispatch('core/editor').editPost({ tags: prev });
-                });
+                }, tagSelectors);
                 return { success: true, message: 'Tags set: ' + existing.join(', ') };
             }
 
             // Some tags need creation — return the result asynchronously.
-            // We use Promise.allSettled to wait for all creations.
             var settle = Promise.all
                 ? Promise.all(promises.map(function (p) {
                     return p.then(
@@ -378,9 +534,10 @@
 
             settle.then(function () {
                 gbDispatch('core/editor').editPost({ tags: ids });
+                scrollToField(tagSelectors);
                 showKeepUndo('Tags updated', function () {
                     gbDispatch('core/editor').editPost({ tags: prev });
-                });
+                }, tagSelectors);
             });
 
             var msg = 'Tags being set: ' + tags.join(', ');
@@ -403,6 +560,13 @@
             // Trigger input event so WP JS picks it up, then click Add.
             input.dispatchEvent(new Event('input', { bubbles: true }));
             addBtn.click();
+
+            // Scroll to and highlight the tag area.
+            var tagBox = document.getElementById('tagsdiv-post_tag') || input.closest('.tagsdiv');
+            if (tagBox) {
+                tagBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                highlightElement(tagBox);
+            }
 
             showKeepUndo('Tags added: ' + tags.join(', '), function () {
                 // Best-effort undo: restore the tag cloud HTML.
@@ -430,6 +594,18 @@
 
             var newBlocks = wp.blocks.parse(content);
             gbDispatch('core/block-editor').resetBlocks(newBlocks);
+
+            // Highlight all new blocks after DOM render.
+            setTimeout(function () {
+                newBlocks.forEach(function (b) {
+                    var el = findBlockElement(b.clientId);
+                    highlightElement(el, 3000);
+                });
+                if (newBlocks.length) {
+                    var first = findBlockElement(newBlocks[0].clientId);
+                    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 200);
 
             showKeepUndo('Content replaced', function () {
                 gbDispatch('core/block-editor').resetBlocks(prevBlocks);
@@ -468,6 +644,7 @@
         if (et === 'gutenberg') {
             var blocks = gbSelect('core/block-editor').getBlocks();
             var count = 0;
+            var changedClientIds = [];
 
             // Snapshot blocks before changes.
             var prevBlocks = blocks.map(function (b) {
@@ -475,12 +652,24 @@
             });
 
             blocks.forEach(function (block) {
-                replaceInBlock(block, search, replace, function () { count++; });
+                replaceInBlock(block, search, replace, function () { count++; }, changedClientIds);
             });
 
             if (count === 0) {
                 return { success: false, message: 'Text "' + search + '" not found in any block' };
             }
+
+            // Highlight changed blocks after DOM render.
+            setTimeout(function () {
+                changedClientIds.forEach(function (cid) {
+                    var el = findBlockElement(cid);
+                    highlightElement(el, 3000);
+                });
+                if (changedClientIds.length) {
+                    var first = findBlockElement(changedClientIds[0]);
+                    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 200);
 
             showKeepUndo(count + ' replacement(s)', function () {
                 gbDispatch('core/block-editor').resetBlocks(prevBlocks);
@@ -518,7 +707,7 @@
     /**
      * Recursively find/replace text in a Gutenberg block and its inner blocks.
      */
-    function replaceInBlock(block, search, replace, onHit) {
+    function replaceInBlock(block, search, replace, onHit, changedIds) {
         var changed = false;
         var attrs = {};
 
@@ -534,12 +723,13 @@
 
         if (changed) {
             gbDispatch('core/block-editor').updateBlockAttributes(block.clientId, attrs);
+            if (changedIds) changedIds.push(block.clientId);
         }
 
         // Recurse into inner blocks.
         if (block.innerBlocks && block.innerBlocks.length) {
             block.innerBlocks.forEach(function (inner) {
-                replaceInBlock(inner, search, replace, onHit);
+                replaceInBlock(inner, search, replace, onHit, changedIds);
             });
         }
     }
@@ -571,6 +761,15 @@
             var newBlock = wp.blocks.createBlock(blockType, blockAttrs);
             var insertAt = typeof position === 'number' ? position : undefined;
             gbDispatch('core/block-editor').insertBlock(newBlock, insertAt);
+
+            // Highlight the new block after DOM render.
+            setTimeout(function () {
+                var el = findBlockElement(newBlock.clientId);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    highlightElement(el, 3000);
+                }
+            }, 200);
 
             showKeepUndo('Block inserted', function () {
                 gbDispatch('core/block-editor').removeBlock(newBlock.clientId);
@@ -632,6 +831,15 @@
         var update = {};
         update[contentKey] = newContent;
         gbDispatch('core/block-editor').updateBlockAttributes(block.clientId, update);
+
+        // Highlight the updated block.
+        setTimeout(function () {
+            var el = findBlockElement(block.clientId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                highlightElement(el, 3000);
+            }
+        }, 200);
 
         showKeepUndo('Block #' + index + ' updated', function () {
             gbDispatch('core/block-editor').replaceBlock(block.clientId, prevBlock);

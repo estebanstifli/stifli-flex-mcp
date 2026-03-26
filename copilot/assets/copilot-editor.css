@@ -79,6 +79,14 @@
     background: #e3b341;
 }
 
+/* ── AI-changed field highlight ─────────────────────────────── */
+
+.sflmcp-ai-changed {
+    box-shadow: 0 0 0 2px #2ea043 !important;
+    border-radius: 3px;
+    transition: box-shadow 0.3s ease;
+}
+
 /* ── Multiple banners stack upward ──────────────────────────── */
 
 .sflmcp-keepundo-banner:nth-last-of-type(2) {

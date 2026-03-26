@@ -1,23 +1,43 @@
-=== StifLi Flex MCP - AI Chat Agent and MCP Server === 
+=== StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server === 
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags: mcp, chatgpt, ai, agent, gemini
+Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.2.2
+Stable tag: 3.0.1
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI Chat Agent for WordPress. Chat directly from your admin panel & manage content, WooCommerce and your site via natural conversation.
+AI Copilot for the WordPress editor, AI Chat Agent for full site management & MCP server for external AI clients. OpenAI, Claude & Gemini.
 
 == Description ==
 
-**StifLi Flex MCP** turns your WordPress site into an intelligent AI agent. Ask questions, create posts, manage orders, update settings — all through a natural conversation with the AI of your choice, right from your WordPress dashboard.
-Also works as a full MCP server for external AI clients.
+**StifLi Flex MCP** brings the power of AI directly into your WordPress workflow. Write faster, edit smarter, and manage your entire site through natural conversation — without leaving the editor.
 
-No complex setup, no external tools required. Just add your API key and start chatting.
+Three powerful tools in one plugin:
+
+1. **AI Copilot** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time
+2. **AI Chat Agent** — A full conversational interface to manage posts, WooCommerce, settings, and more
+3. **MCP Server** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site
+
+Choose between OpenAI (GPT-5.4), Anthropic (Claude 4.6 Opus/Sonnet), or Google (Gemini 3.1 Pro/Flash). No external tools, no complex setup — just your API key.
+
+**✍️ AI Copilot — Your Writing Assistant Inside the Editor**
+
+The AI Copilot lives as a floating widget right inside the WordPress post and page editor. It understands the full context of what you're editing — title, content, categories, tags, featured image, and even WooCommerce product fields — and helps you write better, faster.
+
+* **Rewrite, expand, or optimize content** — Ask the Copilot to improve your text and it applies the changes directly into the editor
+* **One-click quick actions** — "⚡ Optimize content", "🏷️ Generate tags", "📝 Write excerpt", "🖼️ Generate image" — one tap, instant results
+* **Real-time editing** — The Copilot sets titles, excerpts, tags, slugs, and categories directly in the editor. No copy-pasting
+* **Content block operations** — Insert, update, replace, or delete Gutenberg blocks through conversation
+* **Visual feedback** — Changed fields and blocks are highlighted with a green border so you always see what the AI modified
+* **Keep or Undo** — Every change shows a floating banner: keep it or undo with a single click. You stay in control
+* **Image generation** — Ask the Copilot to generate an image and it sets it as the featured image or inserts it as a block, automatically
+* **Works with Gutenberg and Classic Editor** — Full support for both editors
+* **Context-aware** — The Copilot reads your current post content, blocks, metadata, and editor state to give relevant suggestions
+* **WooCommerce-aware** — When editing a product, the Copilot sees prices, stock, SKU, attributes, and product type
 
 **🤖 AI Chat Agent — Your WordPress AI Assistant**
 
@@ -133,14 +153,21 @@ https://youtu.be/KHr1zt2R8Ew
 
 == Installation ==
 
-= Quick Start (AI Chat Agent) =
+= Quick Start (AI Copilot) =
 
 1. Upload the `stifli-flex-mcp` folder to `/wp-content/plugins/` or install from the WordPress plugin directory
 2. Activate the plugin
-3. Go to **StifLi Flex MCP → AI Chat Agent**
-4. Open the **Settings** tab and select your AI provider (OpenAI, Claude, or Gemini)
-5. Enter your API key
-6. Start chatting!
+3. Go to **StifLi Flex MCP → AI Copilot** and make sure it’s enabled
+4. Go to **StifLi Flex MCP → AI Chat Agent → Settings** and enter your API key
+5. Open any post or page in the editor — the Copilot widget appears automatically
+6. Start writing with AI!
+
+= Quick Start (AI Chat Agent) =
+
+1. Go to **StifLi Flex MCP → AI Chat Agent**
+2. Open the **Settings** tab and select your AI provider (OpenAI, Claude, or Gemini)
+3. Enter your API key
+4. Start chatting!
 
 That's it — no external tools, no complex configuration. Your AI agent is ready.
 
@@ -159,6 +186,18 @@ If you also want to connect external AI clients (ChatGPT Connectors, Claude Desk
 * SSE Streaming: `https://yoursite.com/wp-json/stifli-flex-mcp/v1/sse`
 
 == Frequently Asked Questions ==
+
+= What is the AI Copilot? =
+
+The AI Copilot is a floating assistant that appears inside the WordPress editor (Gutenberg or Classic). It reads the context of what you’re editing and helps you write, rewrite, optimize, generate tags, create excerpts, and even generate images — all without leaving the editor. Every change can be undone with one click.
+
+= How is the Copilot different from the Chat Agent? =
+
+The **Copilot** lives inside the post/page editor and is focused on writing and content editing. It works directly with the editor fields (title, content blocks, excerpt, tags, etc.).
+
+The **Chat Agent** is a standalone admin page where you can manage your entire WordPress site through conversation — create posts, manage WooCommerce orders, check settings, install plugins, and more.
+
+Both use the same AI provider and API key.
 
 = How do I set up the AI Chat Agent? =
 
@@ -247,13 +286,28 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 
 == Screenshots ==
 
-1. AI Chat Agent - Chat with AI directly from WordPress admin
-2. AI Chat Agent - Settings and provider configuration
-3. MCP Server - Endpoint URLs and authentication setup
-4. MCP Server - Tool profiles management
-5. MCP Server - WordPress and WooCommerce tools management
+1. AI Copilot - Floating assistant inside the WordPress editor with quick actions
+2. AI Copilot - Visual feedback with green highlights and Keep/Undo banners
+3. AI Chat Agent - Chat with AI directly from WordPress admin
+4. AI Chat Agent - Settings and provider configuration
+5. MCP Server - Endpoint URLs and authentication setup
+6. MCP Server - Tool profiles management
+7. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 3.0.1 =
+* **✍️ AI Copilot — New floating writing assistant for the WordPress editor!**
+* New: AI Copilot widget available inside the Gutenberg and Classic editors
+* New: Quick action chips — Optimize content, Generate tags, Write excerpt, Generate image
+* New: Direct editing — the Copilot sets titles, excerpts, tags, categories, and slugs in the editor
+* New: Block operations — insert, update, replace, and delete Gutenberg blocks through conversation
+* New: Visual feedback — green highlight on changed fields and blocks with auto-dismiss
+* New: Keep/Undo banner on every AI change for full user control
+* New: Image generation workflow — generate an image and set it as featured or insert as block
+* New: AI Copilot settings page with enable/disable toggle and tools mode selection
+* New: Full context awareness — reads post content, blocks, metadata, and WooCommerce product fields
+
+
 = 2.2.2 =
 * **📊 Token Usage Bars** — Real-time speedometer-style token bars in the AI Chat Agent showing input, output, and cached tokens per interaction.
 

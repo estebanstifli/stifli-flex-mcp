@@ -267,6 +267,9 @@ class StifliFlexMcp_Copilot_Admin {
 		// Trim conversation to last 6 tool cycles to keep the copilot lightweight.
 		$conversation = $this->trim_conversation( $conversation, 6 );
 
+		// Remove any orphaned tool_result messages (safety net for corrupted histories).
+		$conversation = $this->sanitize_conversation( $conversation );
+
 		$result = $handler->send_message( array(
 			'api_key'          => $settings['api_key'],
 			'model'            => $settings['model'],
@@ -1032,7 +1035,11 @@ class StifliFlexMcp_Copilot_Admin {
 	}
 
 	/**
-	 * Simple conversation trimmer — keeps the last N tool cycles.
+	 * Trim conversation while respecting tool_use / tool_result boundaries.
+	 *
+	 * Walks backwards counting tool-result cycles. Once the limit is exceeded
+	 * the cut is placed at the nearest *safe* boundary — a plain-text user
+	 * message — so orphaned tool_result references are impossible.
 	 *
 	 * @param mixed $conversation Conversation array.
 	 * @param int   $max_cycles   Max tool cycles to keep.
@@ -1043,12 +1050,219 @@ class StifliFlexMcp_Copilot_Admin {
 			return array();
 		}
 
-		// Quick limit: at most 30 messages total for the copilot.
-		if ( count( $conversation ) > 30 ) {
-			$conversation = array_slice( $conversation, -30 );
+		$conversation = array_values( $conversation );
+		$total        = count( $conversation );
+		if ( $total === 0 ) {
+			return array();
 		}
 
-		return array_values( $conversation );
+		$tool_count = 0;
+		$cut_index  = 0;
+
+		for ( $i = $total - 1; $i >= 0; $i-- ) {
+			$msg = $conversation[ $i ];
+			if ( ! is_array( $msg ) ) {
+				continue;
+			}
+			$tool_count += $this->count_tool_results( $msg );
+
+			if ( $tool_count > $max_cycles ) {
+				$cut_index = $this->find_safe_cut( $conversation, $i, $total );
+				break;
+			}
+		}
+
+		// Hard cap: if still very large, find a safe boundary near -30.
+		$trimmed = array_slice( $conversation, $cut_index );
+		if ( count( $trimmed ) > 40 ) {
+			$target  = count( $trimmed ) - 30;
+			$safe    = $this->find_safe_cut( $trimmed, $target, count( $trimmed ) );
+			$trimmed = array_slice( $trimmed, $safe );
+		}
+
+		return array_values( $trimmed );
+	}
+
+	/**
+	 * Count tool-result items inside a single conversation message.
+	 */
+	private function count_tool_results( $msg ) {
+		$count = 0;
+
+		// OpenAI Responses API.
+		if ( ( $msg['type'] ?? '' ) === 'function_call_output' ) {
+			return 1;
+		}
+
+		// Claude: content[] with tool_result blocks.
+		$content = $msg['content'] ?? null;
+		if ( is_array( $content ) ) {
+			foreach ( $content as $block ) {
+				if ( is_array( $block ) && ( $block['type'] ?? '' ) === 'tool_result' ) {
+					$count++;
+				}
+			}
+		}
+
+		// Gemini: parts[] with functionResponse.
+		$parts = $msg['parts'] ?? null;
+		if ( is_array( $parts ) ) {
+			foreach ( $parts as $part ) {
+				if ( is_array( $part ) && isset( $part['functionResponse'] ) ) {
+					$count++;
+				}
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Find the nearest safe cut point at or after $from.
+	 *
+	 * A safe point is a plain-text user message (no tool_result / functionResponse).
+	 */
+	private function find_safe_cut( $conversation, $from, $total ) {
+		for ( $i = $from; $i < $total; $i++ ) {
+			$msg = $conversation[ $i ];
+			if ( ! is_array( $msg ) ) {
+				continue;
+			}
+
+			$type = $msg['type'] ?? '';
+			if ( $type === 'function_call' || $type === 'function_call_output' ) {
+				continue;
+			}
+
+			if ( ( $msg['role'] ?? '' ) !== 'user' ) {
+				continue;
+			}
+
+			// Reject if contains tool_result blocks (Claude).
+			$content = $msg['content'] ?? null;
+			if ( is_array( $content ) ) {
+				$has_tr = false;
+				foreach ( $content as $block ) {
+					if ( is_array( $block ) && ( $block['type'] ?? '' ) === 'tool_result' ) {
+						$has_tr = true;
+						break;
+					}
+				}
+				if ( $has_tr ) {
+					continue;
+				}
+			}
+
+			// Reject if contains functionResponse (Gemini).
+			$parts = $msg['parts'] ?? null;
+			if ( is_array( $parts ) ) {
+				$has_fr = false;
+				foreach ( $parts as $part ) {
+					if ( is_array( $part ) && isset( $part['functionResponse'] ) ) {
+						$has_fr = true;
+						break;
+					}
+				}
+				if ( $has_fr ) {
+					continue;
+				}
+			}
+
+			return $i;
+		}
+
+		// No safe point found — keep everything to avoid breaking chains.
+		return 0;
+	}
+
+	/**
+	 * Remove orphaned tool_result messages whose matching tool_use was lost.
+	 *
+	 * For Claude: a user message with tool_result blocks is only valid if the
+	 * immediately preceding assistant message contains the matching tool_use IDs.
+	 * For OpenAI: function_call_output must follow function_call with matching call_id.
+	 *
+	 * @param array $conversation Sanitized conversation.
+	 * @return array
+	 */
+	private function sanitize_conversation( $conversation ) {
+		if ( ! is_array( $conversation ) || count( $conversation ) < 2 ) {
+			return $conversation;
+		}
+
+		$clean = array();
+		$prev  = null;
+
+		foreach ( $conversation as $msg ) {
+			if ( ! is_array( $msg ) ) {
+				$clean[] = $msg;
+				$prev    = $msg;
+				continue;
+			}
+
+			// --- Claude: user message with tool_result blocks ---
+			$content = $msg['content'] ?? null;
+			if ( ( $msg['role'] ?? '' ) === 'user' && is_array( $content ) ) {
+				$has_tool_result = false;
+				foreach ( $content as $block ) {
+					if ( is_array( $block ) && ( $block['type'] ?? '' ) === 'tool_result' ) {
+						$has_tool_result = true;
+						break;
+					}
+				}
+
+				if ( $has_tool_result ) {
+					// Collect tool_use IDs from previous assistant message.
+					$prev_ids = array();
+					if ( is_array( $prev ) && ( $prev['role'] ?? '' ) === 'assistant' ) {
+						$pc = $prev['content'] ?? array();
+						if ( is_array( $pc ) ) {
+							foreach ( $pc as $pb ) {
+								if ( is_array( $pb ) && ( $pb['type'] ?? '' ) === 'tool_use' && ! empty( $pb['id'] ) ) {
+									$prev_ids[ $pb['id'] ] = true;
+								}
+							}
+						}
+					}
+
+					// Drop tool_result blocks with no matching tool_use.
+					if ( empty( $prev_ids ) ) {
+						// No preceding tool_use at all — skip entire message.
+						continue;
+					}
+
+					$filtered = array();
+					foreach ( $content as $block ) {
+						if ( is_array( $block ) && ( $block['type'] ?? '' ) === 'tool_result' ) {
+							if ( ! empty( $block['tool_use_id'] ) && isset( $prev_ids[ $block['tool_use_id'] ] ) ) {
+								$filtered[] = $block;
+							}
+							// else: orphaned — drop it.
+						} else {
+							$filtered[] = $block;
+						}
+					}
+
+					if ( empty( $filtered ) ) {
+						continue; // Nothing left in this message.
+					}
+					$msg['content'] = $filtered;
+				}
+			}
+
+			// --- OpenAI: function_call_output without preceding function_call ---
+			if ( ( $msg['type'] ?? '' ) === 'function_call_output' ) {
+				$call_id = $msg['call_id'] ?? '';
+				if ( ! is_array( $prev ) || ( $prev['type'] ?? '' ) !== 'function_call' || ( $prev['call_id'] ?? '' ) !== $call_id ) {
+					continue; // Orphaned.
+				}
+			}
+
+			$clean[] = $msg;
+			$prev    = $msg;
+		}
+
+		return array_values( $clean );
 	}
 
 	/* ----------------------------------------------------------
