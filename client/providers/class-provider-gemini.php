@@ -97,19 +97,30 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 
 		// If we have a tool result, add it as a function response
 		if ( $tool_result ) {
-			$contents[] = array(
-				'role'  => 'user',
-				'parts' => array(
-					array(
-						'functionResponse' => array(
-							'name'     => $tool_result['name'],
-							'response' => array(
-								'result' => $tool_result['output'],
-							),
-						),
+			$parts = array();
+			// Support both single result and array of results.
+			if ( isset( $tool_result['name'] ) ) {
+				$parts[] = array(
+					'functionResponse' => array(
+						'name'     => $tool_result['name'],
+						'response' => array( 'result' => $tool_result['output'] ),
 					),
-				),
-			);
+				);
+			} elseif ( is_array( $tool_result ) ) {
+				foreach ( $tool_result as $tr ) {
+					if ( isset( $tr['name'] ) ) {
+						$parts[] = array(
+							'functionResponse' => array(
+								'name'     => $tr['name'],
+								'response' => array( 'result' => $tr['output'] ),
+							),
+						);
+					}
+				}
+			}
+			if ( ! empty( $parts ) ) {
+				$contents[] = array( 'role' => 'user', 'parts' => $parts );
+			}
 		} elseif ( ! empty( $message ) ) {
 			// Add new user message
 			$contents[] = array(

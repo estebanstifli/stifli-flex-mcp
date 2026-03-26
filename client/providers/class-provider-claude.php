@@ -106,6 +106,9 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 			);
 		}
 
+		// Sanitize: ensure every tool_use block has a matching tool_result.
+		$messages = $this->ensure_tool_results( $messages );
+
 		// Build request body.
 		// Use structured system prompt with cache_control for Anthropic prompt caching.
 		$system_text = $this->get_system_prompt( $system_prompt );
@@ -293,6 +296,84 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 		}
 
 		return $msg;
+	}
+
+	/**
+	 * Ensure every tool_use block in the conversation has a matching tool_result.
+	 *
+	 * Claude rejects conversations where any tool_use id lacks a corresponding
+	 * tool_result in the immediately following user message. This can happen
+	 * when the AI returns multiple tool_use blocks but only some are executed.
+	 *
+	 * @param array $messages The messages array about to be sent to the API.
+	 * @return array Sanitized messages with guaranteed tool_result completeness.
+	 */
+	private function ensure_tool_results( $messages ) {
+		$count = count( $messages );
+		for ( $i = 0; $i < $count; $i++ ) {
+			$msg = $messages[ $i ];
+
+			if ( ( $msg['role'] ?? '' ) !== 'assistant' || ! is_array( $msg['content'] ?? null ) ) {
+				continue;
+			}
+
+			// Collect tool_use IDs in this assistant message.
+			$tool_use_ids = array();
+			foreach ( $msg['content'] as $block ) {
+				if ( isset( $block['type'] ) && $block['type'] === 'tool_use' && ! empty( $block['id'] ) ) {
+					$tool_use_ids[ $block['id'] ] = true;
+				}
+			}
+
+			if ( empty( $tool_use_ids ) ) {
+				continue;
+			}
+
+			// Check the next message for matching tool_results.
+			$next = $messages[ $i + 1 ] ?? null;
+			$answered_ids = array();
+
+			if ( $next && ( $next['role'] ?? '' ) === 'user' && is_array( $next['content'] ?? null ) ) {
+				foreach ( $next['content'] as $block ) {
+					if ( isset( $block['type'] ) && $block['type'] === 'tool_result' && ! empty( $block['tool_use_id'] ) ) {
+						$answered_ids[ $block['tool_use_id'] ] = true;
+					}
+				}
+			}
+
+			// Find orphaned tool_use IDs (no matching tool_result).
+			$orphaned = array_diff_key( $tool_use_ids, $answered_ids );
+
+			if ( empty( $orphaned ) ) {
+				continue;
+			}
+
+			stifli_flex_mcp_log( '[Claude] Fixing ' . count( $orphaned ) . ' orphaned tool_use blocks' );
+
+			// Build stub tool_result blocks for orphaned IDs.
+			$stubs = array();
+			foreach ( array_keys( $orphaned ) as $id ) {
+				$stubs[] = array(
+					'type'        => 'tool_result',
+					'tool_use_id' => $id,
+					'content'     => wp_json_encode( array( 'error' => 'Tool was not executed.' ) ),
+				);
+			}
+
+			// If the next message is already a user role with tool_results, merge stubs.
+			if ( ! empty( $answered_ids ) && $next && ( $next['role'] ?? '' ) === 'user' && is_array( $next['content'] ?? null ) ) {
+				$messages[ $i + 1 ]['content'] = array_merge( $messages[ $i + 1 ]['content'], $stubs );
+			} elseif ( empty( $answered_ids ) ) {
+				// No tool_result message at all — insert a new user message with stubs.
+				array_splice( $messages, $i + 1, 0, array( array(
+					'role'    => 'user',
+					'content' => $stubs,
+				) ) );
+				$count = count( $messages ); // Update count after splice.
+			}
+		}
+
+		return $messages;
 	}
 
 	/**

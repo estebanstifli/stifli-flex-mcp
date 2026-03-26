@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - AI Chat Agent and MCP Server
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 2.2.1
+Version: 2.2.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -169,11 +169,15 @@ require_once __DIR__ . '/client/class-event-automation-admin.php';
 // Load Logs Admin
 require_once __DIR__ . '/client/class-logs-admin.php';
 
+// Load AI Copilot
+require_once __DIR__ . '/copilot/class-copilot-admin.php';
+
 // Initialize Automation Admin
 if ( is_admin() ) {
 	new StifliFlexMcp_Automation_Admin();
 	new StifliFlexMcp_Event_Automation_Admin();
 	new StifliFlexMcp_Logs_Admin();
+	new StifliFlexMcp_Copilot_Admin();
 }
 
 // Initialize Event Automation Engine (for trigger hooks)

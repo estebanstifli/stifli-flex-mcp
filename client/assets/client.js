@@ -618,20 +618,9 @@
      * Handle AI response
      */
     function handleAIResponse(response) {
-        console.log('[SFLMCP] handleAIResponse called', {
-            has_usage: !!response.usage,
-            usage: response.usage || null,
-            has_text: !!response.text,
-            has_tool_calls: !!(response.tool_calls && response.tool_calls.length),
-            tool_calls_count: response.tool_calls ? response.tool_calls.length : 0,
-            response_keys: Object.keys(response)
-        });
-
         // Update token bars if usage data is present
         if (response.usage) {
             updateTokenBars(response.usage);
-        } else {
-            console.warn('[SFLMCP] No usage data in response!');
         }
 
         // Update conversation history
@@ -692,13 +681,6 @@
         var cached = parseInt(usage.cached_tokens, 10) || 0;
         // Show non-cached tokens only (reflects actual billable cost)
         var total = Math.max(0, input + output - cached);
-
-        console.log('[SFLMCP] updateTokenBars', {
-            raw_usage: usage,
-            parsed: { input: input, output: output, cached: cached },
-            total_billable: total,
-            formula: input + ' + ' + output + ' - ' + cached + ' = ' + total
-        });
 
         // Show the bars container
         $bars.show();
@@ -966,7 +948,6 @@
      */
     function executeToolViaAjax(toolCall) {
         var ajaxStart = Date.now();
-        console.log('[SFLMCP] Tool AJAX start:', toolCall.name, new Date().toISOString());
         return new Promise((resolve, reject) => {
             $.ajax({
                 url: sflmcpClient.ajaxUrl,
@@ -982,10 +963,8 @@
                     var elapsed = Math.round((Date.now() - ajaxStart) / 1000);
                     if (response.success && response.data && response.data.async) {
                         // Long-running tool — switch to polling
-                        console.log('[SFLMCP] Tool is async, job_id:', response.data.job_id);
                         pollToolResult(response.data.job_id, toolCall, resolve, reject);
                     } else if (response.success) {
-                        console.log('[SFLMCP] Tool AJAX success:', toolCall.name, elapsed + 's');
                         resolve(response.data);
                     } else {
                         reject(new Error(response.data.message || 'Tool returned error'));
@@ -993,7 +972,6 @@
                 },
                 error: function(xhr, status, error) {
                     var elapsed = Math.round((Date.now() - ajaxStart) / 1000);
-                    console.error('[SFLMCP] Tool AJAX error:', toolCall.name, elapsed + 's', 'status=' + status, 'httpStatus=' + xhr.status);
                     reject(new Error('Tool execution failed (' + status + ' after ' + elapsed + 's: ' + (error || xhr.status || 'connection lost') + ')'));
                 }
             });
@@ -1008,8 +986,6 @@
         var MAX_POLLS     = 72;    // 6 minutes max
         var pollCount     = 0;
 
-        console.log('[SFLMCP] Starting async poll for', toolCall.name, 'job:', jobId);
-
         function poll() {
             if (state.isStopped) {
                 reject(new Error('Stopped by user'));
@@ -1017,7 +993,6 @@
             }
             pollCount++;
             if (pollCount > MAX_POLLS) {
-                console.error('[SFLMCP] Async tool timed out after', MAX_POLLS * (POLL_INTERVAL / 1000), 's');
                 reject(new Error('Tool timed out after ' + MAX_POLLS * (POLL_INTERVAL / 1000) + 's'));
                 return;
             }
@@ -1033,12 +1008,8 @@
                 success: function(response) {
                     if (response.success) {
                         if (response.data.status === 'running') {
-                            var elapsed = response.data.elapsed || (pollCount * (POLL_INTERVAL / 1000));
-                            console.log('[SFLMCP] Async poll #' + pollCount, toolCall.name, 'still running', elapsed + 's');
                             setTimeout(poll, POLL_INTERVAL);
                         } else {
-                            // completed
-                            console.log('[SFLMCP] Async tool completed:', toolCall.name, response.data);
                             resolve(response.data);
                         }
                     } else {
@@ -1048,7 +1019,6 @@
                 },
                 error: function(xhr, status) {
                     // Network error — retry silently
-                    console.warn('[SFLMCP] Poll network error, retrying...', status);
                     setTimeout(poll, POLL_INTERVAL);
                 }
             });

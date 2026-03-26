@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: mcp, chatgpt, ai, agent, gemini
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 2.2.1
+Stable tag: 2.2.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -254,17 +254,19 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 5. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 2.2.2 =
+* **📊 Token Usage Bars** — Real-time speedometer-style token bars in the AI Chat Agent showing input, output, and cached tokens per interaction.
+
 = 2.2.1 =
 * **🤖 Updated AI Models for All Providers** — Refreshed the full model catalog across OpenAI, Anthropic (Claude), and Google Gemini.
 * New: OpenAI GPT-5.4 series — GPT-5.4 Pro, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano (1M context, Computer Use support)
 * New: OpenAI GPT-5.3 and GPT-5.3 Mini added as stable production models
-* New: Anthropic Claude 4.6 Opus and Claude 4.6 Sonnet (with Extended Thinking support)
-* New: Anthropic Claude 4.5 Haiku (fastest) and Claude 4.5 Sonnet (stable workhorse)
-* New: Anthropic Claude 3.7 Sonnet (hybrid thinking bridge)
+* New: Anthropic Claude Sonnet 4.6 and Claude Opus 4.6 (1M context, 128K output, Extended Thinking)
+* New: Anthropic Claude Sonnet 4.5, Claude Opus 4.5, and Claude Haiku 4.5
 * New: Google Gemini 3.1 Pro, Gemini 3 Flash, and Gemini 3.1 Flash-Lite (latest generation)
 * Updated: Google Gemini 2.5 Pro, Flash, and Flash-Lite remain as stable production models
-* Updated: Default models changed — GPT-5.4 (OpenAI), Claude 4.6 Sonnet (Claude), Gemini 3 Flash (Gemini)
-* Removed: Deprecated models — GPT-5 Nano, Gemini 2.0 Flash/Flash-Lite, older Claude 3.x/4.x aliases
+* Updated: Default models changed — GPT-5.4 (OpenAI), Claude Sonnet 4.6 (Claude), Gemini 3 Flash (Gemini)
+* Removed: Deprecated models — GPT-5 Nano, Gemini 2.0 Flash/Flash-Lite, older Claude 3.x aliases
 
 = 2.2.0 =
 * **🆕 AI Image Generation** — Generate images directly from your AI agent using `wp_generate_image`!

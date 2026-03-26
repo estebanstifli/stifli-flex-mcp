@@ -231,7 +231,7 @@ class StifliFlexMcp_Client_Admin {
 			'presence_penalty'      => 0,
 			'enable_suggestions'    => true,
 			'suggestions_count'     => 3,
-			'explicit_caching'      => false,
+			'explicit_caching'      => true,
 		);
 
 		$settings = get_option( self::OPTION_NAME . '_advanced', array() );

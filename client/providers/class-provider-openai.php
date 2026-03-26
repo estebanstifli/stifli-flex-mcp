@@ -90,11 +90,24 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 
 		// If we have a tool result, add it
 		if ( $tool_result ) {
-			$input[] = array(
-				'type'    => 'function_call_output',
-				'call_id' => $tool_result['call_id'],
-				'output'  => wp_json_encode( $tool_result['output'] ),
-			);
+			// Support both single result and array of results.
+			if ( isset( $tool_result['call_id'] ) ) {
+				$input[] = array(
+					'type'    => 'function_call_output',
+					'call_id' => $tool_result['call_id'],
+					'output'  => wp_json_encode( $tool_result['output'] ),
+				);
+			} elseif ( is_array( $tool_result ) ) {
+				foreach ( $tool_result as $tr ) {
+					if ( isset( $tr['call_id'] ) ) {
+						$input[] = array(
+							'type'    => 'function_call_output',
+							'call_id' => $tr['call_id'],
+							'output'  => wp_json_encode( $tr['output'] ),
+						);
+					}
+				}
+			}
 		} elseif ( ! empty( $message ) ) {
 			// Add new user message
 			$input[] = array(
