@@ -513,7 +513,7 @@
                 if (res.success && res.data) {
                     handleResponse(res.data);
                 } else {
-                    addMessage('assistant', '<span class="sflmcp-copilot-error">' + sflmcpCopilot.i18n.error + ' ' + (res.data && res.data.message ? res.data.message : 'Unknown error') + '</span>');
+                    addMessage('assistant', '<span class="sflmcp-copilot-error">' + escapeHtml(sflmcpCopilot.i18n.error + ' ' + (res.data && res.data.message ? res.data.message : 'Unknown error')) + '</span>');
                 }
             },
             error: function (xhr, status) {
@@ -650,7 +650,7 @@
                 if (res.success && res.data) {
                     handleResponse(res.data);
                 } else {
-                    addMessage('assistant', '<span class="sflmcp-copilot-error">' + (res.data && res.data.message || 'Error') + '</span>');
+                    addMessage('assistant', '<span class="sflmcp-copilot-error">' + escapeHtml(res.data && res.data.message || 'Error') + '</span>');
                 }
             },
             error: function () {

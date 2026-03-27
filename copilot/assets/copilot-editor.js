@@ -46,6 +46,13 @@
         return d.textContent || d.innerText || '';
     }
 
+    /** Escape HTML entities to prevent XSS. */
+    function escapeHtml(s) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s));
+        return d.innerHTML;
+    }
+
     /* =====================================================================
      * Highlight & scroll helpers
      * =================================================================== */
@@ -185,7 +192,7 @@
         banner.id = id;
         banner.className = 'sflmcp-keepundo-banner';
         banner.innerHTML =
-            '<span class="sflmcp-keepundo-label">' + label + '</span>' +
+            '<span class="sflmcp-keepundo-label">' + escapeHtml(label) + '</span>' +
             '<button type="button" class="sflmcp-keepundo-btn sflmcp-keepundo-keep">✓ Keep</button>' +
             '<button type="button" class="sflmcp-keepundo-btn sflmcp-keepundo-undo">↩ Undo</button>';
 

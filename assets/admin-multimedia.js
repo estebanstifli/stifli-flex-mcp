@@ -260,8 +260,8 @@
 			$imgCard.find('.sflmcp-provider-tab').removeClass('active');
 			$imgCard.find('.sflmcp-provider-tab[data-provider="' + imgProv + '"]').addClass('active');
 			var $imgForm = $('#sflmcp_mm_image_provider').closest('form');
-			$imgForm.find('.sflmcp-provider-panel').hide();
-			$imgForm.find('#sflmcp-panel-' + imgProv).show();
+			$imgForm.find('.sflmcp-provider-panel').addClass('sflmcp-hidden');
+			$imgForm.find('#sflmcp-panel-' + imgProv).removeClass('sflmcp-hidden');
 		}
 
 		// Video provider (only on Videos tab)
@@ -271,8 +271,8 @@
 			$vidCard.find('.sflmcp-provider-tab').removeClass('active');
 			$vidCard.find('.sflmcp-provider-tab[data-provider="' + vidProv + '"]').addClass('active');
 			var $vidForm = $('#sflmcp_mm_video_provider').closest('form');
-			$vidForm.find('.sflmcp-provider-panel').hide();
-			$vidForm.find('#sflmcp-panel-' + vidProv).show();
+			$vidForm.find('.sflmcp-provider-panel').addClass('sflmcp-hidden');
+			$vidForm.find('#sflmcp-panel-' + vidProv).removeClass('sflmcp-hidden');
 		}
 	}
 
@@ -322,8 +322,8 @@
 			var $hidden = $card.find('input[type="hidden"]');
 			$hidden.val(provider);
 			var $form = $(this).closest('form');
-			$form.find('.sflmcp-provider-panel').hide();
-			$form.find('#sflmcp-panel-' + provider).show();
+			$form.find('.sflmcp-provider-panel').addClass('sflmcp-hidden');
+			$form.find('#sflmcp-panel-' + provider).removeClass('sflmcp-hidden');
 			triggerSaveImmediate($hidden);
 		});
 

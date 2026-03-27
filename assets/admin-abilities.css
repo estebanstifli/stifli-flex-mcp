@@ -176,3 +176,25 @@
     border: 1px solid #f5c6cb;
     color: #721c24;
 }
+
+/* Ability list item styles */
+.sflmcp-ability-tool-name {
+    font-size: 11px;
+    color: #666;
+}
+
+.sflmcp-ability-desc {
+    color: #666;
+}
+
+.sflmcp-td-center {
+    text-align: center;
+}
+
+.sflmcp-ability-status-icon {
+    font-size: 20px;
+}
+
+.sflmcp-ability-delete-icon {
+    color: #dc3232;
+}

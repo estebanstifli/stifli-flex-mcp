@@ -1227,8 +1227,8 @@ class StifliFlexMcp {
 		
 		<h2><?php echo esc_html__('🔐 Authentication with Application Passwords', 'stifli-flex-mcp'); ?></h2>
 		
-		<div style="background:#f0f9ff;border:1px solid #0073aa;padding:20px;margin:20px 0;border-radius:4px;">
-			<h3 style="margin-top:0;color:#0073aa;"><?php echo esc_html__('How it works', 'stifli-flex-mcp'); ?></h3>
+		<div class="sflmcp-settings-infobox">
+			<h3><?php echo esc_html__('How it works', 'stifli-flex-mcp'); ?></h3>
 			<p><?php echo esc_html__('This plugin uses WordPress Application Passwords for secure API authentication. This is the recommended authentication method by WordPress.org.', 'stifli-flex-mcp'); ?></p>
 			<ol>
 				<li><?php echo esc_html__('Create an Application Password in your WordPress profile', 'stifli-flex-mcp'); ?></li>
@@ -1248,16 +1248,16 @@ class StifliFlexMcp {
 			<tr valign="top">
 				<th scope="row"><?php echo esc_html__('JSON-RPC 2.0 Endpoint', 'stifli-flex-mcp'); ?></th>
 				<td>
-					<code id="sflmcp_endpoint" style="display:block;background:#f0f0f0;padding:8px;margin:5px 0;font-size:13px;"><?php echo esc_html($endpoint); ?></code>
-					<button type="button" class="button" onclick="navigator.clipboard.writeText('<?php echo esc_js($endpoint); ?>');alert('<?php echo esc_js(__('Endpoint copied!', 'stifli-flex-mcp')); ?>');"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
+					<code id="sflmcp_endpoint" class="sflmcp-settings-endpoint-code"><?php echo esc_html($endpoint); ?></code>
+					<button type="button" class="button sflmcp-copy-btn" data-copy-target="#sflmcp_endpoint" data-copy-notice="<?php echo esc_attr__('Endpoint copied!', 'stifli-flex-mcp'); ?>"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
 					<p class="description"><?php echo esc_html__('Main endpoint for JSON-RPC 2.0 calls (methods: tools/list, tools/call).', 'stifli-flex-mcp'); ?></p>
 				</td>
 			</tr>
 			<tr valign="top">
 				<th scope="row"><?php echo esc_html__('Endpoint for Claude/ChatGPT', 'stifli-flex-mcp'); ?></th>
 				<td>
-					<code id="sflmcp_endpoint_auth" style="display:block;background:#f0f0f0;padding:8px;margin:5px 0;font-size:13px;word-break:break-all;"><?php echo esc_html($endpoint_with_auth); ?></code>
-					<button type="button" class="button" onclick="navigator.clipboard.writeText('<?php echo esc_js($endpoint_with_auth); ?>');alert('<?php echo esc_js(__('Endpoint copied! Remember to replace YOUR_APP_PASSWORD with your actual Application Password (without spaces).', 'stifli-flex-mcp')); ?>');"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
+					<code id="sflmcp_endpoint_auth" class="sflmcp-settings-endpoint-code sflmcp-break-all"><?php echo esc_html($endpoint_with_auth); ?></code>
+					<button type="button" class="button sflmcp-copy-btn" data-copy-target="#sflmcp_endpoint_auth" data-copy-notice="<?php echo esc_attr__('Endpoint copied! Remember to replace YOUR_APP_PASSWORD with your actual Application Password (without spaces).', 'stifli-flex-mcp'); ?>"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
 					<p class="description"><?php echo esc_html__('Use this URL format for Claude, ChatGPT, and other MCP clients. Replace YOUR_APP_PASSWORD with your Application Password (without spaces).', 'stifli-flex-mcp'); ?></p>
 				</td>
 			</tr>
@@ -1277,7 +1277,7 @@ class StifliFlexMcp {
 			<li><?php echo esc_html__('Copy the generated password (it will only be shown once!)', 'stifli-flex-mcp'); ?></li>
 		</ol>
 		
-		<div style="background:#e8f5e9;border:1px solid #4caf50;padding:12px 15px;margin:10px 0 20px;border-radius:4px;">
+		<div class="sflmcp-settings-tipbox">
 			<strong>💡 <?php echo esc_html__('Tip:', 'stifli-flex-mcp'); ?></strong>
 			<?php echo esc_html__('WordPress displays the password with spaces for readability (e.g., "SbfX irNe J5t3 OUNK"). You can use it with or without spaces - both work! For cleaner code, remove the spaces when configuring your client.', 'stifli-flex-mcp'); ?>
 		</div>
@@ -1285,13 +1285,13 @@ class StifliFlexMcp {
 		<h3><?php echo esc_html__('Step 2: Test Your Endpoint', 'stifli-flex-mcp'); ?></h3>
 		<p><?php echo esc_html__('Use HTTP Basic Authentication with your WordPress username and the application password:', 'stifli-flex-mcp'); ?></p>
 		
-		<pre style="background:#2c3e50;color:#ecf0f1;border:none;padding:15px;overflow:auto;border-radius:4px;">curl -X POST '<?php echo esc_url($endpoint); ?>' \
+		<pre class="sflmcp-settings-pre-dark">curl -X POST '<?php echo esc_url($endpoint); ?>' \
   -H 'Content-Type: application/json' \
   -u '<?php echo esc_html($current_user->user_login); ?>:YOUR_APPLICATION_PASSWORD' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
 		
 		<p><?php echo esc_html__('Or with the Authorization header:', 'stifli-flex-mcp'); ?></p>
-		<pre style="background:#2c3e50;color:#ecf0f1;border:none;padding:15px;overflow:auto;border-radius:4px;">curl -X POST '<?php echo esc_url($endpoint); ?>' \
+		<pre class="sflmcp-settings-pre-dark">curl -X POST '<?php echo esc_url($endpoint); ?>' \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Basic BASE64_ENCODED_CREDENTIALS' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
@@ -1300,7 +1300,7 @@ class StifliFlexMcp {
 		
 		<h3><?php echo esc_html__('Step 3: Configure Your MCP Client', 'stifli-flex-mcp'); ?></h3>
 		<p><?php echo esc_html__('Example configuration:', 'stifli-flex-mcp'); ?></p>
-		<pre style="background:#f7f7f7;border:1px solid #ddd;padding:15px;overflow:auto;border-radius:4px;">{
+		<pre class="sflmcp-settings-pre-light">{
   "url": "<?php echo esc_url($endpoint); ?>",
   "auth": {
     "type": "basic",
@@ -1311,9 +1311,9 @@ class StifliFlexMcp {
   "methods": ["tools/list", "tools/call"]
 }</pre>
 		
-		<div style="background:#fff8e1;border:1px solid #ff9800;padding:15px;margin:20px 0;border-radius:4px;">
-			<h4 style="margin-top:0;color:#e65100;">⚠️ <?php echo esc_html__('Security Notes', 'stifli-flex-mcp'); ?></h4>
-			<ul style="margin-bottom:0;">
+		<div class="sflmcp-settings-warnbox">
+			<h4>⚠️ <?php echo esc_html__('Security Notes', 'stifli-flex-mcp'); ?></h4>
+			<ul>
 				<li><?php echo esc_html__('Application Passwords are tied to your WordPress user - API calls execute with your permissions', 'stifli-flex-mcp'); ?></li>
 				<li><?php echo esc_html__('You can revoke an Application Password at any time from your profile', 'stifli-flex-mcp'); ?></li>
 				<li><?php echo esc_html__('Create separate Application Passwords for different clients/integrations', 'stifli-flex-mcp'); ?></li>
@@ -1376,7 +1376,7 @@ class StifliFlexMcp {
 					<?php echo esc_html($active_profile['profile_name']); ?>
 					<br>
 					<?php echo esc_html__('Changes to tools will be automatically saved to this profile.', 'stifli-flex-mcp'); ?>
-					<a href="?page=sflmcp-server&tab=profiles" class="button button-small" style="margin-left: 10px;">
+					<a href="?page=sflmcp-server&tab=profiles" class="button button-small sflmcp-profile-link">
 						<?php echo esc_html__('View Profiles', 'stifli-flex-mcp'); ?>
 					</a>
 				</p>
@@ -1394,17 +1394,17 @@ class StifliFlexMcp {
 				</p>
 			</form>
 		<?php else: ?>
-			<form method="post" action="" style="margin-bottom: 20px;">
+			<form method="post" action="" class="sflmcp-reseed-form">
 				<?php wp_nonce_field('sflmcp_reseed_tools', 'sflmcp_reseed_nonce'); ?>
 				<p>
-					<button type="submit" class="button button-secondary" onclick="return confirm('<?php echo esc_js(__('This will delete all tools and reseed them. Are you sure?', 'stifli-flex-mcp')); ?>');"><?php echo esc_html__('Reset and Reseed Tools', 'stifli-flex-mcp'); ?></button>
+					<button type="submit" class="button button-secondary sflmcp-reseed-btn" data-confirm="<?php echo esc_attr__('This will delete all tools and reseed them. Are you sure?', 'stifli-flex-mcp'); ?>"><?php echo esc_html__('Reset and Reseed Tools', 'stifli-flex-mcp'); ?></button>
 					<span class="description"><?php echo esc_html__('Useful if you\'ve updated the plugin and new tools are available.', 'stifli-flex-mcp'); ?></span>
 				</p>
 			</form>
 			
 			<?php foreach ($grouped_tools as $category => $category_tools): ?>
 				<?php $category_token_total = 0; foreach ($category_tools as $tool_meta) { $category_token_total += intval($tool_meta['token_estimate']); } ?>
-				<h2><?php echo esc_html($category); ?> <small style="font-weight: normal;">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
+				<h2><?php echo esc_html($category); ?> <small class="sflmcp-category-count">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
 				<div class="sflmcp-bulk-actions">
 					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="enable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Enable All', 'stifli-flex-mcp'); ?></button>
 					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="disable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Disable All', 'stifli-flex-mcp'); ?></button>
@@ -1412,10 +1412,10 @@ class StifliFlexMcp {
 				<table class="wp-list-table widefat fixed striped">
 					<thead>
 						<tr>
-							<th style="width:25%"><?php echo esc_html__('Tool', 'stifli-flex-mcp'); ?></th>
-							<th style="width:45%"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
-							<th style="width:15%"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
-							<th style="width:15%"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-tool"><?php echo esc_html__('Tool', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-desc"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-tokens"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-status"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1489,7 +1489,7 @@ class StifliFlexMcp {
 					<?php echo esc_html($active_profile['profile_name']); ?>
 					<br>
 					<?php echo esc_html__('Changes to tools will be automatically saved to this profile.', 'stifli-flex-mcp'); ?>
-					<a href="?page=sflmcp-server&tab=profiles" class="button button-small" style="margin-left: 10px;">
+					<a href="?page=sflmcp-server&tab=profiles" class="button button-small sflmcp-profile-link">
 						<?php echo esc_html__('View Profiles', 'stifli-flex-mcp'); ?>
 					</a>
 				</p>
@@ -1518,7 +1518,7 @@ class StifliFlexMcp {
 		<?php else: ?>
 			<?php foreach ($grouped_tools as $category => $category_tools): ?>
 				<?php $category_token_total = 0; foreach ($category_tools as $tool_meta) { $category_token_total += intval($tool_meta['token_estimate']); } ?>
-				<h2><?php echo esc_html($category); ?> <small style="font-weight: normal;">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
+				<h2><?php echo esc_html($category); ?> <small class="sflmcp-category-count">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
 				<div class="sflmcp-bulk-actions">
 					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="enable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Enable All', 'stifli-flex-mcp'); ?></button>
 					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="disable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Disable All', 'stifli-flex-mcp'); ?></button>
@@ -1526,10 +1526,10 @@ class StifliFlexMcp {
 				<table class="wp-list-table widefat fixed striped">
 					<thead>
 						<tr>
-							<th style="width:25%"><?php echo esc_html__('Tool', 'stifli-flex-mcp'); ?></th>
-							<th style="width:45%"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
-							<th style="width:15%"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
-							<th style="width:15%"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-tool"><?php echo esc_html__('Tool', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-desc"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-tokens"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
+							<th class="sflmcp-tools-col-status"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1594,7 +1594,7 @@ class StifliFlexMcp {
 		<p><?php echo esc_html__('Profiles allow you to quickly switch which tools are available for different use cases.', 'stifli-flex-mcp'); ?></p>
 		<p class="description"><?php echo esc_html__('Token totals shown below are approximations based on the enabled tools. They help you gauge relative cost when switching profiles.', 'stifli-flex-mcp'); ?></p>
 		
-		<div style="margin: 20px 0;">
+		<div class="sflmcp-profiles-actions">
 			<button type="button" class="button" id="sflmcp_import_profile">
 				<?php echo esc_html__('⬆ Import JSON', 'stifli-flex-mcp'); ?>
 			</button>
@@ -1616,7 +1616,7 @@ class StifliFlexMcp {
 			<p>
 				<strong><?php echo esc_html__('Currently active profile:', 'stifli-flex-mcp'); ?></strong>
 				<?php echo esc_html($active_profile_info['profile_name']); ?>
-				<span style="display:block;font-size:12px;"><?php echo esc_html__('Estimated token footprint (sum of enabled tools within the profile):', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n(intval($active_profile_info['tokens_sum']))); ?></span>
+				<span class="sflmcp-profiles-token-info"><?php echo esc_html__('Estimated token footprint (sum of enabled tools within the profile):', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n(intval($active_profile_info['tokens_sum']))); ?></span>
 			</p>
 		</div>
 		<?php endif; ?>
@@ -1635,12 +1635,12 @@ class StifliFlexMcp {
 			<table class="wp-list-table widefat fixed striped">
 				<thead>
 					<tr>
-						<th style="width: 5%;"></th>
-						<th style="width: 18%;"><?php echo esc_html__('Name', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 35%;"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 12%;"><?php echo esc_html__('Tools', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 12%;"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 18%;"><?php echo esc_html__('Actions', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-radio"></th>
+						<th class="sflmcp-profiles-col-name"><?php echo esc_html__('Name', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-desc"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-tools"><?php echo esc_html__('Tools', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-tokens"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-actions"><?php echo esc_html__('Actions', 'stifli-flex-mcp'); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -1665,14 +1665,14 @@ class StifliFlexMcp {
 						<tr>
 							<td>
 								<?php if (intval($profile['is_active']) === 1): ?>
-									<span style="color: #2271b1; font-size: 20px;">●</span>
+									<span class="sflmcp-active-dot">●</span>
 								<?php endif; ?>
 							</td>
 							<td><strong><?php echo esc_html($profile['profile_name']); ?></strong></td>
 							<td>
 								<?php echo esc_html($profile['profile_description']); ?>
 								<br>
-								<a href="#" class="SFLMCP-view-tools" data-tools="<?php echo esc_attr($tools_list_html); ?>" style="font-size: 12px; text-decoration: none;">
+								<a href="#" class="SFLMCP-view-tools" data-tools="<?php echo esc_attr($tools_list_html); ?>" class="sflmcp-view-tools-link">
 									📋 <?php echo esc_html__('View tools', 'stifli-flex-mcp'); ?>
 								</a>
 							</td>
@@ -1700,16 +1700,16 @@ class StifliFlexMcp {
 			$custom_profiles = array_filter($profiles, function($p) { return intval($p['is_system']) === 0; });
 			if (!empty($custom_profiles)):
 			?>
-			<h3 style="margin-top: 30px;"><?php echo esc_html__('Custom Profiles', 'stifli-flex-mcp'); ?></h3>
+			<h3 class="sflmcp-profiles-custom-heading"><?php echo esc_html__('Custom Profiles', 'stifli-flex-mcp'); ?></h3>
 			<table class="wp-list-table widefat fixed striped">
 				<thead>
 					<tr>
-						<th style="width: 5%;"></th>
-						<th style="width: 18%;"><?php echo esc_html__('Name', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 35%;"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 12%;"><?php echo esc_html__('Tools', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 12%;"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
-						<th style="width: 18%;"><?php echo esc_html__('Actions', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-radio"></th>
+						<th class="sflmcp-profiles-col-name"><?php echo esc_html__('Name', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-desc"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-tools"><?php echo esc_html__('Tools', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-tokens"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
+						<th class="sflmcp-profiles-col-actions"><?php echo esc_html__('Actions', 'stifli-flex-mcp'); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -1735,14 +1735,14 @@ class StifliFlexMcp {
 						<tr>
 							<td>
 								<?php if (intval($profile['is_active']) === 1): ?>
-									<span style="color: #2271b1; font-size: 20px;">●</span>
+									<span class="sflmcp-active-dot">●</span>
 								<?php endif; ?>
 							</td>
 							<td><strong><?php echo esc_html($profile['profile_name']); ?></strong></td>
 							<td>
 								<?php echo esc_html($profile['profile_description']); ?>
 								<br>
-								<a href="#" class="SFLMCP-view-tools" data-tools="<?php echo esc_attr($tools_list_html); ?>" style="font-size: 12px; text-decoration: none;">
+								<a href="#" class="SFLMCP-view-tools" data-tools="<?php echo esc_attr($tools_list_html); ?>" class="sflmcp-view-tools-link">
 									📋 <?php echo esc_html__('View tools', 'stifli-flex-mcp'); ?>
 								</a>
 							</td>
@@ -1773,7 +1773,7 @@ class StifliFlexMcp {
 		<?php endif; ?>
 		
 		<!-- Hidden file input for import -->
-		<input type="file" id="sflmcp_import_file" accept=".json" style="display: none;" />
+		<input type="file" id="sflmcp_import_file" accept=".json" class="sflmcp-hidden-file-input" />
 		
 		
 		<?php
@@ -1822,7 +1822,7 @@ class StifliFlexMcp {
 			</div>
 			
 			<!-- Editor Modal (Hidden) -->
-			<div id="sflmcp_tool_editor_modal" class="sflmcp-modal" style="display:none;">
+			<div id="sflmcp_tool_editor_modal" class="sflmcp-modal">
 				<div class="sflmcp-modal-content">
 					<div class="sflmcp-modal-header">
 						<h2 id="sflmcp_editor_title"><?php echo esc_html__('Edit Tool', 'stifli-flex-mcp'); ?></h2>
@@ -1855,7 +1855,7 @@ class StifliFlexMcp {
 									</select>
 									<p class="description"><?php echo esc_html__('HTTP calls external APIs. ACTION executes internal WordPress hooks.', 'stifli-flex-mcp'); ?></p>
 								</div>
-								<div class="sflmcp-form-row" style="flex-grow:2;">
+								<div class="sflmcp-form-row sflmcp-form-row-grow">
 									<label id="endpoint_label"><?php echo esc_html__('Webhook URL / Endpoint', 'stifli-flex-mcp'); ?></label>
 									<input type="text" id="tool_endpoint" name="endpoint" required placeholder="https://hook.eu1.make.com/...">
 									<p class="description" id="endpoint_help"><?php echo esc_html__('For HTTP: full URL. For ACTION: any WordPress action hook name (e.g. flush_rewrite_rules, woocommerce_cancel_unpaid_orders)', 'stifli-flex-mcp'); ?></p>
@@ -1892,7 +1892,7 @@ class StifliFlexMcp {
 								<a href="#" id="sflmcp_toggle_advanced"><?php echo esc_html__('Advanced Settings (Headers)', 'stifli-flex-mcp'); ?></a>
 							</div>
 							
-							<div id="sflmcp_advanced_settings" style="display:none;">
+							<div id="sflmcp_advanced_settings">
 								<div class="sflmcp-form-row">
 									<label><?php echo esc_html__('HTTP Headers (JSON)', 'stifli-flex-mcp'); ?></label>
 									<textarea id="tool_headers" name="headers" rows="3" placeholder='{"Authorization": "Bearer token"}'></textarea>
@@ -1909,7 +1909,7 @@ class StifliFlexMcp {
 					</div>
 					<div class="sflmcp-modal-footer">
 						<button type="button" class="button button-secondary" id="sflmcp_test_tool"><?php echo esc_html__('Test Connection', 'stifli-flex-mcp'); ?></button>
-						<div style="flex-grow:1;"></div>
+						<div class="sflmcp-spacer"></div>
 						<button type="button" class="button button-primary" id="sflmcp_save_tool"><?php echo esc_html__('Save Tool', 'stifli-flex-mcp'); ?></button>
 					</div>
 				</div>
@@ -2244,10 +2244,10 @@ class StifliFlexMcp {
 			<?php echo esc_html__('Discover and import abilities from other WordPress plugins. Imported abilities are exposed as MCP tools for AI agents.', 'stifli-flex-mcp'); ?>
 		</p>
 
-		<div class="sflmcp-abilities-container" style="display: flex; gap: 20px; margin-top: 20px;">
+		<div class="sflmcp-abilities-container">
 			<!-- Left Panel: Discover Abilities -->
-			<div class="sflmcp-abilities-discover" style="flex: 1; background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px;">
-				<h3 style="margin-top: 0;">
+			<div class="sflmcp-abilities-discover">
+				<h3>
 					<?php echo esc_html__('🔍 Discover Available Abilities', 'stifli-flex-mcp'); ?>
 				</h3>
 				<p class="description">
@@ -2257,14 +2257,14 @@ class StifliFlexMcp {
 					<?php echo esc_html__('Discover Abilities', 'stifli-flex-mcp'); ?>
 				</button>
 				
-				<div id="sflmcp-discovered-abilities" style="margin-top: 20px;">
+				<div id="sflmcp-discovered-abilities">
 					<!-- Discovered abilities will be loaded here via AJAX -->
 				</div>
 			</div>
 
 			<!-- Right Panel: Imported Abilities -->
-			<div class="sflmcp-abilities-imported" style="flex: 1; background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px;">
-				<h3 style="margin-top: 0;">
+			<div class="sflmcp-abilities-imported">
+				<h3>
 					<?php echo esc_html__('✅ Imported Abilities', 'stifli-flex-mcp'); ?>
 				</h3>
 				<p class="description">
@@ -2277,9 +2277,9 @@ class StifliFlexMcp {
 			</div>
 		</div>
 
-		<div class="sflmcp-abilities-info" style="margin-top: 20px; padding: 15px; background: #f0f6fc; border-left: 4px solid #0073aa; border-radius: 4px;">
+		<div class="sflmcp-abilities-info">
 			<strong><?php echo esc_html__('How it works:', 'stifli-flex-mcp'); ?></strong>
-			<ol style="margin: 10px 0 0 20px;">
+			<ol>
 				<li><?php echo esc_html__('Install plugins that register WordPress Abilities (e.g., All Sources Images)', 'stifli-flex-mcp'); ?></li>
 				<li><?php echo esc_html__('Click "Discover Abilities" to find available abilities', 'stifli-flex-mcp'); ?></li>
 				<li><?php echo esc_html__('Import the abilities you want to expose to AI agents', 'stifli-flex-mcp'); ?></li>
@@ -2308,16 +2308,16 @@ class StifliFlexMcp {
 		$abilities = $wpdb->get_results("SELECT * FROM {$table} ORDER BY ability_category, ability_label");
 		
 		if (empty($abilities)) {
-			echo '<p style="color: #666; font-style: italic;">' . esc_html__('No abilities imported yet. Use the Discover button to find and import abilities.', 'stifli-flex-mcp') . '</p>';
+			echo '<p class="sflmcp-empty-msg">' . esc_html__('No abilities imported yet. Use the Discover button to find and import abilities.', 'stifli-flex-mcp') . '</p>';
 			return;
 		}
 
-		echo '<table class="widefat striped" style="margin-top: 10px;">';
+		echo '<table class="widefat striped">';
 		echo '<thead><tr>';
 		echo '<th>' . esc_html__('Ability', 'stifli-flex-mcp') . '</th>';
 		echo '<th>' . esc_html__('Category', 'stifli-flex-mcp') . '</th>';
-		echo '<th style="width: 80px; text-align: center;">' . esc_html__('Enabled', 'stifli-flex-mcp') . '</th>';
-		echo '<th style="width: 80px; text-align: center;">' . esc_html__('Actions', 'stifli-flex-mcp') . '</th>';
+		echo '<th class="sflmcp-logs-col-enabled">' . esc_html__('Enabled', 'stifli-flex-mcp') . '</th>';
+		echo '<th class="sflmcp-logs-col-enabled">' . esc_html__('Actions', 'stifli-flex-mcp') . '</th>';
 		echo '</tr></thead><tbody>';
 
 		foreach ($abilities as $ability) {
@@ -2328,20 +2328,20 @@ class StifliFlexMcp {
 			echo '<tr data-ability-id="' . esc_attr($ability->id) . '">';
 			echo '<td>';
 			echo '<strong>' . esc_html($ability->ability_label) . '</strong>';
-			echo '<br><code style="font-size: 11px; color: #666;">' . esc_html($tool_name) . '</code>';
+			echo '<br><code class="sflmcp-ability-tool-name">' . esc_html($tool_name) . '</code>';
 			if (!empty($ability->ability_description)) {
-				echo '<br><small style="color: #666;">' . esc_html(wp_trim_words($ability->ability_description, 15)) . '</small>';
+				echo '<br><small class="sflmcp-ability-desc">' . esc_html(wp_trim_words($ability->ability_description, 15)) . '</small>';
 			}
 			echo '</td>';
 			echo '<td>' . esc_html($ability->ability_category) . '</td>';
-			echo '<td style="text-align: center;">';
+			echo '<td class="sflmcp-td-center">';
 			echo '<button type="button" class="button-link sflmcp-toggle-ability" data-id="' . esc_attr($ability->id) . '" data-enabled="' . esc_attr($ability->enabled) . '" title="' . esc_attr__('Toggle enabled', 'stifli-flex-mcp') . '">';
-			echo '<span class="dashicons ' . esc_attr($enabled_class) . '" style="color: ' . esc_attr($enabled_color) . '; font-size: 20px;"></span>';
+			echo '<span class="dashicons ' . esc_attr($enabled_class) . '" class="sflmcp-ability-status-icon"></span>';
 			echo '</button>';
 			echo '</td>';
-			echo '<td style="text-align: center;">';
+			echo '<td class="sflmcp-td-center">';
 			echo '<button type="button" class="button-link sflmcp-delete-ability" data-id="' . esc_attr($ability->id) . '" title="' . esc_attr__('Remove ability', 'stifli-flex-mcp') . '">';
-			echo '<span class="dashicons dashicons-trash" style="color: #dc3232;"></span>';
+			echo '<span class="dashicons dashicons-trash" class="sflmcp-ability-delete-icon"></span>';
 			echo '</button>';
 			echo '</td>';
 			echo '</tr>';
@@ -2734,8 +2734,8 @@ class StifliFlexMcp {
 				</span>
 				<span class="sflmcp-toggle-status"></span>
 			</div>
-			<p class="description sflmcp-pricing-notice" style="margin: -8px 0 12px 60px; color: #826200; background: #fff8e1; border-left: 4px solid #ffb900; padding: 8px 12px;">
-				<span class="dashicons dashicons-info" style="color:#ffb900;font-size:16px;vertical-align:middle;margin-right:4px;"></span>
+			<p class="description sflmcp-pricing-notice">
+				<span class="dashicons dashicons-info" class="sflmcp-pricing-icon"></span>
 				<?php esc_html_e( 'Approximate cost per image: OpenAI GPT Image 1: $0.01–$0.25 (varies by quality: low/medium/high and size). DALL·E 3: $0.04–$0.12. DALL·E 2: ~$0.02. Google Imagen 4: $0.02 (fast), $0.04 (standard), $0.06 (ultra). Prices may change — please consult each provider\'s pricing page for up-to-date rates.', 'stifli-flex-mcp' ); ?>
 			</p>
 
@@ -2755,7 +2755,7 @@ class StifliFlexMcp {
 
 					<input type="hidden" id="sflmcp_mm_image_provider" name="image_provider" value="<?php echo esc_attr( $s['image_provider'] ); ?>">
 
-					<div class="sflmcp-provider-tabs" style="margin-top:12px;">
+					<div class="sflmcp-provider-tabs">
 						<div class="sflmcp-provider-tab <?php echo $s['image_provider'] === 'openai' ? 'active' : ''; ?>" data-provider="openai">
 							<span class="dashicons dashicons-format-image"></span> OpenAI
 						</div>
@@ -2766,7 +2766,7 @@ class StifliFlexMcp {
 				</div>
 
 				<!-- ─── OpenAI Settings ──────────────────────────── -->
-				<div id="sflmcp-panel-openai" class="sflmcp-provider-panel card" style="<?php echo $s['image_provider'] !== 'openai' ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-panel-openai" class="sflmcp-provider-panel card<?php echo $s['image_provider'] !== 'openai' ? ' sflmcp-hidden' : ''; ?>">
 					<h3><span class="dashicons dashicons-format-image"></span> <?php esc_html_e( 'OpenAI Image Settings', 'stifli-flex-mcp' ); ?></h3>
 
 					<table class="form-table">
@@ -2849,7 +2849,7 @@ class StifliFlexMcp {
 				</div>
 
 				<!-- ─── Gemini Settings ──────────────────────────── -->
-				<div id="sflmcp-panel-gemini" class="sflmcp-provider-panel card" style="<?php echo $s['image_provider'] !== 'gemini' ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-panel-gemini" class="sflmcp-provider-panel card<?php echo $s['image_provider'] !== 'gemini' ? ' sflmcp-hidden' : ''; ?>">
 					<h3><span class="dashicons dashicons-admin-customizer"></span> <?php esc_html_e( 'Gemini Image Settings', 'stifli-flex-mcp' ); ?></h3>
 
 					<table class="form-table">
@@ -2993,8 +2993,8 @@ class StifliFlexMcp {
 				</span>
 				<span class="sflmcp-toggle-status"></span>
 			</div>
-			<p class="description sflmcp-pricing-notice" style="margin: -8px 0 12px 60px; color: #826200; background: #fff8e1; border-left: 4px solid #ffb900; padding: 8px 12px;">
-				<span class="dashicons dashicons-info" style="color:#ffb900;font-size:16px;vertical-align:middle;margin-right:4px;"></span>
+			<p class="description sflmcp-pricing-notice">
+				<span class="dashicons dashicons-info" class="sflmcp-pricing-icon"></span>
 				<?php esc_html_e( 'Approximate cost per video: OpenAI Sora is billed per second — sora-2: $0.10/s, sora-2-pro: $0.30–$0.50/s (e.g. a 5s video costs $0.50–$2.50). Google Veo 2: $0.35/video, Veo 3: $0.15–$0.40/video, Veo 3.1: $0.15–$0.60/video (varies by resolution). Video generation is significantly more expensive than images. Prices may change — please consult each provider\'s pricing page for up-to-date rates.', 'stifli-flex-mcp' ); ?>
 			</p>
 
@@ -3014,7 +3014,7 @@ class StifliFlexMcp {
 
 					<input type="hidden" id="sflmcp_mm_video_provider" name="video_provider" value="<?php echo esc_attr( $s['video_provider'] ); ?>">
 
-					<div class="sflmcp-provider-tabs" style="margin-top:12px;">
+					<div class="sflmcp-provider-tabs">
 						<div class="sflmcp-provider-tab <?php echo $s['video_provider'] === 'gemini' ? 'active' : ''; ?>" data-provider="gemini">
 							<span class="dashicons dashicons-admin-customizer"></span> Google Veo
 						</div>
@@ -3025,7 +3025,7 @@ class StifliFlexMcp {
 				</div>
 
 				<!-- ─── Gemini / Veo Settings ──────────────────────── -->
-				<div id="sflmcp-panel-gemini" class="sflmcp-provider-panel card" style="<?php echo $s['video_provider'] !== 'gemini' ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-panel-gemini" class="sflmcp-provider-panel card<?php echo $s['video_provider'] !== 'gemini' ? ' sflmcp-hidden' : ''; ?>">
 					<h3><span class="dashicons dashicons-admin-customizer"></span> <?php esc_html_e( 'Google Veo Settings', 'stifli-flex-mcp' ); ?></h3>
 
 					<table class="form-table">
@@ -3055,7 +3055,7 @@ class StifliFlexMcp {
 				</div>
 
 				<!-- ─── OpenAI / Sora Settings ──────────────────── -->
-				<div id="sflmcp-panel-openai" class="sflmcp-provider-panel card" style="<?php echo $s['video_provider'] !== 'openai' ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-panel-openai" class="sflmcp-provider-panel card<?php echo $s['video_provider'] !== 'openai' ? ' sflmcp-hidden' : ''; ?>">
 					<h3><span class="dashicons dashicons-video-alt3"></span> <?php esc_html_e( 'OpenAI Sora Settings', 'stifli-flex-mcp' ); ?></h3>
 
 					<table class="form-table">
@@ -3362,7 +3362,7 @@ class StifliFlexMcp {
 			<h1>📚 <?php esc_html_e('StifLi Flex MCP - Complete Guide', 'stifli-flex-mcp'); ?></h1>
 			
 			<div class="card toc">
-				<h3 style="margin-top:0;">📑 <?php esc_html_e('Table of Contents', 'stifli-flex-mcp'); ?></h3>
+				<h3>📑 <?php esc_html_e('Table of Contents', 'stifli-flex-mcp'); ?></h3>
 				<ul>
 					<li><a href="#overview">🎯 <?php esc_html_e('What is MCP?', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#builtin-tools">🔧 <?php esc_html_e('Built-in Tools (117+)', 'stifli-flex-mcp'); ?></a></li>
@@ -3647,8 +3647,8 @@ X-Custom-Header: value</code></pre>
 				<p><?php esc_html_e('Go to the Logs tab and enable logging to see all MCP requests and responses. This helps debug issues with tools.', 'stifli-flex-mcp'); ?></p>
 			</div>
 
-			<hr style="margin: 40px 0;">
-			<p style="text-align: center; color: #666;">
+			<hr class="sflmcp-help-separator">
+			<p class="sflmcp-help-footer">
 				<strong>StifLi Flex MCP</strong> - 
 				<a href="https://github.com/estebanstifli/stifli-flex-mcp" target="_blank">GitHub</a> | 
 				<a href="https://wordpress.org/plugins/stifli-flex-mcp/" target="_blank">WordPress.org</a>

@@ -151,3 +151,158 @@
     background: #9b59b6;
     color: #fff;
 }
+
+/* =============================================================================
+   SETTINGS PAGE
+   ============================================================================= */
+
+.sflmcp-settings-infobox {
+    background: #f0f9ff;
+    border: 1px solid #0073aa;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.sflmcp-settings-infobox h3 {
+    margin-top: 0;
+    color: #0073aa;
+}
+
+.sflmcp-settings-endpoint-code {
+    display: block;
+    background: #f0f0f0;
+    padding: 8px;
+    margin: 5px 0;
+    font-size: 13px;
+}
+
+.sflmcp-settings-endpoint-code.sflmcp-break-all {
+    word-break: break-all;
+}
+
+.sflmcp-settings-tipbox {
+    background: #e8f5e9;
+    border: 1px solid #4caf50;
+    padding: 12px 15px;
+    margin: 10px 0 20px;
+    border-radius: 4px;
+}
+
+.sflmcp-settings-pre-dark {
+    background: #2c3e50;
+    color: #ecf0f1;
+    border: none;
+    padding: 15px;
+    overflow: auto;
+    border-radius: 4px;
+}
+
+.sflmcp-settings-pre-light {
+    background: #f7f7f7;
+    border: 1px solid #ddd;
+    padding: 15px;
+    overflow: auto;
+    border-radius: 4px;
+}
+
+.sflmcp-settings-warnbox {
+    background: #fff8e1;
+    border: 1px solid #ff9800;
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.sflmcp-settings-warnbox h4 {
+    margin-top: 0;
+    color: #e65100;
+}
+
+.sflmcp-settings-warnbox ul {
+    margin-bottom: 0;
+}
+
+.sflmcp-profile-link {
+    margin-left: 10px;
+}
+
+.sflmcp-reseed-form {
+    margin-bottom: 20px;
+}
+
+.sflmcp-category-count {
+    font-weight: normal;
+}
+
+.sflmcp-tools-col-tool { width: 25%; }
+.sflmcp-tools-col-desc { width: 45%; }
+.sflmcp-tools-col-tokens { width: 15%; }
+.sflmcp-tools-col-status { width: 15%; }
+
+.sflmcp-profiles-col-radio { width: 5%; }
+.sflmcp-profiles-col-name { width: 18%; }
+.sflmcp-profiles-col-desc { width: 35%; }
+.sflmcp-profiles-col-tools { width: 12%; }
+.sflmcp-profiles-col-tokens { width: 12%; }
+.sflmcp-profiles-col-actions { width: 18%; }
+
+.sflmcp-profiles-custom-heading { margin-top: 30px; }
+
+.sflmcp-logs-col-enabled { width: 80px; text-align: center; }
+
+/* Profiles tab */
+.sflmcp-profiles-actions {
+    margin: 20px 0;
+}
+
+.sflmcp-profiles-token-info {
+    display: block;
+    font-size: 12px;
+}
+
+.sflmcp-active-dot {
+    color: #2271b1;
+    font-size: 20px;
+}
+
+.sflmcp-view-tools-link {
+    font-size: 12px;
+    text-decoration: none;
+}
+
+.sflmcp-hidden-file-input {
+    display: none;
+}
+
+/* Custom Tools tab */
+.sflmcp-form-row-grow {
+    flex-grow: 2;
+}
+
+.sflmcp-spacer {
+    flex-grow: 1;
+}
+
+#sflmcp_advanced_settings {
+    display: none;
+}
+
+/* Empty state */
+.sflmcp-empty-msg {
+    color: #666;
+    font-style: italic;
+}
+
+#sflmcp-copilot-settings-notice {
+    display: none;
+}
+
+.sflmcp-help-separator {
+    margin: 40px 0;
+}
+
+.sflmcp-help-footer {
+    text-align: center;
+    color: #666;
+}

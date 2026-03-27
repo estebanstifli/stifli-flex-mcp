@@ -277,6 +277,7 @@
 .sflmcp-provider-tabs {
 	display: flex;
 	gap: 8px;
+	margin-top: 12px;
 	margin-bottom: 16px;
 }
 .sflmcp-provider-tab {
@@ -344,4 +345,25 @@
 	border-radius: 4px;
 	font-size: 13px;
 	margin: 8px 0;
+}
+
+/* Pricing notice */
+.sflmcp-pricing-notice {
+	margin: -8px 0 12px 60px;
+	color: #826200;
+	background: #fff8e1;
+	border-left: 4px solid #ffb900;
+	padding: 8px 12px;
+}
+
+.sflmcp-pricing-icon {
+	color: #ffb900;
+	font-size: 16px;
+	vertical-align: middle;
+	margin-right: 4px;
+}
+
+/* Hidden utility */
+.sflmcp-hidden {
+	display: none;
 }

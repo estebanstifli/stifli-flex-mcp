@@ -72,6 +72,17 @@ class StifliFlexMcp_Copilot_Admin {
 	 */
 	public function enqueue_assets( $hook ) {
 
+		// Settings page script (needed regardless of copilot enabled state).
+		if ( str_ends_with( $hook, '_page_sflmcp-copilot' ) ) {
+			wp_enqueue_script(
+				'sflmcp-copilot-settings',
+				plugin_dir_url( __FILE__ ) . 'assets/copilot-settings.js',
+				array( 'jquery' ),
+				self::ASSET_VERSION,
+				true
+			);
+		}
+
 		// Only load when the user has configured an API key.
 		$settings = $this->get_chat_settings();
 		if ( empty( $settings['api_key'] ) ) {
@@ -165,7 +176,7 @@ class StifliFlexMcp_Copilot_Admin {
 			return;
 		}
 		?>
-		<div id="sflmcp-copilot-widget" class="sflmcp-copilot-widget" style="display:none;">
+		<div id="sflmcp-copilot-widget" class="sflmcp-copilot-widget">
 			<!-- Toggle bubble -->
 			<button type="button" id="sflmcp-copilot-toggle" class="sflmcp-copilot-toggle" aria-label="<?php esc_attr_e( 'Toggle AI Copilot', 'stifli-flex-mcp' ); ?>">
 				<span class="sflmcp-copilot-icon">
@@ -870,7 +881,7 @@ class StifliFlexMcp_Copilot_Admin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'AI Copilot Settings', 'stifli-flex-mcp' ); ?></h1>
 
-			<div id="sflmcp-copilot-settings-notice" style="display:none;" class="notice notice-success is-dismissible">
+			<div id="sflmcp-copilot-settings-notice" class="notice notice-success is-dismissible">
 				<p><?php esc_html_e( 'Settings saved.', 'stifli-flex-mcp' ); ?></p>
 			</div>
 
@@ -931,33 +942,6 @@ class StifliFlexMcp_Copilot_Admin {
 				<?php submit_button( __( 'Save Settings', 'stifli-flex-mcp' ), 'primary', 'sflmcp-copilot-save' ); ?>
 			</form>
 		</div>
-
-		<script>
-		jQuery(function($) {
-			$('#sflmcp-copilot-settings-form').on('submit', function(e) {
-				e.preventDefault();
-				var $btn = $(this).find('#sflmcp-copilot-save');
-				$btn.prop('disabled', true);
-
-				$.post(ajaxurl, {
-					action: 'sflmcp_copilot_save_settings',
-					nonce:  $('#sflmcp_copilot_settings_nonce').val(),
-					enabled: $('#sflmcp-copilot-enabled').is(':checked') ? '1' : '0',
-					tools_mode: $('#sflmcp-copilot-tools-mode').val()
-				}, function(res) {
-					$btn.prop('disabled', false);
-					if (res.success) {
-						$('#sflmcp-copilot-settings-notice').slideDown().delay(3000).slideUp();
-					} else {
-						alert(res.data && res.data.message ? res.data.message : 'Error saving settings');
-					}
-				}).fail(function() {
-					$btn.prop('disabled', false);
-					alert('Network error');
-				});
-			});
-		});
-		</script>
 		<?php
 	}
 

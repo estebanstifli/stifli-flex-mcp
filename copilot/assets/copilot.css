@@ -9,6 +9,7 @@
  * Widget container
  * ------------------------------------------------------- */
 .sflmcp-copilot-widget {
+    display: none;
     position: fixed;
     bottom: 24px;
     right: 24px;
