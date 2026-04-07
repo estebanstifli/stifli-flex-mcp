@@ -203,7 +203,10 @@ class StifliFlexMcpModel {
             'wc_create_webhook','wc_update_webhook','wc_delete_webhook',
             // WooCommerce - Stock & Refunds
             'wc_update_stock','wc_set_stock_status',
-            'wc_create_refund','wc_delete_refund'
+            'wc_create_refund','wc_delete_refund',
+            // Snippet write operations
+            'snippet_create','snippet_update','snippet_delete',
+            'snippet_activate','snippet_deactivate'
         );
 
         // Lectura sensible (requiere permisos elevados o toca red externa)
@@ -219,7 +222,9 @@ class StifliFlexMcpModel {
             'wc_get_orders',        // order data privacy
             'wc_get_order_notes',   // order notes may contain sensitive info
             'wc_get_system_status', // system information
-            'wc_get_settings'       // WooCommerce settings
+            'wc_get_settings',      // WooCommerce settings
+            // Snippet sensitive reads (code content)
+            'snippet_list','snippet_get'
         );
 
         if (in_array($name, $WRITE, true)) {
@@ -1160,6 +1165,12 @@ class StifliFlexMcpModel {
                 ),
             );
 
+            // Merge Snippets tools if a snippet plugin is available
+            require_once dirname(__FILE__) . '/snippets/snippets.php';
+            if ( class_exists( 'StifliFlexMcp_Snippets' ) ) {
+                $tools = array_merge( $tools, StifliFlexMcp_Snippets::getTools() );
+            }
+
             // Merge WooCommerce tools if available
             // Lazy load modules ensures compatibility with all load orders
             if ( class_exists( 'WooCommerce' ) ) {
@@ -1458,6 +1469,11 @@ class StifliFlexMcpModel {
             if ( class_exists( 'StifliFlexMcp_WC_System' ) ) {
                 $map = array_merge( $map, StifliFlexMcp_WC_System::getCapabilities() );
             }
+        }
+
+        // Merge Snippets capabilities if available
+        if ( class_exists( 'StifliFlexMcp_Snippets' ) ) {
+            $map = array_merge( $map, StifliFlexMcp_Snippets::getCapabilities() );
         }
 
         return isset($map[$tool]) ? $map[$tool] : null;
@@ -3784,6 +3800,17 @@ class StifliFlexMcpModel {
                     }
                 }
                 
+                // Try Snippets module (snippet_* tools)
+                if ( strpos( $tool, 'snippet_' ) === 0 ) {
+                    require_once dirname(__FILE__) . '/snippets/snippets.php';
+                    if ( class_exists( 'StifliFlexMcp_Snippets' ) ) {
+                        $result = StifliFlexMcp_Snippets::dispatch( $tool, $args, $r, $addResultText, $utils );
+                        if ( $result !== null ) {
+                            return $r;
+                        }
+                    }
+                }
+
                 // Try Custom Tools (from sflmcp_custom_tools table)
                 if ( strpos( $tool, 'custom_' ) === 0 ) {
                     return $this->dispatchCustomTool( $tool, $args, $rpcId, $r );

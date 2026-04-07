@@ -520,6 +520,15 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_generate_video', 'Generate a video using AI (Google Veo or OpenAI Sora) and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
 	);
 	
+	// Snippet tools (requires WPCode or Code Snippets plugin)
+	$tools[] = array('snippet_list', 'List code snippets. Supports limit, offset, active filter. Requires WPCode or Code Snippets plugin.', 'Snippets', 1);
+	$tools[] = array('snippet_get', 'Get a single code snippet by ID with full details.', 'Snippets', 1);
+	$tools[] = array('snippet_create', 'Create a new code snippet (inactive by default). Requires WPCode or Code Snippets plugin.', 'Snippets', 1);
+	$tools[] = array('snippet_update', 'Update an existing code snippet by ID.', 'Snippets', 1);
+	$tools[] = array('snippet_delete', 'Delete a code snippet by ID.', 'Snippets', 1);
+	$tools[] = array('snippet_activate', 'Activate a code snippet by ID.', 'Snippets', 1);
+	$tools[] = array('snippet_deactivate', 'Deactivate a code snippet by ID.', 'Snippets', 1);
+	
 	// WooCommerce tools (available even if WooCommerce is not installed)
 	// WooCommerce Products
 	$tools[] = array('wc_get_products', 'List WooCommerce products with filters.', 'WooCommerce - Products', 1);
@@ -723,6 +732,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_site_health',
 				// Utilities (1) — wp_generate_video excluded by default; enable in Multimedia Settings
 				'wp_generate_image',
+				// Snippets (7) — requires WPCode or Code Snippets plugin
+				'snippet_list', 'snippet_get', 'snippet_create', 'snippet_update', 'snippet_delete', 'snippet_activate', 'snippet_deactivate',
 			),
 		),
 		array(
@@ -843,6 +854,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_tax_classes', 'wc_get_tax_rates',
 				'wc_get_shipping_zones',
 				'wc_get_payment_gateways',
+				// Snippets (read)
+				'snippet_list', 'snippet_get',
 			),
 		),
 	);
