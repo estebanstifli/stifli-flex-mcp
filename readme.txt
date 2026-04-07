@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 3.0.1
+Stable tag: 3.0.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -38,6 +38,25 @@ The AI Copilot lives as a floating widget right inside the WordPress post and pa
 * **Works with Gutenberg and Classic Editor** — Full support for both editors
 * **Context-aware** — The Copilot reads your current post content, blocks, metadata, and editor state to give relevant suggestions
 * **WooCommerce-aware** — When editing a product, the Copilot sees prices, stock, SKU, attributes, and product type
+
+**💡 What Can You Do With the Copilot?**
+
+Here are just a few examples of what you can ask while editing a post or page:
+
+* ✏️ "Rewrite the introduction to sound more professional and engaging"
+* 📊 "Add a comparison table below the second paragraph with pros and cons"
+* 🌍 "Translate the third paragraph into French"
+* 🔤 "Bold the most important keywords for SEO throughout the article"
+* 🖼️ "Generate an image that illustrates the idea in paragraph four and insert it right above"
+* 📝 "Write a compelling meta description and set it as the excerpt"
+* 🏷️ "Suggest 5 relevant tags based on the content and add them"
+* 📐 "Split this long paragraph into three shorter ones with subheadings"
+* 🔗 "Add a call-to-action block at the end with a link to the pricing page"
+* 💬 "Turn the bullet list into a FAQ block with questions and answers"
+* 🎨 "Add a custom CSS class to the hero image block for full-width display"
+* 🛒 "Update the product short description to highlight free shipping and set the sale price to $19.99"
+
+The Copilot reads your full content, understands context, and applies changes directly in the editor — no copy-pasting, no switching tabs.
 
 **🤖 AI Chat Agent — Your WordPress AI Assistant**
 
@@ -92,7 +111,20 @@ Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simp
 
 No coding experience required — use the built-in examples as templates.
 
-**🧠 WordPress Abilities Integration** (WordPress 6.9+)
+**� Code Snippet Management — Design and Develop Through Conversation**
+
+Create, edit, activate, and manage code snippets on your WordPress site entirely through AI — no manual coding required. Compatible with the three most popular snippet plugins: **WPCode**, **Code Snippets**, and **Woody Code Snippets**.
+
+* **Add functionality instantly** — "Add a PHP snippet that redirects users after login based on their role"
+* **Custom CSS on demand** — "Create a CSS snippet that hides the sidebar on mobile devices"
+* **JavaScript injection** — "Add a JS snippet that shows a sticky banner with a 10% discount code"
+* **Full lifecycle management** — List, create, edit, activate, deactivate, and delete snippets from conversation
+* **Automatic provider detection** — Works with whichever snippet plugin you have installed, no extra configuration
+* **Safe by design** — PHP code is sanitized automatically, removing stray `<?php` tags and markdown artifacts from AI-generated output
+
+This opens up powerful possibilities: customize your theme's appearance, add tracking scripts, inject schema markup for SEO, modify WooCommerce checkout behavior, add custom shortcodes — all through natural language. Ask your AI agent to build it, test it, and activate it, without ever touching a code editor.
+
+**�🧠 WordPress Abilities Integration** (WordPress 6.9+)
 
 Automatically discover and import abilities registered by other plugins into your AI agent's toolkit. If a plugin supports the WordPress Abilities API, StifLi Flex MCP can detect, import, and expose it as an AI tool — zero configuration needed.
 
@@ -295,6 +327,19 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 7. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 3.0.2 =
+* **🧩 Code Snippets Management** — 7 new MCP tools for managing code snippets directly from AI agents!
+* New: snippet_list, snippet_get, snippet_create, snippet_update, snippet_delete, snippet_activate, snippet_deactivate tools
+* New: Multi-provider support — compatible with WPCode, Code Snippets (v2/v3), and Woody Code Snippets plugins
+* New: Automatic provider detection — seamlessly works with whichever snippet plugin is installed
+* New: LLM-friendly input normalization — maps common AI output variants for code_type, location, and scope parameters
+* New: PHP code sanitization — automatically strips `<?php`, `?>` tags and markdown code fences from AI-generated code
+* New: Code Snippets v3.x full namespace support — resolves namespaced functions and classes automatically
+* New: Woody Code Snippets scope mapping — translates locations to Woody's dual scope/location system
+* Security: Rate limiting (30 requests/minute per IP) on MCP endpoints to prevent abuse
+* Security: SSRF protection on fetch tool — blocks requests to private/reserved IP ranges (127.x, 10.x, 172.16.x, 192.168.x)
+* Improved: Snippet tools added to WordPress Full Management profile (auto-migrated for existing installs)
+
 = 3.0.1 =
 * **✍️ AI Copilot — New floating writing assistant for the WordPress editor!**
 * New: AI Copilot widget available inside the Gutenberg and Classic editors

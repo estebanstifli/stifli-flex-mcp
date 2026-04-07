@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.0.1
+Version: 3.0.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -521,9 +521,9 @@ function stifli_flex_mcp_seed_initial_tools() {
 	);
 	
 	// Snippet tools (requires WPCode or Code Snippets plugin)
-	$tools[] = array('snippet_list', 'List code snippets. Supports limit, offset, active filter. Requires WPCode or Code Snippets plugin.', 'Snippets', 1);
+	$tools[] = array('snippet_list', 'List code snippets. Supports limit, offset, active filter. Requires WPCode, Code Snippets, or Woody Code Snippets.', 'Snippets', 1);
 	$tools[] = array('snippet_get', 'Get a single code snippet by ID with full details.', 'Snippets', 1);
-	$tools[] = array('snippet_create', 'Create a new code snippet (inactive by default). Requires WPCode or Code Snippets plugin.', 'Snippets', 1);
+	$tools[] = array('snippet_create', 'Create a new code snippet (inactive by default). Requires WPCode, Code Snippets, or Woody Code Snippets.', 'Snippets', 1);
 	$tools[] = array('snippet_update', 'Update an existing code snippet by ID.', 'Snippets', 1);
 	$tools[] = array('snippet_delete', 'Delete a code snippet by ID.', 'Snippets', 1);
 	$tools[] = array('snippet_activate', 'Activate a code snippet by ID.', 'Snippets', 1);
@@ -642,6 +642,70 @@ function stifli_flex_mcp_seed_initial_tools() {
 			array('%s', '%s', '%s', '%d', '%s', '%s')
 		);
 	}
+}
+
+/**
+ * Upgrade routine: seed snippet tools and update profiles for existing installs.
+ * Runs on plugins_loaded; uses a version flag to run once per upgrade.
+ */
+function stifli_flex_mcp_upgrade_302() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_302_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$table = $wpdb->prefix . 'sflmcp_tools';
+	$now   = current_time( 'mysql', true );
+
+	// Seed snippet tools if missing.
+	$snippet_tools = array(
+		array( 'snippet_list',       'List code snippets. Supports limit, offset, active filter. Requires WPCode, Code Snippets, or Woody Code Snippets.', 'Snippets', 1 ),
+		array( 'snippet_get',        'Get a single code snippet by ID with full details.', 'Snippets', 1 ),
+		array( 'snippet_create',     'Create a new code snippet (inactive by default). Requires WPCode, Code Snippets, or Woody Code Snippets.', 'Snippets', 1 ),
+		array( 'snippet_update',     'Update an existing code snippet by ID.', 'Snippets', 1 ),
+		array( 'snippet_delete',     'Delete a code snippet by ID.', 'Snippets', 1 ),
+		array( 'snippet_activate',   'Activate a code snippet by ID.', 'Snippets', 1 ),
+		array( 'snippet_deactivate', 'Deactivate a code snippet by ID.', 'Snippets', 1 ),
+	);
+
+	foreach ( $snippet_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			$wpdb->insert( $table, array(
+				'tool_name'        => $tool[0],
+				'tool_description' => $tool[1],
+				'category'         => $tool[2],
+				'enabled'          => $tool[3],
+				'created_at'       => $now,
+				'updated_at'       => $now,
+			), array( '%s', '%s', '%s', '%d', '%s', '%s' ) );
+		}
+	}
+
+	// Add snippet tools to "WordPress Full Management" profile if missing.
+	$profiles_table      = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	$profile_id = $wpdb->get_var( $wpdb->prepare(
+		"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+		'WordPress Full Management'
+	) );
+	if ( $profile_id ) {
+		foreach ( $snippet_tools as $tool ) {
+			$in_profile = $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+				$profile_id, $tool[0]
+			) );
+			if ( ! $in_profile ) {
+				$wpdb->insert( $profile_tools_table, array(
+					'profile_id' => $profile_id,
+					'tool_name'  => $tool[0],
+				), array( '%d', '%s' ) );
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
 }
 
 function stifli_flex_mcp_seed_system_profiles() {
@@ -2396,6 +2460,7 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
+	stifli_flex_mcp_upgrade_302();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
 	if (class_exists('StifliFlexMcp')) {

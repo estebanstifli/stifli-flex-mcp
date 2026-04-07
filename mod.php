@@ -95,6 +95,25 @@ class StifliFlexMcp {
 	 * @see https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/
 	 */
 	public function canAccessMCP( $request ) {
+		// --- Rate limiting: 30 requests/minute per IP ---
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '0.0.0.0';
+		$rate_key = 'sflmcp_rate_' . md5( $ip );
+		$rate_data = get_transient( $rate_key );
+		if ( false === $rate_data ) {
+			$rate_data = array( 'count' => 0, 'start' => time() );
+		}
+		$rate_data['count']++;
+		$window = 60; // seconds
+		$limit  = 30; // max requests per window
+		if ( ( time() - $rate_data['start'] ) > $window ) {
+			// Window expired, reset.
+			$rate_data = array( 'count' => 1, 'start' => time() );
+		} elseif ( $rate_data['count'] > $limit ) {
+			stifli_flex_mcp_log( sprintf( 'canAccessMCP: Rate limit exceeded for IP %s (%d requests in %ds)', $ip, $rate_data['count'], time() - $rate_data['start'] ) );
+			return new WP_Error( 'rate_limit_exceeded', 'Rate limit exceeded. Max ' . $limit . ' requests per minute.', array( 'status' => 429 ) );
+		}
+		set_transient( $rate_key, $rate_data, $window );
+
 		$current_user_id = get_current_user_id();
 		
 		if ($current_user_id > 0 && current_user_can('edit_posts')) {

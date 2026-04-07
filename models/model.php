@@ -3456,6 +3456,16 @@ class StifliFlexMcpModel {
             case 'fetch':
                 $url = esc_url_raw($utils::getArrayValue($args, 'url'));
                 if (!$url) { $r['error'] = array('code' => -42602, 'message' => 'url required'); break; }
+                // SSRF protection: block requests to private/reserved IP ranges.
+                $fetch_host = wp_parse_url( $url, PHP_URL_HOST );
+                if ( ! $fetch_host ) { $r['error'] = array('code' => -42602, 'message' => 'Invalid URL: cannot resolve host.'); break; }
+                $fetch_ip = gethostbyname( $fetch_host );
+                if ( $fetch_ip === $fetch_host && ! filter_var( $fetch_host, FILTER_VALIDATE_IP ) ) {
+                    $r['error'] = array('code' => -42602, 'message' => 'Invalid URL: DNS resolution failed.'); break;
+                }
+                if ( $fetch_ip && ! filter_var( $fetch_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+                    $r['error'] = array('code' => -42603, 'message' => 'Blocked: target resolves to a private or reserved IP range.'); break;
+                }
                 $method = strtoupper($utils::getArrayValue($args, 'method', 'GET'));
                 $opts = array();
                 if (!empty($args['headers']) && is_array($args['headers'])) { $opts['headers'] = $args['headers']; }
