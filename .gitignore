@@ -1,5 +1,7 @@
 # Development files and documentation
 /dev/
+/.dev/
+/.doc/
 
 # IDE and editor files
 /.vscode/
