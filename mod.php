@@ -216,9 +216,13 @@ class StifliFlexMcp {
 		}
 		echo 'event: ' . esc_attr( $event ) . "\n";
 		if ('json' === $enc) {
+			// SSE data is consumed by MCP clients (not HTML context).
+			// wp_json_encode handles safe encoding; esc_html would break JSON
+			// by converting " to &quot;.  phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			$data = null === $data ? '{}' : str_replace('[]', '{}', wp_json_encode($data, JSON_UNESCAPED_UNICODE));
 		}
-		echo 'data: ' . esc_html( $data ) . "\n\n";
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- SSE text/event-stream data, not HTML context
+		echo 'data: ' . $data . "\n\n";
 		if (ob_get_level()) {
 			ob_end_flush();
 		}

@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 3.0.2
+Stable tag: 3.0.3
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -111,7 +111,7 @@ Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simp
 
 No coding experience required — use the built-in examples as templates.
 
-**� Code Snippet Management — Design and Develop Through Conversation**
+**🧩 Code Snippet Management — Design and Develop Through Conversation**
 
 Create, edit, activate, and manage code snippets on your WordPress site entirely through AI — no manual coding required. Compatible with the three most popular snippet plugins: **WPCode**, **Code Snippets**, and **Woody Code Snippets**.
 
@@ -124,7 +124,7 @@ Create, edit, activate, and manage code snippets on your WordPress site entirely
 
 This opens up powerful possibilities: customize your theme's appearance, add tracking scripts, inject schema markup for SEO, modify WooCommerce checkout behavior, add custom shortcodes — all through natural language. Ask your AI agent to build it, test it, and activate it, without ever touching a code editor.
 
-**�🧠 WordPress Abilities Integration** (WordPress 6.9+)
+**🧠 WordPress Abilities Integration** (WordPress 6.9+)
 
 Automatically discover and import abilities registered by other plugins into your AI agent's toolkit. If a plugin supports the WordPress Abilities API, StifLi Flex MCP can detect, import, and expose it as an AI tool — zero configuration needed.
 
@@ -327,6 +327,10 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 7. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 3.0.3 =
+* Fixed: MCP Server connection with Claude Desktop and other SSE-based clients now works correctly
+* Fixed: Scheduled automation tasks running more frequently than configured and producing intermittent errors
+
 = 3.0.2 =
 * **🧩 Code Snippets Management** — 7 new MCP tools for managing code snippets directly from AI agents!
 * New: snippet_list, snippet_get, snippet_create, snippet_update, snippet_delete, snippet_activate, snippet_deactivate tools

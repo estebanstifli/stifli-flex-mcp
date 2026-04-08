@@ -219,7 +219,21 @@ class StifliFlexMcp_Automation_Engine {
 		}
 
 		foreach ( $tasks as $task ) {
-			$this->execute_task( $task );
+			// Acquire a per-task lock to prevent concurrent execution.
+			// If another cron request is already running this task, skip it.
+			$lock_key = 'sflmcp_task_lock_' . $task->id;
+			if ( get_transient( $lock_key ) ) {
+				stifli_flex_mcp_log( sprintf( '[Automation] Task %d is already running (locked), skipping', $task->id ) );
+				continue;
+			}
+			// Lock for up to 3 minutes (longer than MAX_EXECUTION_TIME to prevent stale locks)
+			set_transient( $lock_key, time(), 3 * MINUTE_IN_SECONDS );
+
+			try {
+				$this->execute_task( $task );
+			} finally {
+				delete_transient( $lock_key );
+			}
 		}
 	}
 
@@ -475,7 +489,8 @@ class StifliFlexMcp_Automation_Engine {
 				break;
 			}
 
-			// Execute each tool call
+			// Execute each tool call and collect ALL results
+			$all_tool_results = array();
 			foreach ( $tool_calls as $tool_call ) {
 				$tool_name = $tool_call['name'];
 				$tool_args = $tool_call['arguments'];
@@ -488,9 +503,11 @@ class StifliFlexMcp_Automation_Engine {
 				$result = $this->execute_tool( $tool_name, $tool_args );
 				$tools_results[ $tool_name ] = $result;
 
-				$args['tool_result'] = $this->format_tool_result( $tool_call, $result, $args['model'] );
-				$args['message']     = '';
+				$all_tool_results[] = $this->format_tool_result( $tool_call, $result, $args['model'] );
 			}
+
+			$args['tool_result'] = $all_tool_results;
+			$args['message']     = '';
 
 			$args['conversation'] = $this->build_conversation_context( $response, $tool_call, $tools_results );
 			$iteration++;
@@ -585,7 +602,8 @@ class StifliFlexMcp_Automation_Engine {
 				break;
 			}
 
-			// Execute each tool call
+			// Execute each tool call and collect ALL results
+			$all_tool_results = array();
 			foreach ( $tool_calls as $tool_call ) {
 				$tool_name = $tool_call['name'];
 				$tool_args = $tool_call['arguments'];
@@ -602,10 +620,13 @@ class StifliFlexMcp_Automation_Engine {
 				$result = $this->execute_tool( $tool_name, $tool_args );
 				$tools_results[ $tool_name ] = $result;
 
-				// Prepare tool result for next iteration
-				$args['tool_result'] = $this->format_tool_result( $tool_call, $result, $args['model'] );
-				$args['message']     = ''; // Clear message for continuation
+				// Collect formatted result for this tool call
+				$all_tool_results[] = $this->format_tool_result( $tool_call, $result, $args['model'] );
 			}
+
+			// Pass ALL tool results (not just the last one) for the next API call
+			$args['tool_result'] = $all_tool_results;
+			$args['message']     = ''; // Clear message for continuation
 
 			// Update conversation context from response
 			$args['conversation'] = $this->build_conversation_context( $response, $tool_call, $tools_results );
@@ -1151,9 +1172,18 @@ class StifliFlexMcp_Automation_Engine {
 		// If max retries reached, pause the task
 		if ( $retry_count >= $max_retries ) {
 			$data['status'] = 'error';
+			// Also set next_run to the correct scheduled time so when re-enabled
+			// it resumes on the proper schedule, not from a stale past date.
+			$data['next_run'] = $this->calculate_next_run( $task );
 		} else {
-			// Schedule retry in 5 minutes
-			$data['next_run'] = gmdate( 'Y-m-d H:i:s', strtotime( '+5 minutes' ) );
+			// Schedule retry: use the later of +5 minutes or the correct scheduled next_run.
+			// This prevents retries from overwriting a correct far-future next_run
+			// (e.g., weekly schedule) that was already set by a concurrent success.
+			$retry_time    = gmdate( 'Y-m-d H:i:s', time() + 5 * MINUTE_IN_SECONDS );
+			$scheduled     = $this->calculate_next_run( $task );
+			$data['next_run'] = ( strtotime( $retry_time ) < strtotime( $scheduled ) )
+				? $retry_time
+				: $scheduled;
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -1499,6 +1529,7 @@ class StifliFlexMcp_Automation_Engine {
 
 				stifli_flex_mcp_log( '[Automation] test_prompt - Found ' . count( $tool_calls ) . ' tool calls' );
 
+				$all_tool_results = array();
 				foreach ( $tool_calls as $tool_call ) {
 					$tool_name = $tool_call['name'];
 					stifli_flex_mcp_log( '[Automation] test_prompt - Executing tool: ' . $tool_name );
@@ -1518,15 +1549,18 @@ class StifliFlexMcp_Automation_Engine {
 						'result'    => is_string( $result ) ? substr( $result, 0, 500 ) : wp_json_encode( $result ),
 					);
 
-					$provider_args['tool_result'] = $this->format_tool_result( $tool_call, $result, $model );
-					$provider_args['message']     = '';
-
-					// Update conversation from response
-					if ( isset( $response['conversation'] ) ) {
-						$provider_args['conversation'] = $response['conversation'];
-					}
+					$all_tool_results[] = $this->format_tool_result( $tool_call, $result, $model );
 
 					$has_pending_tool = true;
+				}
+
+				// Pass ALL tool results for next iteration
+				$provider_args['tool_result'] = $all_tool_results;
+				$provider_args['message']     = '';
+
+				// Update conversation from response
+				if ( isset( $response['conversation'] ) ) {
+					$provider_args['conversation'] = $response['conversation'];
 				}
 
 				$iteration++;
