@@ -330,6 +330,31 @@ It takes less than a minute:
 
 The plugin uses OAuth 2.1 — no API keys or passwords needed. Your session stays active for up to 90 days.
 
+= OAuth works but Claude/ChatGPT says "Authorization failed" =
+
+This is usually caused by Cloudflare's "Block AI Bots" setting (enabled by default on new domains) or similar WAF rules from Sucuri, Wordfence, SiteGround, WP Engine, etc.
+
+**What happens:** The OAuth consent screen works fine (it runs in your browser), but after the token exchange, the AI backend servers (Anthropic, OpenAI) try to reach your MCP endpoint — and the firewall blocks them as bot traffic, returning a 403 before the request ever reaches WordPress.
+
+**How to confirm:** Check your firewall logs. You'll see the OAuth/token requests succeed but subsequent MCP requests from Anthropic or OpenAI IPs are blocked.
+
+**Option 1 — Disable AI bot blocking:**
+
+* **Cloudflare:** Dashboard → Security → Settings → turn off "Block AI Bots". Note: this is all-or-nothing — you cannot allow only Anthropic/OpenAI while blocking others.
+* **Sucuri / Wordfence / other WAFs:** Whitelist the AI provider's IP ranges or user agents (e.g., `python-httpx` for Anthropic, `ChatGPT-User` for OpenAI).
+
+**Option 2 — Use Application Passwords (bypasses the firewall):**
+
+If you cannot change your firewall settings, use WordPress Application Passwords instead of OAuth. This connects directly from Claude Desktop on your machine, bypassing the AI provider's proxy entirely:
+
+1. Go to **Users → Your Profile** in WordPress admin
+2. Scroll to **Application Passwords** section
+3. Enter a name (e.g., "Claude Desktop") and click **Add New Application Password**
+4. Copy the generated password (shown only once)
+5. In `claude_desktop_config.json`, configure the MCP server with your username and the application password as HTTP Basic Auth headers
+
+This method works even behind strict firewalls because all requests come from your own computer.
+
 == Screenshots ==
 
 1. AI Copilot - Floating assistant inside the WordPress editor with quick actions

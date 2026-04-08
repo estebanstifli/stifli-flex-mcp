@@ -1531,16 +1531,58 @@ class StifliFlexMcp {
 			<div class="sflmcp-settings-section">
 				<h3><?php esc_html_e( 'Alternative: Application Passwords', 'stifli-flex-mcp' ); ?></h3>
 				<p class="description">
-					<?php echo wp_kses(
-						sprintf(
-							/* translators: %s: link to profile page */
-							__( 'For advanced setups or clients that don\'t support OAuth, you can still use WordPress Application Passwords. Go to %s to create one, then use HTTP Basic Auth with your username and the generated password.', 'stifli-flex-mcp' ),
-							'<a href="' . esc_url( get_edit_profile_url( get_current_user_id() ) . '#application-passwords-section' ) . '" target="_blank">'
-							. esc_html__( 'your profile', 'stifli-flex-mcp' ) . '</a>'
-						),
-						array( 'a' => array( 'href' => array(), 'target' => array() ) )
-					); ?>
+					<?php esc_html_e( 'For advanced setups, clients that don\'t support OAuth, or if your firewall blocks AI backend servers (Cloudflare "Block AI Bots", Sucuri, Wordfence, etc.), you can use WordPress Application Passwords instead.', 'stifli-flex-mcp' ); ?>
 				</p>
+
+				<div class="sflmcp-notice sflmcp-notice-warning" style="margin: 12px 0; padding: 10px 14px; background: #fff8e1; border-left: 4px solid #f0b849; border-radius: 4px;">
+					<strong><?php esc_html_e( 'Firewall blocking your connection?', 'stifli-flex-mcp' ); ?></strong>
+					<p style="margin: 6px 0 0;">
+						<?php esc_html_e( 'If OAuth completes successfully but Claude or ChatGPT shows "Authorization failed", your firewall is likely blocking the AI provider\'s backend servers. You have two options:', 'stifli-flex-mcp' ); ?>
+					</p>
+					<ol style="margin: 8px 0 4px 18px;">
+						<li><?php esc_html_e( 'Disable "Block AI Bots" in your firewall (Cloudflare: Security → Settings).', 'stifli-flex-mcp' ); ?></li>
+						<li><?php esc_html_e( 'Or use Application Passwords below — this connects directly from your machine, bypassing the AI proxy entirely.', 'stifli-flex-mcp' ); ?></li>
+					</ol>
+				</div>
+
+				<h4><?php esc_html_e( 'How to set up Application Passwords', 'stifli-flex-mcp' ); ?></h4>
+				<ol>
+					<li>
+						<?php echo wp_kses(
+							sprintf(
+								/* translators: %s: link to profile page */
+								__( 'Go to %s in WordPress admin.', 'stifli-flex-mcp' ),
+								'<a href="' . esc_url( get_edit_profile_url( get_current_user_id() ) . '#application-passwords-section' ) . '" target="_blank"><strong>'
+								. esc_html__( 'Users → Your Profile → Application Passwords', 'stifli-flex-mcp' ) . '</strong></a>'
+							),
+							array( 'a' => array( 'href' => array(), 'target' => array() ), 'strong' => array() )
+						); ?>
+					</li>
+					<li><?php esc_html_e( 'Enter a name (e.g., "Claude Desktop") and click Add New Application Password.', 'stifli-flex-mcp' ); ?></li>
+					<li><?php esc_html_e( 'Copy the generated password immediately — it is shown only once.', 'stifli-flex-mcp' ); ?></li>
+					<li>
+						<?php esc_html_e( 'Configure your AI client with HTTP Basic Auth using your WordPress username and the application password.', 'stifli-flex-mcp' ); ?>
+					</li>
+				</ol>
+
+				<details style="margin-top: 10px;">
+					<summary style="cursor: pointer; color: #2271b1; font-weight: 500;">
+						<?php esc_html_e( 'Example: claude_desktop_config.json', 'stifli-flex-mcp' ); ?>
+					</summary>
+					<pre style="background: #f0f0f0; padding: 12px; border-radius: 4px; margin-top: 8px; font-size: 12px; overflow-x: auto;">{
+  "mcpServers": {
+    "wordpress": {
+      "url": "<?php echo esc_html( rest_url( 'stifli-flex-mcp/v1/sse' ) ); ?>",
+      "headers": {
+        "Authorization": "Basic &lt;base64(username:app_password)&gt;"
+      }
+    }
+  }
+}</pre>
+					<p class="description" style="margin-top: 6px;">
+						<?php esc_html_e( 'Replace the Authorization value with your Base64-encoded username:password. On macOS/Linux run: echo -n "user:xxxx xxxx xxxx xxxx" | base64', 'stifli-flex-mcp' ); ?>
+					</p>
+				</details>
 			</div>
 
 		</div>
