@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
 Tested up to: 6.9
-Stable tag: 3.0.3
+Stable tag: 3.1.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -154,16 +154,24 @@ Run AI workflows automatically when specific events happen:
 
 StifLi Flex MCP also works as a standards-compliant Model Context Protocol (MCP) server, so you can connect external AI clients:
 
-* **ChatGPT** — via Custom Connectors with SSE streaming
-* **Claude Desktop** — direct MCP connection
+* **ChatGPT** — via Apps & Connectors with OAuth 2.1 authentication
+* **Claude Desktop** — via Connectors with automatic OAuth flow
 * **LibreChat** — full MCP integration
-* **Any MCP-compatible client** — JSON-RPC 2.0 + SSE
+* **Any MCP-compatible client** — JSON-RPC 2.0 + SSE + OAuth 2.1
+
+Just copy the SSE URL from the Settings page, paste it into your AI client, and authorize. That's it — no tokens to manage, no passwords to share. The server handles discovery, registration, and authentication automatically following the latest security standards (OAuth 2.1, PKCE, RFC 9728, RFC 8414, RFC 7591).
 
 The server exposes 117+ tools (55 WordPress + 61 WooCommerce + 1 Core + Abilities + Custom Tools) that external AI agents can discover and execute.
 
-**🛡️ Security**
+**🛡️ Security — OAuth 2.1 Built In**
 
-* WordPress Application Passwords (native WordPress 5.6+ feature)
+StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard security protocol — to authenticate external AI clients. No API keys to copy, no passwords to share. Just paste the URL, authorize once, and you're connected.
+
+* **OAuth 2.1 with PKCE (S256)** — The most modern and secure authentication standard, used by Google, Microsoft, and GitHub
+* **Dynamic Client Registration (RFC 7591)** — AI clients register automatically, no manual setup needed
+* **Auto-discovery (RFC 9728 + RFC 8414)** — Clients find your server's auth endpoints automatically
+* **Token auto-refresh** — Sessions stay active for up to 90 days without re-authorization
+* **Application Passwords fallback** — Still supported for advanced setups and legacy clients
 * Per-tool capability checks linked to WordPress roles
 * Profile-based tool restrictions (8 predefined profiles + custom)
 * Tool execution confirmations in AI Chat Agent
@@ -205,17 +213,17 @@ That's it — no external tools, no complex configuration. Your AI agent is read
 
 = Optional: MCP Server for External Clients =
 
-If you also want to connect external AI clients (ChatGPT Connectors, Claude Desktop, LibreChat):
+If you also want to connect external AI clients (ChatGPT, Claude Desktop, LibreChat):
 
 1. Go to **StifLi Flex MCP → MCP Server**
-2. Create an Application Password in your WordPress profile (Users → Profile → Application Passwords)
-3. Use HTTP Basic Authentication with your username and application password
-4. Configure your MCP client with the provided endpoint URLs
+2. Copy the SSE URL shown on the Settings page
+3. Paste it in your AI client:
+   * **Claude Desktop:** Customize → Connectors → Add custom connector → Paste the URL
+   * **ChatGPT:** Settings → Apps & Connectors → Advanced settings → Enable Developer mode → Create app → Paste the URL → Choose OAuth
+4. A browser window will open — log in to WordPress and click "Authorize"
+5. Done! Your AI client can now manage your WordPress site
 
-**Endpoints:**
-
-* JSON-RPC: `https://yoursite.com/wp-json/stifli-flex-mcp/v1/messages`
-* SSE Streaming: `https://yoursite.com/wp-json/stifli-flex-mcp/v1/sse`
+No API keys, no passwords — OAuth 2.1 handles everything securely and automatically.
 
 == Frequently Asked Questions ==
 
@@ -266,10 +274,11 @@ You control which tools are available through Profiles.
 
 Yes, with multiple layers of protection:
 
+* **OAuth 2.1 with PKCE** — Industry-standard secure authentication for external AI clients, no shared passwords
 * **Tool confirmations** — In "Ask User" mode, you approve every action before it executes
 * **Permission checks** — Every tool verifies WordPress capabilities before running  
 * **Profiles** — Restrict which tools are available (e.g., "Read Only" profiles)
-* **Application Passwords** — Revocable at any time for MCP server connections
+* **Token management** — Revoke access for any client instantly from the admin panel
 
 = What is MCP? =
 
@@ -311,10 +320,15 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 
 = How do I connect ChatGPT or Claude Desktop? =
 
-1. Go to **StifLi Flex MCP → MCP Server** for the endpoint URLs
-2. Create an Application Password (Users → Profile → Application Passwords)
-3. Configure your external AI client with the SSE endpoint and credentials
-4. The client will auto-discover all available tools
+It takes less than a minute:
+
+1. Go to **StifLi Flex MCP → MCP Server** and copy the SSE URL
+2. Paste it in your AI client:
+   * **Claude Desktop:** Customize → Connectors → Add custom connector
+   * **ChatGPT:** Settings → Apps & Connectors → Advanced settings → Enable Developer mode → Create app → Paste the URL → Choose OAuth
+3. Authorize when the browser window opens (you only need to do this once)
+
+The plugin uses OAuth 2.1 — no API keys or passwords needed. Your session stays active for up to 90 days.
 
 == Screenshots ==
 
@@ -327,6 +341,24 @@ WordPress 6.9 introduced the Abilities API, letting plugins register standardize
 7. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 3.1.0 =
+* **🔐 OAuth 2.1 Authentication** — Connect ChatGPT, Claude Desktop, and any MCP client with one click!
+* New: Full OAuth 2.1 implementation with PKCE (S256) — the most secure authentication standard
+* New: Dynamic Client Registration (RFC 7591) — AI clients register automatically, zero manual setup
+* New: Auto-discovery via RFC 9728 (Protected Resource Metadata) and RFC 8414 (Authorization Server Metadata)
+* New: Automatic token refresh — sessions stay active for up to 90 days without re-authorization
+* New: Auto-approve for returning clients — authorize once, connect instantly on future sessions
+* New: Simplified Settings page — just copy the URL and paste it in your AI client
+* New: "View More Details" panel with connected clients, active tokens, and troubleshooting
+* New: One-click client deletion and token revocation from the admin panel
+* Improved: No more API keys or passwords needed for external AI clients
+* Improved: Full compatibility with Claude Desktop Connectors and ChatGPT Apps & Connectors
+* Improved: Standards-compliant OpenID Connect discovery fallback for maximum client compatibility
+* Security: PKCE S256 challenge on every authorization flow
+* Security: Short-lived authorization codes (10 min) with single-use enforcement
+* Security: Access tokens expire in 24 hours, refresh tokens in 90 days
+* Security: Application Passwords still supported as fallback for advanced setups
+
 = 3.0.3 =
 * Fixed: MCP Server connection with Claude Desktop and other SSE-based clients now works correctly
 * Fixed: Scheduled automation tasks running more frequently than configured and producing intermittent errors

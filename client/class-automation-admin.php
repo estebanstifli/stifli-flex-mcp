@@ -1029,6 +1029,8 @@ class StifliFlexMcp_Automation_Admin {
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
 
+		set_time_limit( 120 );
+
 		$prompt        = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : '';
 		$system_prompt = isset( $_POST['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['system_prompt'] ) ) : '';
 
@@ -1057,6 +1059,8 @@ class StifliFlexMcp_Automation_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
+
+		set_time_limit( 120 );
 
 		$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
 

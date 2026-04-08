@@ -25,5 +25,28 @@
 				}
 			});
 		});
+
+		// "View More Details" toggle on Settings tab
+		var toggleBtn = document.getElementById('sflmcp-toggle-details');
+		if (toggleBtn) {
+			toggleBtn.addEventListener('click', function() {
+				var details = document.getElementById('sflmcp-settings-details');
+				var icon = toggleBtn.querySelector('.dashicons');
+				if (!details) return;
+				if (details.style.display === 'none') {
+					details.style.display = '';
+					if (icon) {
+						icon.classList.remove('dashicons-arrow-down-alt2');
+						icon.classList.add('dashicons-arrow-up-alt2');
+					}
+				} else {
+					details.style.display = 'none';
+					if (icon) {
+						icon.classList.remove('dashicons-arrow-up-alt2');
+						icon.classList.add('dashicons-arrow-down-alt2');
+					}
+				}
+			});
+		}
 	});
 })();

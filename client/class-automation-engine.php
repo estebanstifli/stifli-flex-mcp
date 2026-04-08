@@ -246,6 +246,8 @@ class StifliFlexMcp_Automation_Engine {
 	public function execute_task( $task ) {
 		global $wpdb;
 
+		set_time_limit( 120 );
+
 		$task_table = $wpdb->prefix . 'sflmcp_automation_tasks';
 		$log_table  = $wpdb->prefix . 'sflmcp_automation_logs';
 		$start_time = microtime( true );
@@ -302,6 +304,9 @@ class StifliFlexMcp_Automation_Engine {
 			$system_prompt = ! empty( $task->system_prompt ) 
 				? $task->system_prompt 
 				: ( $advanced_settings['system_prompt'] ?? __( 'You are an AI assistant with access to WordPress tools.', 'stifli-flex-mcp' ) );
+
+			// Force sequential tool execution for reliability (same as AI Chat Agent)
+			$system_prompt .= "\n\n" . __( 'IMPORTANT: When using tools, execute only ONE tool at a time. Wait for the result before deciding if you need another tool. Never call multiple tools in parallel.', 'stifli-flex-mcp' );
 
 			// Prepare arguments
 			$args = array(
@@ -419,6 +424,9 @@ class StifliFlexMcp_Automation_Engine {
 			$system_prompt = ! empty( $task->system_prompt ) 
 				? $task->system_prompt 
 				: ( $advanced_settings['system_prompt'] ?? __( 'You are an AI assistant with access to WordPress tools.', 'stifli-flex-mcp' ) );
+
+			// Force sequential tool execution for reliability (same as AI Chat Agent)
+			$system_prompt .= "\n\n" . __( 'IMPORTANT: When using tools, execute only ONE tool at a time. Wait for the result before deciding if you need another tool. Never call multiple tools in parallel.', 'stifli-flex-mcp' );
 
 			// Prepare arguments
 			$args = array(
@@ -769,6 +777,11 @@ class StifliFlexMcp_Automation_Engine {
 	private function execute_tool( $tool_name, $arguments ) {
 		global $stifliFlexMcp;
 
+		// Normalize arguments: json_decode('{}') returns stdClass, dispatchTool expects array
+		$arguments = $this->normalize_args( $arguments );
+
+		stifli_flex_mcp_log( '[Automation] execute_tool - START ' . $tool_name . ' args=' . wp_json_encode( $arguments ) );
+
 		if ( ! isset( $stifliFlexMcp ) || ! isset( $stifliFlexMcp->model ) ) {
 			return array(
 				'error'   => true,
@@ -777,6 +790,8 @@ class StifliFlexMcp_Automation_Engine {
 		}
 
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );
+
+		stifli_flex_mcp_log( '[Automation] execute_tool - END ' . $tool_name . ' error=' . ( isset( $result['error'] ) ? 'yes' : 'no' ) );
 
 		if ( isset( $result['error'] ) ) {
 			return array(
@@ -799,6 +814,30 @@ class StifliFlexMcp_Automation_Engine {
 			'success' => true,
 			'content' => trim( $content ),
 		);
+	}
+
+	/**
+	 * Recursively normalize arguments from stdClass to array.
+	 *
+	 * json_decode('{}') returns stdClass which crashes dispatchTool.
+	 * This ensures all nested objects are converted to associative arrays.
+	 *
+	 * @param mixed $args Arguments to normalize.
+	 * @return array Normalized arguments.
+	 */
+	private function normalize_args( $args ) {
+		if ( $args instanceof stdClass ) {
+			$args = (array) $args;
+		}
+		if ( ! is_array( $args ) ) {
+			return array();
+		}
+		foreach ( $args as $key => $value ) {
+			if ( $value instanceof stdClass || is_array( $value ) ) {
+				$args[ $key ] = $this->normalize_args( $value );
+			}
+		}
+		return $args;
 	}
 
 	/**
@@ -1471,13 +1510,17 @@ class StifliFlexMcp_Automation_Engine {
 			global $stifliFlexMcp;
 			$tools = $stifliFlexMcp->model->getToolsList();
 
+			// Force sequential tool execution for reliability (same as AI Chat Agent)
+			$system_prompt = $args['system_prompt'] ?? '';
+			$system_prompt .= "\n\n" . __( 'IMPORTANT: When using tools, execute only ONE tool at a time. Wait for the result before deciding if you need another tool. Never call multiple tools in parallel.', 'stifli-flex-mcp' );
+
 			$provider_args = array(
 				'api_key'       => $api_key,
 				'model'         => $model,
 				'message'       => $args['prompt'],
 				'conversation'  => array(),
 				'tools'         => $tools,
-				'system_prompt' => $args['system_prompt'] ?? '',
+				'system_prompt' => $system_prompt,
 				'temperature'   => 0.7,
 				'max_tokens'    => 4096,
 			);
@@ -1647,13 +1690,17 @@ class StifliFlexMcp_Automation_Engine {
 			// Create session
 			$session_id = wp_generate_uuid4();
 
+			// Force sequential tool execution for reliability (same as AI Chat Agent)
+			$system_prompt = $args['system_prompt'] ?? '';
+			$system_prompt .= "\n\n" . __( 'IMPORTANT: When using tools, execute only ONE tool at a time. Wait for the result before deciding if you need another tool. Never call multiple tools in parallel.', 'stifli-flex-mcp' );
+
 			$provider_args = array(
 				'api_key'       => $api_key,
 				'model'         => $model,
 				'message'       => $args['prompt'],
 				'conversation'  => array(),
 				'tools'         => $tools,
-				'system_prompt' => $args['system_prompt'] ?? '',
+				'system_prompt' => $system_prompt,
 				'temperature'   => 0.7,
 				'max_tokens'    => 4096,
 			);
@@ -1765,7 +1812,7 @@ class StifliFlexMcp_Automation_Engine {
 			foreach ( $pending_tools as $tool_call ) {
 				$tool_name = $tool_call['name'];
 
-				stifli_flex_mcp_log( '[Automation] test_step - Executing: ' . $tool_name );
+				stifli_flex_mcp_log( '[Automation] test_step - Executing: ' . $tool_name . ' args=' . wp_json_encode( $tool_call['arguments'] ) );
 
 				// Track tool usage
 				if ( ! in_array( $tool_name, $session_data['tools_used'], true ) ) {
@@ -1774,6 +1821,8 @@ class StifliFlexMcp_Automation_Engine {
 
 				// Execute tool
 				$result = $this->execute_tool( $tool_name, $tool_call['arguments'] );
+
+				stifli_flex_mcp_log( '[Automation] test_step - Tool result for ' . $tool_name . ': ' . substr( wp_json_encode( $result ), 0, 300 ) );
 
 				$tools_executed[] = array(
 					'name'      => $tool_name,
@@ -1784,6 +1833,8 @@ class StifliFlexMcp_Automation_Engine {
 				// Format tool result for provider
 				$tool_results[] = $this->format_tool_result( $tool_call, $result, $session_data['model'] );
 			}
+
+			stifli_flex_mcp_log( '[Automation] test_step - All tools executed, sending ' . count( $tool_results ) . ' results to LLM' );
 
 			// Send tool results to LLM
 			$provider_args = array(
@@ -1798,15 +1849,22 @@ class StifliFlexMcp_Automation_Engine {
 				'tool_result'   => count( $tool_results ) === 1 ? $tool_results[0] : $tool_results,
 			);
 
+			stifli_flex_mcp_log( '[Automation] test_step - Calling LLM with conversation length=' . count( $provider_args['conversation'] ) );
+
 			$response = $provider_instance->send_message( $provider_args );
 
 			if ( is_wp_error( $response ) ) {
+				stifli_flex_mcp_log( '[Automation] test_step - LLM error: ' . $response->get_error_message() );
 				throw new Exception( $response->get_error_message() );
 			}
+
+			stifli_flex_mcp_log( '[Automation] test_step - LLM response received, keys: ' . implode( ', ', array_keys( $response ) ) );
 
 			// Extract next tool calls
 			$next_tool_calls = $this->extract_tool_calls( $response, $session_data['model'] );
 			$text            = $this->extract_text_response( $response );
+
+			stifli_flex_mcp_log( '[Automation] test_step - Next tool_calls: ' . count( $next_tool_calls ) . ', text length: ' . strlen( $text ) );
 
 			// Update session
 			$session_data['conversation']  = $response['conversation'] ?? $session_data['conversation'];

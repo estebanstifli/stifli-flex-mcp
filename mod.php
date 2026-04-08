@@ -58,6 +58,10 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_load_multimedia_settings', array($this, 'ajax_load_multimedia_settings'));
 			add_action('wp_ajax_sflmcp_mm_toggle_tool', array($this, 'ajax_mm_toggle_tool'));
 			add_action('wp_ajax_sflmcp_mm_reveal_key', array($this, 'ajax_mm_reveal_key'));
+			// AJAX handlers for OAuth Clients
+			add_action('wp_ajax_sflmcp_oauth_delete_client', array($this, 'ajax_oauth_delete_client'));
+			add_action('wp_ajax_sflmcp_oauth_revoke_token', array($this, 'ajax_oauth_revoke_token'));
+			add_action('wp_ajax_sflmcp_oauth_save_settings', array($this, 'ajax_oauth_save_settings'));
 		}
 	}
 
@@ -95,6 +99,18 @@ class StifliFlexMcp {
 	 * @see https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/
 	 */
 	public function canAccessMCP( $request ) {
+		// --- Verbose debug logging ---
+		$req_method = $request->get_method();
+		$req_route  = $request->get_route();
+		$auth_hdr   = $request->get_header( 'Authorization' );
+		stifli_flex_mcp_log( sprintf(
+			'canAccessMCP: %s %s | Auth: %s | User-Agent: %s',
+			$req_method,
+			$req_route,
+			$auth_hdr ? substr( $auth_hdr, 0, 20 ) . '...' : '(none)',
+			$request->get_header( 'User-Agent' ) ?: '(none)'
+		) );
+
 		// --- Rate limiting: 30 requests/minute per IP ---
 		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '0.0.0.0';
 		$rate_key = 'sflmcp_rate_' . md5( $ip );
@@ -114,6 +130,23 @@ class StifliFlexMcp {
 		}
 		set_transient( $rate_key, $rate_data, $window );
 
+		// --- OAuth 2.1 Bearer token validation ---
+		$auth_header = $request->get_header( 'Authorization' );
+		if ( $auth_header && stripos( $auth_header, 'Bearer ' ) === 0 ) {
+			$bearer_token = substr( $auth_header, 7 );
+			if ( class_exists( 'StifliFlexMcp_OAuth_Server' ) ) {
+				$oauth_user_id = StifliFlexMcp_OAuth_Server::get_instance()->validate_token( $bearer_token );
+				if ( $oauth_user_id ) {
+					wp_set_current_user( $oauth_user_id );
+					stifli_flex_mcp_log( sprintf( 'canAccessMCP: OAuth token validated for user %d', $oauth_user_id ) );
+					return true;
+				}
+			}
+			// Bearer token present but invalid → 401.
+			stifli_flex_mcp_log( 'canAccessMCP: Invalid OAuth Bearer token' );
+			return new WP_Error( 'invalid_token', 'Invalid or expired Bearer token.', array( 'status' => 401 ) );
+		}
+
 		$current_user_id = get_current_user_id();
 		
 		if ($current_user_id > 0 && current_user_can('edit_posts')) {
@@ -122,6 +155,9 @@ class StifliFlexMcp {
 		}
 		
 		stifli_flex_mcp_log('canAccessMCP: Access denied - no authenticated user with edit_posts capability');
+		if ( class_exists( 'StifliFlexMcp_OAuth_Server' ) ) {
+			return StifliFlexMcp_OAuth_Server::get_instance()->get_unauthorized_error();
+		}
 		return false;
 	}
 
@@ -1155,6 +1191,35 @@ class StifliFlexMcp {
 			));
 		}
 
+		// Enqueue OAuth assets on Settings tab
+		if ($active_tab === 'settings') {
+			wp_enqueue_style(
+				'sflmcp-admin-oauth',
+				plugin_dir_url(__FILE__) . 'assets/admin-oauth.css',
+				array(),
+				'1.0.0'
+			);
+			wp_enqueue_script(
+				'sflmcp-admin-oauth',
+				plugin_dir_url(__FILE__) . 'assets/admin-oauth.js',
+				array('jquery'),
+				'1.0.0',
+				true
+			);
+			wp_localize_script('sflmcp-admin-oauth', 'sflmcpOAuth', array(
+				'ajaxUrl' => admin_url('admin-ajax.php'),
+				'nonce' => wp_create_nonce('sflmcp_oauth'),
+				'i18n' => array(
+					'confirmDeleteClient' => __('Are you sure you want to delete this OAuth client and revoke all its tokens?', 'stifli-flex-mcp'),
+					'confirmRevokeToken' => __('Revoke this token? The client will need to re-authorize.', 'stifli-flex-mcp'),
+					'clientDeleted' => __('OAuth client deleted', 'stifli-flex-mcp'),
+					'tokenRevoked' => __('Token revoked', 'stifli-flex-mcp'),
+					'settingsSaved' => __('Settings saved', 'stifli-flex-mcp'),
+					'error' => __('An error occurred', 'stifli-flex-mcp'),
+				),
+			));
+		}
+
 		// Enqueue Tools tab JavaScript (WordPress and WooCommerce tools)
 		if ($active_tab === 'tools' || $active_tab === 'wc_tools') {
 			wp_enqueue_script(
@@ -1239,111 +1304,247 @@ class StifliFlexMcp {
 	}
 	
 	private function renderSettingsTab() {
-		$endpoint = rest_url($this->namespace . '/messages');
-		$current_user = wp_get_current_user();
-		$profile_url = get_edit_profile_url($current_user->ID) . '#application-passwords-section';
-		
-		// Build endpoint URL with auth placeholder
-		$parsed = wp_parse_url($endpoint);
-		$endpoint_with_auth = $parsed['scheme'] . '://' . $current_user->user_login . ':YOUR_APP_PASSWORD@' . $parsed['host'] . (isset($parsed['port']) ? ':' . $parsed['port'] : '') . $parsed['path'];
+		$sse_url = rest_url( $this->namespace . '/sse' );
+
+		if ( ! class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'OAuth module is not loaded.', 'stifli-flex-mcp' ) . '</p></div>';
+			return;
+		}
+
+		$storage       = StifliFlexMcp_OAuth_Storage::get_instance();
+		$clients       = $storage->get_all_clients();
+
+		// Preload token data.
+		global $wpdb;
+		$tokens_table = $wpdb->prefix . 'sflmcp_oauth_tokens';
+		$now          = gmdate( 'Y-m-d H:i:s' );
+
+		$token_counts = array();
+		$token_data   = array();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$counts_raw = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT client_id, COUNT(*) as cnt FROM {$tokens_table} WHERE revoked = 0 AND access_expires_at > %s GROUP BY client_id",
+				$now
+			)
+		);
+		foreach ( $counts_raw as $row ) {
+			$token_counts[ $row->client_id ] = (int) $row->cnt;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$tokens_raw = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT t.id, t.client_id, t.user_id, t.scope, t.access_expires_at, t.created_at, u.display_name as user_name
+				FROM {$tokens_table} t
+				LEFT JOIN {$wpdb->users} u ON t.user_id = u.ID
+				WHERE t.revoked = 0 AND t.access_expires_at > %s
+				ORDER BY t.created_at DESC",
+				$now
+			)
+		);
+		foreach ( $tokens_raw as $tok ) {
+			$token_data[ $tok->client_id ][] = $tok;
+		}
 		?>
-		
-		<h2><?php echo esc_html__('🔐 Authentication with Application Passwords', 'stifli-flex-mcp'); ?></h2>
-		
-		<div class="sflmcp-settings-infobox">
-			<h3><?php echo esc_html__('How it works', 'stifli-flex-mcp'); ?></h3>
-			<p><?php echo esc_html__('This plugin uses WordPress Application Passwords for secure API authentication. This is the recommended authentication method by WordPress.org.', 'stifli-flex-mcp'); ?></p>
-			<ol>
-				<li><?php echo esc_html__('Create an Application Password in your WordPress profile', 'stifli-flex-mcp'); ?></li>
-				<li><?php echo esc_html__('Use HTTP Basic Authentication with your username and application password', 'stifli-flex-mcp'); ?></li>
-				<li><?php echo esc_html__('API calls will execute with your user permissions', 'stifli-flex-mcp'); ?></li>
-			</ol>
-			<p>
-				<a href="<?php echo esc_url($profile_url); ?>" class="button button-primary" target="_blank">
-					<?php echo esc_html__('🔑 Create Application Password', 'stifli-flex-mcp'); ?>
-				</a>
-			</p>
+
+		<div class="sflmcp-settings-connect">
+			<h2><?php esc_html_e( 'Connect your AI assistant', 'stifli-flex-mcp' ); ?></h2>
+			<p><?php esc_html_e( 'Copy this URL and paste it in your AI client (Claude, ChatGPT, or any MCP-compatible app):', 'stifli-flex-mcp' ); ?></p>
+
+			<div class="sflmcp-settings-url-box">
+				<code id="sflmcp_sse_url" class="sflmcp-settings-endpoint-code"><?php echo esc_html( $sse_url ); ?></code>
+				<button type="button" class="button button-primary sflmcp-copy-btn" data-copy-target="#sflmcp_sse_url" data-copy-notice="<?php echo esc_attr__( 'URL copied!', 'stifli-flex-mcp' ); ?>">
+					<?php esc_html_e( 'Copy', 'stifli-flex-mcp' ); ?>
+				</button>
+			</div>
+
+			<div class="sflmcp-settings-steps">
+				<div class="sflmcp-settings-step">
+					<span class="sflmcp-step-number">1</span>
+					<div>
+						<strong><?php esc_html_e( 'Copy the URL above', 'stifli-flex-mcp' ); ?></strong>
+					</div>
+				</div>
+				<div class="sflmcp-settings-step">
+					<span class="sflmcp-step-number">2</span>
+					<div>
+						<strong><?php esc_html_e( 'Paste it in your AI client', 'stifli-flex-mcp' ); ?></strong>
+						<p class="description" style="margin-bottom:4px;"><strong>Claude Desktop:</strong> <?php esc_html_e( 'Customize → Connectors → Add custom connector.', 'stifli-flex-mcp' ); ?></p>
+						<p class="description"><strong>ChatGPT:</strong> <?php esc_html_e( 'Settings → Apps & Connectors → Advanced settings → Enable Developer mode → Create app → Paste the URL → Choose OAuth.', 'stifli-flex-mcp' ); ?></p>
+					</div>
+				</div>
+				<div class="sflmcp-settings-step">
+					<span class="sflmcp-step-number">3</span>
+					<div>
+						<strong><?php esc_html_e( 'Authorize when prompted', 'stifli-flex-mcp' ); ?></strong>
+						<p class="description"><?php esc_html_e( 'A browser window will open. Log in to WordPress and click "Authorize". You only need to do this once.', 'stifli-flex-mcp' ); ?></p>
+					</div>
+				</div>
+			</div>
+
+			<?php if ( ! empty( $clients ) ) : ?>
+			<div class="sflmcp-settings-status">
+				<span class="dashicons dashicons-yes-alt" style="color:#00a32a;"></span>
+				<?php
+				$client_count = count( $clients );
+				$total_tokens = array_sum( $token_counts );
+				printf(
+					/* translators: %1$d: number of connected clients, %2$d: number of active sessions */
+					esc_html( _n(
+						'%1$d client connected, %2$d active session.',
+						'%1$d clients connected, %2$d active sessions.',
+						$client_count,
+						'stifli-flex-mcp'
+					) ),
+					intval( $client_count ),
+					intval( $total_tokens )
+				);
+				?>
+			</div>
+			<?php endif; ?>
 		</div>
-		
-		<h2><?php echo esc_html__('📡 MCP Endpoint', 'stifli-flex-mcp'); ?></h2>
-		
-		<table class="form-table">
-			<tr valign="top">
-				<th scope="row"><?php echo esc_html__('JSON-RPC 2.0 Endpoint', 'stifli-flex-mcp'); ?></th>
-				<td>
-					<code id="sflmcp_endpoint" class="sflmcp-settings-endpoint-code"><?php echo esc_html($endpoint); ?></code>
-					<button type="button" class="button sflmcp-copy-btn" data-copy-target="#sflmcp_endpoint" data-copy-notice="<?php echo esc_attr__('Endpoint copied!', 'stifli-flex-mcp'); ?>"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
-					<p class="description"><?php echo esc_html__('Main endpoint for JSON-RPC 2.0 calls (methods: tools/list, tools/call).', 'stifli-flex-mcp'); ?></p>
-				</td>
-			</tr>
-			<tr valign="top">
-				<th scope="row"><?php echo esc_html__('Endpoint for Claude/ChatGPT', 'stifli-flex-mcp'); ?></th>
-				<td>
-					<code id="sflmcp_endpoint_auth" class="sflmcp-settings-endpoint-code sflmcp-break-all"><?php echo esc_html($endpoint_with_auth); ?></code>
-					<button type="button" class="button sflmcp-copy-btn" data-copy-target="#sflmcp_endpoint_auth" data-copy-notice="<?php echo esc_attr__('Endpoint copied! Remember to replace YOUR_APP_PASSWORD with your actual Application Password (without spaces).', 'stifli-flex-mcp'); ?>"><?php echo esc_html__('📋 Copy', 'stifli-flex-mcp'); ?></button>
-					<p class="description"><?php echo esc_html__('Use this URL format for Claude, ChatGPT, and other MCP clients. Replace YOUR_APP_PASSWORD with your Application Password (without spaces).', 'stifli-flex-mcp'); ?></p>
-				</td>
-			</tr>
-		</table>
-		
-		<h2><?php echo esc_html__('🚀 Quick Start Guide', 'stifli-flex-mcp'); ?></h2>
-		
-		<h3><?php echo esc_html__('Step 1: Create an Application Password', 'stifli-flex-mcp'); ?></h3>
-		<ol>
-			<li><?php echo sprintf(
-				/* translators: %s: link to user profile */
-				esc_html__('Go to %s', 'stifli-flex-mcp'),
-				'<a href="' . esc_url($profile_url) . '" target="_blank">' . esc_html__('your profile page', 'stifli-flex-mcp') . '</a>'
-			); ?></li>
-			<li><?php echo esc_html__('Scroll to "Application Passwords" section', 'stifli-flex-mcp'); ?></li>
-			<li><?php echo esc_html__('Enter a name like "MCP Client" and click "Add New Application Password"', 'stifli-flex-mcp'); ?></li>
-			<li><?php echo esc_html__('Copy the generated password (it will only be shown once!)', 'stifli-flex-mcp'); ?></li>
-		</ol>
-		
-		<div class="sflmcp-settings-tipbox">
-			<strong>💡 <?php echo esc_html__('Tip:', 'stifli-flex-mcp'); ?></strong>
-			<?php echo esc_html__('WordPress displays the password with spaces for readability (e.g., "SbfX irNe J5t3 OUNK"). You can use it with or without spaces - both work! For cleaner code, remove the spaces when configuring your client.', 'stifli-flex-mcp'); ?>
+
+		<!-- View More Details -->
+		<div class="sflmcp-settings-details-toggle">
+			<button type="button" class="button" id="sflmcp-toggle-details">
+				<span class="dashicons dashicons-arrow-down-alt2" style="vertical-align:middle;"></span>
+				<?php esc_html_e( 'View More Details', 'stifli-flex-mcp' ); ?>
+			</button>
 		</div>
-		
-		<h3><?php echo esc_html__('Step 2: Test Your Endpoint', 'stifli-flex-mcp'); ?></h3>
-		<p><?php echo esc_html__('Use HTTP Basic Authentication with your WordPress username and the application password:', 'stifli-flex-mcp'); ?></p>
-		
-		<pre class="sflmcp-settings-pre-dark">curl -X POST '<?php echo esc_url($endpoint); ?>' \
-  -H 'Content-Type: application/json' \
-  -u '<?php echo esc_html($current_user->user_login); ?>:YOUR_APPLICATION_PASSWORD' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
-		
-		<p><?php echo esc_html__('Or with the Authorization header:', 'stifli-flex-mcp'); ?></p>
-		<pre class="sflmcp-settings-pre-dark">curl -X POST '<?php echo esc_url($endpoint); ?>' \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Basic BASE64_ENCODED_CREDENTIALS' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre>
-		
-		<p class="description"><?php echo esc_html__('Note: BASE64_ENCODED_CREDENTIALS = base64(username:application_password)', 'stifli-flex-mcp'); ?></p>
-		
-		<h3><?php echo esc_html__('Step 3: Configure Your MCP Client', 'stifli-flex-mcp'); ?></h3>
-		<p><?php echo esc_html__('Example configuration:', 'stifli-flex-mcp'); ?></p>
-		<pre class="sflmcp-settings-pre-light">{
-  "url": "<?php echo esc_url($endpoint); ?>",
-  "auth": {
-    "type": "basic",
-    "username": "<?php echo esc_html($current_user->user_login); ?>",
-    "password": "YOUR_APPLICATION_PASSWORD"
-  },
-  "protocol": "JSON-RPC 2.0",
-  "methods": ["tools/list", "tools/call"]
-}</pre>
-		
-		<div class="sflmcp-settings-warnbox">
-			<h4>⚠️ <?php echo esc_html__('Security Notes', 'stifli-flex-mcp'); ?></h4>
-			<ul>
-				<li><?php echo esc_html__('Application Passwords are tied to your WordPress user - API calls execute with your permissions', 'stifli-flex-mcp'); ?></li>
-				<li><?php echo esc_html__('You can revoke an Application Password at any time from your profile', 'stifli-flex-mcp'); ?></li>
-				<li><?php echo esc_html__('Create separate Application Passwords for different clients/integrations', 'stifli-flex-mcp'); ?></li>
-				<li><?php echo esc_html__('Always use HTTPS in production to protect credentials', 'stifli-flex-mcp'); ?></li>
-			</ul>
+
+		<div id="sflmcp-settings-details" style="display:none;">
+
+			<!-- Connected Clients -->
+			<div class="sflmcp-settings-section">
+				<h3><?php esc_html_e( 'Connected Clients', 'stifli-flex-mcp' ); ?></h3>
+				<?php if ( empty( $clients ) ) : ?>
+					<p class="description"><?php esc_html_e( 'No clients connected yet. Follow the steps above to connect your first AI assistant.', 'stifli-flex-mcp' ); ?></p>
+				<?php else : ?>
+					<table class="wp-list-table widefat fixed striped sflmcp-oauth-table">
+						<thead>
+							<tr>
+								<th><?php esc_html_e( 'Client Name', 'stifli-flex-mcp' ); ?></th>
+								<th><?php esc_html_e( 'Client ID', 'stifli-flex-mcp' ); ?></th>
+								<th><?php esc_html_e( 'Active Tokens', 'stifli-flex-mcp' ); ?></th>
+								<th><?php esc_html_e( 'Registered', 'stifli-flex-mcp' ); ?></th>
+								<th><?php esc_html_e( 'Actions', 'stifli-flex-mcp' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $clients as $client ) :
+								$cid         = esc_attr( $client->client_id );
+								$count       = isset( $token_counts[ $client->client_id ] ) ? $token_counts[ $client->client_id ] : 0;
+								$tokens_list = isset( $token_data[ $client->client_id ] ) ? $token_data[ $client->client_id ] : array();
+							?>
+								<tr>
+									<td><strong><?php echo esc_html( $client->client_name ); ?></strong></td>
+									<td><code style="font-size:11px;"><?php echo esc_html( $client->client_id ); ?></code></td>
+									<td>
+										<?php if ( $count > 0 ) : ?>
+											<a href="#" class="sflmcp-oauth-toggle-tokens" data-client-id="<?php echo esc_attr( $cid ); ?>">
+												<span class="sflmcp-oauth-token-count has-tokens" data-client-count="<?php echo esc_attr( $cid ); ?>"><?php echo intval( $count ); ?></span>
+											</a>
+										<?php else : ?>
+											<span data-client-count="<?php echo esc_attr( $cid ); ?>">0</span>
+										<?php endif; ?>
+									</td>
+									<td>
+										<?php
+										$registered = strtotime( $client->created_at );
+										echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $registered + ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) );
+										?>
+									</td>
+									<td>
+										<button type="button" class="button button-small button-link-delete sflmcp-oauth-delete-client" data-client-id="<?php echo esc_attr( $cid ); ?>">
+											<?php esc_html_e( 'Delete', 'stifli-flex-mcp' ); ?>
+										</button>
+									</td>
+								</tr>
+								<?php if ( ! empty( $tokens_list ) ) : ?>
+								<tr class="sflmcp-oauth-tokens-row">
+									<td colspan="5">
+										<div id="sflmcp-tokens-<?php echo esc_attr( $cid ); ?>" class="sflmcp-oauth-tokens-detail">
+											<table class="sflmcp-oauth-tokens-list">
+												<thead>
+													<tr>
+														<th><?php esc_html_e( 'User', 'stifli-flex-mcp' ); ?></th>
+														<th><?php esc_html_e( 'Scope', 'stifli-flex-mcp' ); ?></th>
+														<th><?php esc_html_e( 'Issued', 'stifli-flex-mcp' ); ?></th>
+														<th><?php esc_html_e( 'Expires', 'stifli-flex-mcp' ); ?></th>
+														<th></th>
+													</tr>
+												</thead>
+												<tbody>
+													<?php foreach ( $tokens_list as $tok ) :
+														$issued  = strtotime( $tok->created_at );
+														$expires = strtotime( $tok->access_expires_at );
+														$offset  = get_option( 'gmt_offset' ) * HOUR_IN_SECONDS;
+													?>
+													<tr>
+														<td><?php echo esc_html( $tok->user_name ?: '#' . $tok->user_id ); ?></td>
+														<td><?php echo esc_html( $tok->scope ); ?></td>
+														<td><?php echo esc_html( date_i18n( 'M j, H:i', $issued + $offset ) ); ?></td>
+														<td><?php echo esc_html( date_i18n( 'M j, H:i', $expires + $offset ) ); ?></td>
+														<td>
+															<button type="button" class="button button-small button-link-delete sflmcp-oauth-revoke-token"
+																data-token-id="<?php echo intval( $tok->id ); ?>"
+																data-client-id="<?php echo esc_attr( $cid ); ?>">
+																<?php esc_html_e( 'Revoke', 'stifli-flex-mcp' ); ?>
+															</button>
+														</td>
+													</tr>
+													<?php endforeach; ?>
+												</tbody>
+											</table>
+										</div>
+									</td>
+								</tr>
+								<?php endif; ?>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php endif; ?>
+			</div>
+
+			<!-- Troubleshooting -->
+			<div class="sflmcp-settings-section">
+				<h3><?php esc_html_e( 'Troubleshooting', 'stifli-flex-mcp' ); ?></h3>
+				<table class="form-table">
+					<tr>
+						<th><?php esc_html_e( 'Connection fails', 'stifli-flex-mcp' ); ?></th>
+						<td><?php esc_html_e( 'Make sure your site uses HTTPS. Check that no security plugin is blocking the REST API.', 'stifli-flex-mcp' ); ?></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Authorization keeps asking', 'stifli-flex-mcp' ); ?></th>
+						<td><?php esc_html_e( 'You need to be logged in to WordPress as an administrator when the authorization page opens. Tokens last 24 hours and refresh automatically for up to 90 days.', 'stifli-flex-mcp' ); ?></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Client not appearing', 'stifli-flex-mcp' ); ?></th>
+						<td><?php esc_html_e( 'The client registers automatically when it first connects. If nothing shows up, try disconnecting and reconnecting from your AI assistant.', 'stifli-flex-mcp' ); ?></td>
+					</tr>
+				</table>
+			</div>
+
+			<!-- Alternative: Application Passwords -->
+			<div class="sflmcp-settings-section">
+				<h3><?php esc_html_e( 'Alternative: Application Passwords', 'stifli-flex-mcp' ); ?></h3>
+				<p class="description">
+					<?php echo wp_kses(
+						sprintf(
+							/* translators: %s: link to profile page */
+							__( 'For advanced setups or clients that don\'t support OAuth, you can still use WordPress Application Passwords. Go to %s to create one, then use HTTP Basic Auth with your username and the generated password.', 'stifli-flex-mcp' ),
+							'<a href="' . esc_url( get_edit_profile_url( get_current_user_id() ) . '#application-passwords-section' ) . '" target="_blank">'
+							. esc_html__( 'your profile', 'stifli-flex-mcp' ) . '</a>'
+						),
+						array( 'a' => array( 'href' => array(), 'target' => array() ) )
+					); ?>
+				</p>
+			</div>
+
 		</div>
-		
+
 		<?php
 	}
 	
@@ -3371,6 +3572,400 @@ class StifliFlexMcp {
 		$this->syncToolToActiveProfile( $tool_name, $enabled );
 
 		wp_send_json_success( array( 'tool_name' => $tool_name, 'enabled' => $enabled ) );
+	}
+
+	// ================================================================
+	// OAuth Clients Tab
+	// ================================================================
+
+	/**
+	 * Render the OAuth Clients admin tab.
+	 */
+	private function renderOAuthClientsTab() {
+		if ( ! class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'OAuth module is not loaded.', 'stifli-flex-mcp' ) . '</p></div>';
+			return;
+		}
+
+		$storage       = StifliFlexMcp_OAuth_Storage::get_instance();
+		$clients       = $storage->get_all_clients();
+		$auto_approve  = get_option( 'sflmcp_oauth_auto_approve', '1' );
+
+		// Preload token counts per client.
+		global $wpdb;
+		$tokens_table = $wpdb->prefix . 'sflmcp_oauth_tokens';
+		$now          = gmdate( 'Y-m-d H:i:s' );
+
+		$token_counts = array();
+		$token_data   = array();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$counts_raw = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT client_id, COUNT(*) as cnt FROM {$tokens_table} WHERE revoked = 0 AND access_expires_at > %s GROUP BY client_id",
+				$now
+			)
+		);
+		foreach ( $counts_raw as $row ) {
+			$token_counts[ $row->client_id ] = (int) $row->cnt;
+		}
+
+		// Get active tokens grouped by client for expandable detail.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$tokens_raw = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT t.id, t.client_id, t.user_id, t.scope, t.access_expires_at, t.created_at, u.display_name as user_name
+				FROM {$tokens_table} t
+				LEFT JOIN {$wpdb->users} u ON t.user_id = u.ID
+				WHERE t.revoked = 0 AND t.access_expires_at > %s
+				ORDER BY t.created_at DESC",
+				$now
+			)
+		);
+		foreach ( $tokens_raw as $tok ) {
+			$token_data[ $tok->client_id ][] = $tok;
+		}
+		?>
+		<div class="sflmcp-oauth-wrap">
+			<div class="sflmcp-oauth-header">
+				<h2><?php esc_html_e( 'OAuth 2.1 Clients', 'stifli-flex-mcp' ); ?></h2>
+			</div>
+
+			<!-- Auto-approve setting -->
+			<div class="sflmcp-oauth-settings">
+				<label>
+					<input type="checkbox" id="sflmcp_oauth_auto_approve" value="1" <?php checked( $auto_approve, '1' ); ?>>
+					<strong><?php esc_html_e( 'Auto-approve new client registrations', 'stifli-flex-mcp' ); ?></strong>
+				</label>
+				<p class="description">
+					<?php esc_html_e( 'When enabled, any MCP client (Claude Desktop, ChatGPT, etc.) can register automatically via Dynamic Client Registration. When disabled, clients must be manually registered by an administrator.', 'stifli-flex-mcp' ); ?>
+				</p>
+			</div>
+
+			<!-- OAuth Endpoints Reference -->
+			<div class="sflmcp-oauth-endpoints">
+				<h3><?php esc_html_e( 'OAuth Endpoints', 'stifli-flex-mcp' ); ?></h3>
+				<table>
+					<tr>
+						<td><?php esc_html_e( 'Resource Metadata', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( home_url( '/.well-known/oauth-protected-resource' ) ); ?></code></td>
+					</tr>
+					<tr>
+						<td><?php esc_html_e( 'Server Metadata', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( home_url( '/.well-known/oauth-authorization-server' ) ); ?></code></td>
+					</tr>
+					<tr>
+						<td><?php esc_html_e( 'Client Registration', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( rest_url( 'stifli-flex-mcp/v1/oauth/register' ) ); ?></code></td>
+					</tr>
+					<tr>
+						<td><?php esc_html_e( 'Authorization', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( home_url( '?sflmcp_oauth=authorize' ) ); ?></code></td>
+					</tr>
+					<tr>
+						<td><?php esc_html_e( 'Token', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( rest_url( 'stifli-flex-mcp/v1/oauth/token' ) ); ?></code></td>
+					</tr>
+					<tr>
+						<td><?php esc_html_e( 'Revocation', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( rest_url( 'stifli-flex-mcp/v1/oauth/revoke' ) ); ?></code></td>
+					</tr>
+				</table>
+			</div>
+
+			<!-- Clients Table -->
+			<?php if ( empty( $clients ) ) : ?>
+				<div class="sflmcp-oauth-empty">
+					<div class="dashicons dashicons-shield"></div>
+					<p><strong><?php esc_html_e( 'No OAuth clients registered yet', 'stifli-flex-mcp' ); ?></strong></p>
+					<p><?php esc_html_e( 'Clients will appear here when an MCP application (Claude Desktop, ChatGPT, etc.) registers via Dynamic Client Registration.', 'stifli-flex-mcp' ); ?></p>
+				</div>
+			<?php else : ?>
+				<table class="wp-list-table widefat fixed striped sflmcp-oauth-table">
+					<thead>
+						<tr>
+							<th class="column-name"><?php esc_html_e( 'Client Name', 'stifli-flex-mcp' ); ?></th>
+							<th class="column-client-id"><?php esc_html_e( 'Client ID', 'stifli-flex-mcp' ); ?></th>
+							<th class="column-auth-method"><?php esc_html_e( 'Type', 'stifli-flex-mcp' ); ?></th>
+							<th class="column-tokens"><?php esc_html_e( 'Tokens', 'stifli-flex-mcp' ); ?></th>
+							<th class="column-date"><?php esc_html_e( 'Registered', 'stifli-flex-mcp' ); ?></th>
+							<th class="column-actions"><?php esc_html_e( 'Actions', 'stifli-flex-mcp' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $clients as $client ) :
+							$cid         = esc_attr( $client->client_id );
+							$count       = isset( $token_counts[ $client->client_id ] ) ? $token_counts[ $client->client_id ] : 0;
+							$is_public   = ( 'none' === $client->token_endpoint_auth_method );
+							$tokens_list = isset( $token_data[ $client->client_id ] ) ? $token_data[ $client->client_id ] : array();
+						?>
+							<tr>
+								<td>
+									<strong><?php echo esc_html( $client->client_name ); ?></strong>
+									<?php if ( $client->client_uri ) : ?>
+										<br><small><a href="<?php echo esc_url( $client->client_uri ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $client->client_uri ); ?></a></small>
+									<?php endif; ?>
+								</td>
+								<td>
+									<span class="sflmcp-oauth-client-id"><?php echo esc_html( $client->client_id ); ?></span>
+								</td>
+								<td>
+									<?php if ( $is_public ) : ?>
+										<span class="sflmcp-oauth-badge sflmcp-oauth-badge--public"><?php esc_html_e( 'Public', 'stifli-flex-mcp' ); ?></span>
+									<?php else : ?>
+										<span class="sflmcp-oauth-badge sflmcp-oauth-badge--confidential"><?php esc_html_e( 'Confidential', 'stifli-flex-mcp' ); ?></span>
+									<?php endif; ?>
+								</td>
+								<td>
+									<?php if ( $count > 0 ) : ?>
+										<a href="#" class="sflmcp-oauth-toggle-tokens" data-client-id="<?php echo esc_attr( $cid ); ?>">
+											<span class="sflmcp-oauth-token-count has-tokens" data-client-count="<?php echo esc_attr( $cid ); ?>"><?php echo intval( $count ); ?></span>
+										</a>
+									<?php else : ?>
+										<span class="sflmcp-oauth-token-count" data-client-count="<?php echo esc_attr( $cid ); ?>">0</span>
+									<?php endif; ?>
+								</td>
+								<td>
+									<?php
+									$registered = strtotime( $client->created_at );
+									echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $registered + ( get_option( 'gmt_offset' ) * HOUR_IN_SECONDS ) ) );
+									?>
+								</td>
+								<td>
+									<button type="button" class="button button-link-delete sflmcp-oauth-delete-client" data-client-id="<?php echo esc_attr( $cid ); ?>">
+										<?php esc_html_e( 'Delete', 'stifli-flex-mcp' ); ?>
+									</button>
+								</td>
+							</tr>
+							<!-- Expandable tokens row -->
+							<?php if ( ! empty( $tokens_list ) ) : ?>
+							<tr class="sflmcp-oauth-tokens-row">
+								<td colspan="6">
+									<div id="sflmcp-tokens-<?php echo esc_attr( $cid ); ?>" class="sflmcp-oauth-tokens-detail">
+										<h4><?php esc_html_e( 'Active Tokens', 'stifli-flex-mcp' ); ?></h4>
+										<table class="sflmcp-oauth-tokens-list">
+											<thead>
+												<tr>
+													<th><?php esc_html_e( 'User', 'stifli-flex-mcp' ); ?></th>
+													<th><?php esc_html_e( 'Scope', 'stifli-flex-mcp' ); ?></th>
+													<th><?php esc_html_e( 'Issued', 'stifli-flex-mcp' ); ?></th>
+													<th><?php esc_html_e( 'Expires', 'stifli-flex-mcp' ); ?></th>
+													<th></th>
+												</tr>
+											</thead>
+											<tbody>
+												<?php foreach ( $tokens_list as $tok ) :
+													$issued  = strtotime( $tok->created_at );
+													$expires = strtotime( $tok->access_expires_at );
+													$offset  = get_option( 'gmt_offset' ) * HOUR_IN_SECONDS;
+												?>
+												<tr>
+													<td><?php echo esc_html( $tok->user_name ?: '#' . $tok->user_id ); ?></td>
+													<td><?php echo esc_html( $tok->scope ); ?></td>
+													<td><?php echo esc_html( date_i18n( 'M j, H:i', $issued + $offset ) ); ?></td>
+													<td><?php echo esc_html( date_i18n( 'M j, H:i', $expires + $offset ) ); ?></td>
+													<td>
+														<button type="button" class="button button-small button-link-delete sflmcp-oauth-revoke-token"
+															data-token-id="<?php echo intval( $tok->id ); ?>"
+															data-client-id="<?php echo esc_attr( $cid ); ?>">
+															<?php esc_html_e( 'Revoke', 'stifli-flex-mcp' ); ?>
+														</button>
+													</td>
+												</tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
+									</div>
+								</td>
+							</tr>
+							<?php endif; ?>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+
+			<!-- Setup Guides -->
+			<div class="sflmcp-oauth-guides" style="margin-top:24px;">
+				<h2><?php esc_html_e( 'Quick Setup Guides', 'stifli-flex-mcp' ); ?></h2>
+
+				<!-- Claude Desktop -->
+				<div class="sflmcp-oauth-guide-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:16px;">
+					<h3 style="margin-top:0;">🟣 <?php esc_html_e( 'Claude Desktop', 'stifli-flex-mcp' ); ?></h3>
+					<p style="color:#646970;font-size:13px;margin-bottom:12px;">
+						<?php esc_html_e( 'Claude Desktop supports MCP OAuth 2.1 natively. It discovers all endpoints automatically from a single URL.', 'stifli-flex-mcp' ); ?>
+					</p>
+					<ol style="font-size:13px;line-height:1.8;padding-left:20px;">
+						<li><?php esc_html_e( 'Enable "Auto-approve new client registrations" above', 'stifli-flex-mcp' ); ?></li>
+						<li><?php echo wp_kses(
+							sprintf(
+								/* translators: %s: file path */
+								__( 'Edit your Claude Desktop config file: %s', 'stifli-flex-mcp' ),
+								'<code>' . ( PHP_OS_FAMILY === 'Darwin'
+									? '~/Library/Application Support/Claude/claude_desktop_config.json'
+									: '%APPDATA%\\Claude\\claude_desktop_config.json' ) . '</code>'
+							),
+							array( 'code' => array() )
+						); ?></li>
+						<li><?php esc_html_e( 'Add this MCP server configuration:', 'stifli-flex-mcp' ); ?>
+							<pre style="background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:12px;font-size:12px;overflow-x:auto;margin-top:6px;">{
+  "mcpServers": {
+    "<?php echo esc_html( sanitize_title( get_bloginfo( 'name' ) ) ); ?>": {
+      "type": "sse",
+      "url": "<?php echo esc_html( rest_url( $this->namespace . '/sse' ) ); ?>"
+    }
+  }
+}</pre>
+						</li>
+						<li><?php esc_html_e( 'Restart Claude Desktop — it will open your browser to authorize', 'stifli-flex-mcp' ); ?></li>
+						<li><?php esc_html_e( 'Log in to WordPress and click "Authorize"', 'stifli-flex-mcp' ); ?></li>
+						<li><?php esc_html_e( 'Done! Claude will auto-discover all OAuth endpoints via .well-known metadata', 'stifli-flex-mcp' ); ?></li>
+					</ol>
+					<p style="font-size:12px;color:#646970;margin-bottom:0;">
+						<?php echo wp_kses(
+							sprintf(
+								/* translators: %s: the SSE URL */
+								__( 'Claude only needs the SSE URL: %s — it discovers authorization, token, and registration endpoints automatically.', 'stifli-flex-mcp' ),
+								'<code>' . esc_html( rest_url( $this->namespace . '/sse' ) ) . '</code>'
+							),
+							array( 'code' => array() )
+						); ?>
+					</p>
+				</div>
+
+				<!-- ChatGPT Custom GPT -->
+				<div class="sflmcp-oauth-guide-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:16px;">
+					<h3 style="margin-top:0;">🟢 <?php esc_html_e( 'ChatGPT (Custom GPT Actions)', 'stifli-flex-mcp' ); ?></h3>
+					<p style="color:#646970;font-size:13px;margin-bottom:12px;">
+						<?php esc_html_e( 'For ChatGPT GPT Actions, register a confidential client and configure OAuth in the GPT editor.', 'stifli-flex-mcp' ); ?>
+					</p>
+					<ol style="font-size:13px;line-height:1.8;padding-left:20px;">
+						<li><?php esc_html_e( 'Register a confidential client (via API or ask an admin) with:', 'stifli-flex-mcp' ); ?>
+							<ul style="list-style:disc;padding-left:16px;margin-top:4px;">
+								<li><code>token_endpoint_auth_method: "client_secret_post"</code></li>
+								<li><code>redirect_uris: ["https://chatgpt.com/aip/<em>YOUR_PLUGIN_ID</em>/oauth/callback"]</code></li>
+							</ul>
+						</li>
+						<li><?php esc_html_e( 'In the GPT editor → Actions → Authentication, select "OAuth" and fill:', 'stifli-flex-mcp' ); ?>
+							<table style="font-size:12px;margin-top:6px;border-collapse:collapse;">
+								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Client ID', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><em><?php esc_html_e( '(from step 1)', 'stifli-flex-mcp' ); ?></em></td></tr>
+								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Client Secret', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><em><?php esc_html_e( '(from step 1)', 'stifli-flex-mcp' ); ?></em></td></tr>
+								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Authorization URL', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><code><?php echo esc_html( home_url( '?sflmcp_oauth=authorize' ) ); ?></code></td></tr>
+								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Token URL', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><code><?php echo esc_html( rest_url( $this->namespace . '/oauth/token' ) ); ?></code></td></tr>
+								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Scope', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><code>mcp</code></td></tr>
+							</table>
+						</li>
+						<li><?php esc_html_e( 'Save and test the GPT — users will be prompted to authorize via your WordPress site', 'stifli-flex-mcp' ); ?></li>
+					</ol>
+				</div>
+
+				<!-- Application Passwords -->
+				<div class="sflmcp-oauth-guide-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:0;">
+					<h3 style="margin-top:0;">🔑 <?php esc_html_e( 'Application Passwords (alternative)', 'stifli-flex-mcp' ); ?></h3>
+					<p style="color:#646970;font-size:13px;margin-bottom:8px;">
+						<?php echo wp_kses(
+							sprintf(
+								/* translators: %s: link to profile page */
+								__( 'For simple setups, WordPress Application Passwords still work. Go to %s to generate one.', 'stifli-flex-mcp' ),
+								'<a href="' . esc_url( get_edit_profile_url( get_current_user_id() ) . '#application-passwords-section' ) . '">'
+								. esc_html__( 'your profile', 'stifli-flex-mcp' ) . '</a>'
+							),
+							array( 'a' => array( 'href' => array() ) )
+						); ?>
+					</p>
+					<p style="font-size:12px;color:#646970;margin-bottom:0;">
+						<?php esc_html_e( 'Use HTTP Basic Auth with your WordPress username and the generated application password. This method does not require OAuth setup.', 'stifli-flex-mcp' ); ?>
+					</p>
+				</div>
+			</div>
+
+		</div>
+		<?php
+	}
+
+	// ================================================================
+	// OAuth AJAX Handlers
+	// ================================================================
+
+	/**
+	 * AJAX: Delete an OAuth client and all its tokens.
+	 */
+	public function ajax_oauth_delete_client() {
+		check_ajax_referer( 'sflmcp_oauth', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) : '';
+
+		if ( empty( $client_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Missing client_id', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$storage = StifliFlexMcp_OAuth_Storage::get_instance();
+		$deleted = $storage->delete_client( $client_id );
+
+		if ( $deleted ) {
+			wp_send_json_success();
+		} else {
+			wp_send_json_error( array( 'message' => __( 'Client not found', 'stifli-flex-mcp' ) ) );
+		}
+	}
+
+	/**
+	 * AJAX: Revoke a specific OAuth token by row ID.
+	 */
+	public function ajax_oauth_revoke_token() {
+		check_ajax_referer( 'sflmcp_oauth', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$token_id = isset( $_POST['token_id'] ) ? intval( $_POST['token_id'] ) : 0;
+
+		if ( ! $token_id ) {
+			wp_send_json_error( array( 'message' => __( 'Missing token_id', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_oauth_tokens';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update(
+			$table,
+			array( 'revoked' => 1 ),
+			array( 'id' => $token_id ),
+			array( '%d' ),
+			array( '%d' )
+		);
+
+		if ( false !== $updated ) {
+			wp_send_json_success();
+		} else {
+			wp_send_json_error( array( 'message' => __( 'Token not found', 'stifli-flex-mcp' ) ) );
+		}
+	}
+
+	/**
+	 * AJAX: Save OAuth settings (auto-approve toggle).
+	 */
+	public function ajax_oauth_save_settings() {
+		check_ajax_referer( 'sflmcp_oauth', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$auto_approve = isset( $_POST['auto_approve'] ) ? sanitize_text_field( wp_unslash( $_POST['auto_approve'] ) ) : '0';
+		update_option( 'sflmcp_oauth_auto_approve', $auto_approve === '1' ? '1' : '0' );
+
+		wp_send_json_success();
 	}
 
 	/**

@@ -156,17 +156,118 @@
    SETTINGS PAGE
    ============================================================================= */
 
-.sflmcp-settings-infobox {
-    background: #f0f9ff;
-    border: 1px solid #0073aa;
-    padding: 20px;
+.sflmcp-settings-connect {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #2271b1;
+    padding: 24px 28px;
     margin: 20px 0;
+    max-width: 720px;
+}
+
+.sflmcp-settings-connect h2 {
+    margin-top: 0;
+    font-size: 1.4em;
+    color: #1d2327;
+}
+
+.sflmcp-settings-url-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 20px;
+}
+
+.sflmcp-settings-url-box code {
+    flex: 1;
+    display: block;
+    background: #f0f6fc;
+    border: 1px solid #2271b1;
+    padding: 10px 14px;
+    font-size: 14px;
+    word-break: break-all;
     border-radius: 4px;
 }
 
-.sflmcp-settings-infobox h3 {
-    margin-top: 0;
-    color: #0073aa;
+.sflmcp-settings-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 16px 0 0;
+}
+
+.sflmcp-settings-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.sflmcp-step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: #2271b1;
+    color: #fff;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.sflmcp-settings-step strong {
+    display: block;
+    margin-bottom: 2px;
+}
+
+.sflmcp-settings-step .description {
+    margin-top: 2px;
+}
+
+.sflmcp-settings-status {
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: #edfaef;
+    border: 1px solid #00a32a;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.sflmcp-settings-status .dashicons {
+    margin-right: 4px;
+    vertical-align: text-bottom;
+}
+
+.sflmcp-settings-details-toggle {
+    margin: 16px 0;
+    max-width: 720px;
+}
+
+.sflmcp-settings-details-toggle .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    margin-right: 2px;
+}
+
+#sflmcp-settings-details {
+    max-width: 900px;
+}
+
+.sflmcp-settings-section {
+    margin: 24px 0;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.sflmcp-settings-section:last-child {
+    border-bottom: none;
+}
+
+.sflmcp-settings-section h3 {
+    font-size: 1.15em;
+    margin-bottom: 12px;
 }
 
 .sflmcp-settings-endpoint-code {
@@ -179,48 +280,6 @@
 
 .sflmcp-settings-endpoint-code.sflmcp-break-all {
     word-break: break-all;
-}
-
-.sflmcp-settings-tipbox {
-    background: #e8f5e9;
-    border: 1px solid #4caf50;
-    padding: 12px 15px;
-    margin: 10px 0 20px;
-    border-radius: 4px;
-}
-
-.sflmcp-settings-pre-dark {
-    background: #2c3e50;
-    color: #ecf0f1;
-    border: none;
-    padding: 15px;
-    overflow: auto;
-    border-radius: 4px;
-}
-
-.sflmcp-settings-pre-light {
-    background: #f7f7f7;
-    border: 1px solid #ddd;
-    padding: 15px;
-    overflow: auto;
-    border-radius: 4px;
-}
-
-.sflmcp-settings-warnbox {
-    background: #fff8e1;
-    border: 1px solid #ff9800;
-    padding: 15px;
-    margin: 20px 0;
-    border-radius: 4px;
-}
-
-.sflmcp-settings-warnbox h4 {
-    margin-top: 0;
-    color: #e65100;
-}
-
-.sflmcp-settings-warnbox ul {
-    margin-bottom: 0;
 }
 
 .sflmcp-profile-link {

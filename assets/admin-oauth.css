@@ -1,0 +1,233 @@
+/* OAuth Clients Admin Tab */
+
+.sflmcp-oauth-wrap {
+	max-width: 1100px;
+}
+
+.sflmcp-oauth-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 20px;
+}
+
+.sflmcp-oauth-header h2 {
+	margin: 0;
+}
+
+.sflmcp-oauth-actions {
+	display: flex;
+	gap: 8px;
+}
+
+/* Settings card */
+.sflmcp-oauth-settings {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin-bottom: 20px;
+}
+
+.sflmcp-oauth-settings label {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 14px;
+	cursor: pointer;
+}
+
+.sflmcp-oauth-settings .description {
+	color: #646970;
+	font-size: 13px;
+	margin-top: 6px;
+	margin-left: 40px;
+}
+
+/* Clients table */
+.sflmcp-oauth-table {
+	margin-top: 12px;
+}
+
+.sflmcp-oauth-table th {
+	font-weight: 600;
+}
+
+.sflmcp-oauth-table .column-name {
+	width: 20%;
+}
+
+.sflmcp-oauth-table .column-client-id {
+	width: 22%;
+}
+
+.sflmcp-oauth-table .column-auth-method {
+	width: 14%;
+}
+
+.sflmcp-oauth-table .column-tokens {
+	width: 10%;
+	text-align: center;
+}
+
+.sflmcp-oauth-table .column-date {
+	width: 16%;
+}
+
+.sflmcp-oauth-table .column-actions {
+	width: 18%;
+}
+
+.sflmcp-oauth-client-id {
+	font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+	font-size: 12px;
+	color: #50575e;
+	word-break: break-all;
+}
+
+.sflmcp-oauth-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.sflmcp-oauth-badge--public {
+	background: #e7f5e7;
+	color: #1e7e1e;
+}
+
+.sflmcp-oauth-badge--confidential {
+	background: #fef3e7;
+	color: #996800;
+}
+
+.sflmcp-oauth-token-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 24px;
+	background: #f0f0f1;
+	border-radius: 12px;
+	font-weight: 600;
+	font-size: 13px;
+	color: #50575e;
+}
+
+.sflmcp-oauth-token-count.has-tokens {
+	background: #dff0d8;
+	color: #3a6e22;
+}
+
+/* Tokens expanded row */
+.sflmcp-oauth-tokens-row td {
+	padding: 0 !important;
+	background: #f9f9f9;
+}
+
+.sflmcp-oauth-tokens-detail {
+	padding: 12px 20px;
+	display: none;
+}
+
+.sflmcp-oauth-tokens-detail.expanded {
+	display: block;
+}
+
+.sflmcp-oauth-tokens-detail h4 {
+	margin: 0 0 8px;
+	font-size: 13px;
+}
+
+.sflmcp-oauth-tokens-list {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.sflmcp-oauth-tokens-list th,
+.sflmcp-oauth-tokens-list td {
+	padding: 6px 10px;
+	font-size: 12px;
+	border-bottom: 1px solid #e5e5e5;
+	text-align: left;
+}
+
+.sflmcp-oauth-tokens-list th {
+	font-weight: 600;
+	color: #646970;
+}
+
+/* Empty state */
+.sflmcp-oauth-empty {
+	text-align: center;
+	padding: 40px 20px;
+	color: #646970;
+}
+
+.sflmcp-oauth-empty .dashicons {
+	font-size: 48px;
+	width: 48px;
+	height: 48px;
+	color: #c3c4c7;
+	margin-bottom: 12px;
+}
+
+.sflmcp-oauth-empty p {
+	font-size: 14px;
+	margin: 4px 0;
+}
+
+/* Endpoints info box */
+.sflmcp-oauth-endpoints {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin-bottom: 20px;
+}
+
+.sflmcp-oauth-endpoints h3 {
+	margin: 0 0 10px;
+	font-size: 14px;
+}
+
+.sflmcp-oauth-endpoints table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.sflmcp-oauth-endpoints td {
+	padding: 4px 8px;
+	font-size: 13px;
+	vertical-align: top;
+}
+
+.sflmcp-oauth-endpoints td:first-child {
+	font-weight: 600;
+	width: 220px;
+	white-space: nowrap;
+}
+
+.sflmcp-oauth-endpoints code {
+	background: #fff;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-size: 12px;
+	word-break: break-all;
+}
+
+/* Notice */
+.sflmcp-oauth-notice {
+	background: #fff;
+	border-left: 4px solid #00a32a;
+	padding: 10px 14px;
+	margin-bottom: 16px;
+	box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.sflmcp-oauth-notice.error {
+	border-left-color: #d63638;
+}

@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.0.3
+Version: 3.1.0
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -171,6 +171,10 @@ require_once __DIR__ . '/client/class-logs-admin.php';
 
 // Load AI Copilot
 require_once __DIR__ . '/copilot/class-copilot-admin.php';
+
+// Load OAuth 2.1 Authorization Server
+require_once __DIR__ . '/oauth/class-oauth-storage.php';
+require_once __DIR__ . '/oauth/class-oauth-server.php';
 
 // Initialize Automation Admin
 if ( is_admin() ) {
@@ -1970,6 +1974,8 @@ function stifli_flex_mcp_maybe_create_automation_tasks_table() {
 		status varchar(20) DEFAULT 'draft',
 		next_run datetime DEFAULT NULL,
 		last_run datetime DEFAULT NULL,
+		last_success datetime DEFAULT NULL,
+		last_error text DEFAULT NULL,
 		retry_count int(11) DEFAULT 0,
 		max_retries int(11) DEFAULT 3,
 		created_by bigint(20) DEFAULT 0,
@@ -1983,6 +1989,15 @@ function stifli_flex_mcp_maybe_create_automation_tasks_table() {
 
 	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 	dbDelta($sql);
+
+	// Migration: add columns if missing (for sites that already had the table).
+	$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table_name", 0 ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+	if ( is_array( $columns ) && ! in_array( 'last_success', $columns, true ) ) {
+		$wpdb->query( "ALTER TABLE $table_name ADD COLUMN last_success datetime DEFAULT NULL AFTER last_run" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+	}
+	if ( is_array( $columns ) && ! in_array( 'last_error', $columns, true ) ) {
+		$wpdb->query( "ALTER TABLE $table_name ADD COLUMN last_error text DEFAULT NULL AFTER last_success" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+	}
 }
 
 /**
@@ -2320,6 +2335,9 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_system_profiles();
+
+	// OAuth 2.1 tables
+	StifliFlexMcp_OAuth_Storage::create_tables();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
 	stifli_flex_mcp_ensure_automation_cron();
@@ -2343,6 +2361,11 @@ function stifli_flex_mcp_clean_queue() {
 			$now
 		)
 	);
+
+	// Also clean expired OAuth codes and tokens.
+	if ( class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
+		StifliFlexMcp_OAuth_Storage::get_instance()->cleanup_expired();
+	}
 }
 
 /* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter */
@@ -2457,6 +2480,11 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_maybe_create_automation_tasks_table();
 	stifli_flex_mcp_maybe_create_automation_logs_table();
 	
+	// OAuth 2.1 tables (idempotent - CREATE TABLE IF NOT EXISTS)
+	if ( class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
+		StifliFlexMcp_OAuth_Storage::create_tables();
+	}
+	
 	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
@@ -2470,6 +2498,11 @@ add_action('plugins_loaded', function() {
 		// Create global reference with model for client
 		$stifliFlexMcp = new stdClass();
 		$stifliFlexMcp->model = new StifliFlexMcpModel();
+	}
+
+	// Initialize OAuth 2.1 Server
+	if ( class_exists( 'StifliFlexMcp_OAuth_Server' ) ) {
+		StifliFlexMcp_OAuth_Server::get_instance()->init();
 	}
 	
 	// Initialize AI Chat Agent admin
