@@ -62,6 +62,14 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_oauth_delete_client', array($this, 'ajax_oauth_delete_client'));
 			add_action('wp_ajax_sflmcp_oauth_revoke_token', array($this, 'ajax_oauth_revoke_token'));
 			add_action('wp_ajax_sflmcp_oauth_save_settings', array($this, 'ajax_oauth_save_settings'));
+			// AJAX handlers for Changelog
+			add_action('wp_ajax_sflmcp_get_changelog', array($this, 'ajax_get_changelog'));
+			add_action('wp_ajax_sflmcp_get_changelog_detail', array($this, 'ajax_get_changelog_detail'));
+			add_action('wp_ajax_sflmcp_rollback_change', array($this, 'ajax_rollback_change'));
+			add_action('wp_ajax_sflmcp_redo_change', array($this, 'ajax_redo_change'));
+			add_action('wp_ajax_sflmcp_purge_changelog', array($this, 'ajax_purge_changelog'));
+			add_action('wp_ajax_sflmcp_export_changelog', array($this, 'ajax_export_changelog'));
+			add_action('wp_ajax_sflmcp_toggle_changelog', array($this, 'ajax_toggle_changelog'));
 		}
 	}
 
@@ -1220,6 +1228,45 @@ class StifliFlexMcp {
 			));
 		}
 
+		// Enqueue Changelog tab assets
+		if ($active_tab === 'changelog') {
+			wp_enqueue_style(
+				'sflmcp-admin-changelog',
+				plugin_dir_url(__FILE__) . 'assets/admin-changelog.css',
+				array(),
+				'1.0.0'
+			);
+			wp_enqueue_script(
+				'sflmcp-admin-changelog',
+				plugin_dir_url(__FILE__) . 'assets/admin-changelog.js',
+				array('jquery'),
+				'1.0.0',
+				true
+			);
+			wp_localize_script('sflmcp-admin-changelog', 'sflmcpChangelog', array(
+				'ajaxUrl' => admin_url('admin-ajax.php'),
+				'nonce' => wp_create_nonce('sflmcp_changelog'),
+				'i18n' => array(
+					'loading'        => __('Loading...', 'stifli-flex-mcp'),
+					'noEntries'      => __('No changelog entries found. Changes made by MCP tools will appear here.', 'stifli-flex-mcp'),
+					'error'          => __('An error occurred', 'stifli-flex-mcp'),
+					'user'           => __('User', 'stifli-flex-mcp'),
+					'rolledBack'     => __('Rolled back', 'stifli-flex-mcp'),
+					'active'         => __('Active', 'stifli-flex-mcp'),
+					'viewDetail'     => __('View', 'stifli-flex-mcp'),
+					'rollback'       => __('Undo', 'stifli-flex-mcp'),
+					'redo'           => __('Redo', 'stifli-flex-mcp'),
+					'confirmRollback'=> __('Are you sure you want to undo this change? This will reverse the operation.', 'stifli-flex-mcp'),
+					'confirmRedo'    => __('Are you sure you want to redo this change?', 'stifli-flex-mcp'),
+					'confirmPurge'   => __('Delete all changelog entries older than %d days?', 'stifli-flex-mcp'),
+					'showing'        => __('Showing', 'stifli-flex-mcp'),
+					'of'             => __('of', 'stifli-flex-mcp'),
+					'prev'           => __('Previous', 'stifli-flex-mcp'),
+					'next'           => __('Next', 'stifli-flex-mcp'),
+				),
+			));
+		}
+
 		// Enqueue Tools tab JavaScript (WordPress and WooCommerce tools)
 		if ($active_tab === 'tools' || $active_tab === 'wc_tools') {
 			wp_enqueue_script(
@@ -1280,6 +1327,9 @@ class StifliFlexMcp {
 				<a href="?page=sflmcp-server&tab=help" class="nav-tab <?php echo $active_tab === 'help' ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__('📚 Help', 'stifli-flex-mcp'); ?>
 				</a>
+				<a href="?page=sflmcp-server&tab=changelog" class="nav-tab <?php echo $active_tab === 'changelog' ? 'nav-tab-active' : ''; ?>">
+					<?php echo esc_html__('📋 Changelog', 'stifli-flex-mcp'); ?>
+				</a>
 			</h2>
 			
 			<?php
@@ -1297,6 +1347,8 @@ class StifliFlexMcp {
 				$this->renderCustomToolsTab();
 			} elseif ($active_tab === 'help') {
 				$this->renderHelpTab();
+			} elseif ($active_tab === 'changelog') {
+				$this->renderChangelogTab();
 			}
 			?>
 		</div>
@@ -4317,6 +4369,326 @@ X-Custom-Header: value</code></pre>
 		<?php
 	}
 	/* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter */
+
+	/* ================================================================
+	 * CHANGELOG TAB — Render + AJAX handlers
+	 * ================================================================ */
+
+	/* phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter */
+
+	private function renderChangelogTab() {
+		$enabled = get_option( 'sflmcp_changelog_enabled', true );
+		?>
+		<div class="sflmcp-changelog-wrap">
+			<p>
+				<label>
+					<input type="checkbox" id="sflmcp-changelog-toggle" <?php checked( $enabled ); ?>>
+					<?php esc_html_e( 'Enable Change Tracking', 'stifli-flex-mcp' ); ?>
+				</label>
+				<span class="description"><?php esc_html_e( 'When enabled, all mutating MCP tool operations are logged with before/after state for audit and rollback.', 'stifli-flex-mcp' ); ?></span>
+			</p>
+
+			<div class="sflmcp-changelog-stats">
+				<div class="stat-box stat-total"><span class="stat-number" id="stat-total">-</span><span class="stat-label"><?php esc_html_e( 'Total', 'stifli-flex-mcp' ); ?></span></div>
+				<div class="stat-box stat-create"><span class="stat-number" id="stat-creates">-</span><span class="stat-label"><?php esc_html_e( 'Creates', 'stifli-flex-mcp' ); ?></span></div>
+				<div class="stat-box stat-update"><span class="stat-number" id="stat-updates">-</span><span class="stat-label"><?php esc_html_e( 'Updates', 'stifli-flex-mcp' ); ?></span></div>
+				<div class="stat-box stat-delete"><span class="stat-number" id="stat-deletes">-</span><span class="stat-label"><?php esc_html_e( 'Deletes', 'stifli-flex-mcp' ); ?></span></div>
+				<div class="stat-box stat-rolled-back"><span class="stat-number" id="stat-rolled-back">-</span><span class="stat-label"><?php esc_html_e( 'Rolled Back', 'stifli-flex-mcp' ); ?></span></div>
+			</div>
+
+			<div class="sflmcp-changelog-filters">
+				<label><?php esc_html_e( 'Tool', 'stifli-flex-mcp' ); ?>
+					<input type="text" id="sflmcp-filter-tool" placeholder="<?php esc_attr_e( 'e.g. wp_update_post', 'stifli-flex-mcp' ); ?>">
+				</label>
+				<label><?php esc_html_e( 'Operation', 'stifli-flex-mcp' ); ?>
+					<select id="sflmcp-filter-operation">
+						<option value=""><?php esc_html_e( 'All', 'stifli-flex-mcp' ); ?></option>
+						<option value="create"><?php esc_html_e( 'Create', 'stifli-flex-mcp' ); ?></option>
+						<option value="update"><?php esc_html_e( 'Update', 'stifli-flex-mcp' ); ?></option>
+						<option value="delete"><?php esc_html_e( 'Delete', 'stifli-flex-mcp' ); ?></option>
+						<option value="file_create"><?php esc_html_e( 'File Create', 'stifli-flex-mcp' ); ?></option>
+						<option value="file_delete"><?php esc_html_e( 'File Delete', 'stifli-flex-mcp' ); ?></option>
+					</select>
+				</label>
+				<label><?php esc_html_e( 'Object Type', 'stifli-flex-mcp' ); ?>
+					<input type="text" id="sflmcp-filter-object" placeholder="<?php esc_attr_e( 'e.g. post, product', 'stifli-flex-mcp' ); ?>">
+				</label>
+				<label><?php esc_html_e( 'Status', 'stifli-flex-mcp' ); ?>
+					<select id="sflmcp-filter-status">
+						<option value=""><?php esc_html_e( 'All', 'stifli-flex-mcp' ); ?></option>
+						<option value="0"><?php esc_html_e( 'Active', 'stifli-flex-mcp' ); ?></option>
+						<option value="1"><?php esc_html_e( 'Rolled back', 'stifli-flex-mcp' ); ?></option>
+					</select>
+				</label>
+				<label><?php esc_html_e( 'From', 'stifli-flex-mcp' ); ?>
+					<input type="date" id="sflmcp-filter-date-from">
+				</label>
+				<label><?php esc_html_e( 'To', 'stifli-flex-mcp' ); ?>
+					<input type="date" id="sflmcp-filter-date-to">
+				</label>
+				<button class="button button-primary" id="sflmcp-filter-apply"><?php esc_html_e( 'Filter', 'stifli-flex-mcp' ); ?></button>
+				<button class="button" id="sflmcp-filter-reset"><?php esc_html_e( 'Reset', 'stifli-flex-mcp' ); ?></button>
+			</div>
+
+			<div class="sflmcp-changelog-actions">
+				<button class="button" id="sflmcp-export-btn"><?php esc_html_e( 'Export CSV', 'stifli-flex-mcp' ); ?></button>
+				<input type="number" id="sflmcp-purge-days" value="30" min="1" max="365" style="width:60px;">
+				<button class="button" id="sflmcp-purge-btn"><?php esc_html_e( 'Purge older than (days)', 'stifli-flex-mcp' ); ?></button>
+			</div>
+
+			<table class="sflmcp-changelog-table">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'ID', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'Tool', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'Operation', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'Object', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'User', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'stifli-flex-mcp' ); ?></th>
+						<th><?php esc_html_e( 'Actions', 'stifli-flex-mcp' ); ?></th>
+					</tr>
+				</thead>
+				<tbody id="sflmcp-changelog-body">
+					<tr><td colspan="8" style="text-align:center;padding:20px;"><?php esc_html_e( 'Loading...', 'stifli-flex-mcp' ); ?></td></tr>
+				</tbody>
+			</table>
+
+			<div class="sflmcp-changelog-pagination">
+				<span class="pagination-info" id="sflmcp-pagination-info"></span>
+				<div class="pagination-buttons" id="sflmcp-pagination-buttons"></div>
+			</div>
+		</div>
+
+		<!-- Detail Modal -->
+		<div class="sflmcp-modal-overlay" id="sflmcp-modal-overlay">
+			<div class="sflmcp-modal">
+				<div class="sflmcp-modal-header">
+					<h3><?php esc_html_e( 'Change Detail', 'stifli-flex-mcp' ); ?> <span id="detail-id"></span></h3>
+					<button class="sflmcp-modal-close">&times;</button>
+				</div>
+				<div class="sflmcp-modal-body">
+					<div class="sflmcp-detail-grid">
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Tool', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-tool"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Operation', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-operation"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Object', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-object"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Subtype', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-subtype"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'User', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-user"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'IP Address', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-ip"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Date', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-date"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Session', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-session"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Status', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-status"></span></div>
+					</div>
+					<h4><?php esc_html_e( 'Arguments', 'stifli-flex-mcp' ); ?></h4>
+					<pre id="detail-args" style="background:#f9f9f9;padding:10px;max-height:150px;overflow:auto;font-size:12px;border:1px solid #ddd;border-radius:4px;"></pre>
+					<div class="sflmcp-state-compare">
+						<div class="state-panel before">
+							<h4><?php esc_html_e( 'Before State', 'stifli-flex-mcp' ); ?></h4>
+							<pre id="detail-before"></pre>
+						</div>
+						<div class="state-panel after">
+							<h4><?php esc_html_e( 'After State', 'stifli-flex-mcp' ); ?></h4>
+							<pre id="detail-after"></pre>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	public function ajax_get_changelog() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+		$page     = max( 1, intval( $_POST['page'] ?? 1 ) );
+		$per_page = max( 1, min( 100, intval( $_POST['per_page'] ?? 25 ) ) );
+
+		$filters = array(
+			'limit'  => $per_page,
+			'offset' => ( $page - 1 ) * $per_page,
+		);
+		if ( ! empty( $_POST['tool_name'] ) ) {
+			$filters['tool_name'] = sanitize_text_field( wp_unslash( $_POST['tool_name'] ) );
+		}
+		if ( ! empty( $_POST['operation_type'] ) ) {
+			$filters['operation_type'] = sanitize_key( wp_unslash( $_POST['operation_type'] ) );
+		}
+		if ( ! empty( $_POST['object_type'] ) ) {
+			$filters['object_type'] = sanitize_key( wp_unslash( $_POST['object_type'] ) );
+		}
+		if ( ! empty( $_POST['date_from'] ) ) {
+			$filters['date_from'] = sanitize_text_field( wp_unslash( $_POST['date_from'] ) ) . ' 00:00:00';
+		}
+		if ( ! empty( $_POST['date_to'] ) ) {
+			$filters['date_to'] = sanitize_text_field( wp_unslash( $_POST['date_to'] ) ) . ' 23:59:59';
+		}
+		if ( isset( $_POST['rolled_back'] ) && $_POST['rolled_back'] !== '' ) {
+			$filters['rolled_back'] = intval( $_POST['rolled_back'] );
+		}
+
+		$result = $tracker->getHistory( $filters );
+
+		// Compute stats
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_changelog';
+		$stats = array(
+			'total'       => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" ),
+			'creates'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE operation_type IN ('create','file_create')" ),
+			'updates'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE operation_type = 'update'" ),
+			'deletes'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE operation_type IN ('delete','file_delete')" ),
+			'rolled_back' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE rolled_back = 1" ),
+		);
+
+		wp_send_json_success( array(
+			'rows'  => $result['rows'],
+			'total' => $result['total'],
+			'stats' => $stats,
+		) );
+	}
+
+	public function ajax_get_changelog_detail() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$id = intval( $_POST['id'] ?? 0 );
+		if ( ! $id ) {
+			wp_send_json_error( 'Invalid ID' );
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_changelog';
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$table}` WHERE id = %d", $id ), ARRAY_A );
+		if ( ! $row ) {
+			wp_send_json_error( 'Entry not found' );
+		}
+
+		wp_send_json_success( $row );
+	}
+
+	public function ajax_rollback_change() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$id = intval( $_POST['id'] ?? 0 );
+		if ( ! $id ) {
+			wp_send_json_error( 'Invalid ID' );
+		}
+
+		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+		$result = $tracker->rollback( $id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( $result['message'] );
+		}
+	}
+
+	public function ajax_redo_change() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$id = intval( $_POST['id'] ?? 0 );
+		if ( ! $id ) {
+			wp_send_json_error( 'Invalid ID' );
+		}
+
+		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+		$result = $tracker->redo( $id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( $result['message'] );
+		}
+	}
+
+	public function ajax_purge_changelog() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$days = max( 1, intval( $_POST['days'] ?? 30 ) );
+		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+		$deleted = $tracker->purge( $days );
+
+		wp_send_json_success( array( 'message' => sprintf( __( 'Purged %d entries older than %d days.', 'stifli-flex-mcp' ), $deleted, $days ) ) );
+	}
+
+	public function ajax_export_changelog() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$filters_json = isset( $_POST['filters'] ) ? sanitize_text_field( wp_unslash( $_POST['filters'] ) ) : '{}';
+		$req_filters = json_decode( $filters_json, true );
+		if ( ! is_array( $req_filters ) ) {
+			$req_filters = array();
+		}
+
+		$filters = array( 'limit' => 10000 );
+		if ( ! empty( $req_filters['tool_name'] ) ) {
+			$filters['tool_name'] = $req_filters['tool_name'];
+		}
+		if ( ! empty( $req_filters['operation_type'] ) ) {
+			$filters['operation_type'] = $req_filters['operation_type'];
+		}
+		if ( ! empty( $req_filters['object_type'] ) ) {
+			$filters['object_type'] = $req_filters['object_type'];
+		}
+		if ( ! empty( $req_filters['date_from'] ) ) {
+			$filters['date_from'] = $req_filters['date_from'] . ' 00:00:00';
+		}
+		if ( ! empty( $req_filters['date_to'] ) ) {
+			$filters['date_to'] = $req_filters['date_to'] . ' 23:59:59';
+		}
+
+		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+		$data = $tracker->getHistory( $filters );
+
+		$csv = "ID,Tool,Operation,Object Type,Object ID,User ID,IP,Date,Rolled Back\n";
+		foreach ( $data['rows'] as $row ) {
+			$csv .= sprintf(
+				"%d,%s,%s,%s,%s,%d,%s,%s,%s\n",
+				$row['id'],
+				$row['tool_name'],
+				$row['operation_type'],
+				$row['object_type'],
+				$row['object_id'] ?? '',
+				$row['user_id'],
+				$row['ip_address'] ?? '',
+				$row['created_at'],
+				$row['rolled_back'] ? 'Yes' : 'No'
+			);
+		}
+
+		wp_send_json_success( array( 'csv' => $csv ) );
+	}
+
+	public function ajax_toggle_changelog() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$enabled = intval( $_POST['enabled'] ?? 0 );
+		update_option( 'sflmcp_changelog_enabled', (bool) $enabled );
+		wp_send_json_success();
+	}
+
+	/* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 }
 
 

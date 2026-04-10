@@ -206,7 +206,9 @@ class StifliFlexMcpModel {
             'wc_create_refund','wc_delete_refund',
             // Snippet write operations
             'snippet_create','snippet_update','snippet_delete',
-            'snippet_activate','snippet_deactivate'
+            'snippet_activate','snippet_deactivate',
+            // Changelog write operations
+            'mcp_rollback_change','mcp_redo_change','mcp_rollback_session'
         );
 
         // Lectura sensible (requiere permisos elevados o toca red externa)
@@ -224,7 +226,9 @@ class StifliFlexMcpModel {
             'wc_get_system_status', // system information
             'wc_get_settings',      // WooCommerce settings
             // Snippet sensitive reads (code content)
-            'snippet_list','snippet_get'
+            'snippet_list','snippet_get',
+            // Changelog sensitive reads
+            'mcp_get_changelog','mcp_get_change_detail'
         );
 
         if (in_array($name, $WRITE, true)) {
@@ -1163,6 +1167,70 @@ class StifliFlexMcpModel {
                         'required' => array(),
                     ),
                 ),
+
+                // Changelog / Audit Log
+                'mcp_get_changelog' => array(
+                    'name' => 'mcp_get_changelog',
+                    'description' => 'Get the changelog/audit log of MCP tool operations. Supports filtering by tool, operation type, object type, date range, and rollback status. Returns paginated results with total count.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'tool_name'      => array('type' => 'string', 'description' => 'Filter by tool name (e.g. wp_update_post).'),
+                            'operation_type'  => array('type' => 'string', 'description' => 'Filter by operation: create, update, delete, file_create, file_delete, unknown.'),
+                            'object_type'     => array('type' => 'string', 'description' => 'Filter by object type: post, page, comment, user, term, option, media, product, order, coupon, etc.'),
+                            'date_from'       => array('type' => 'string', 'description' => 'Start date filter (YYYY-MM-DD).'),
+                            'date_to'         => array('type' => 'string', 'description' => 'End date filter (YYYY-MM-DD).'),
+                            'rolled_back'     => array('type' => 'integer', 'description' => '0=active only, 1=rolled-back only. Omit for all.'),
+                            'page'            => array('type' => 'integer', 'description' => 'Page number (default 1).'),
+                            'per_page'        => array('type' => 'integer', 'description' => 'Results per page (default 25, max 100).'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'mcp_get_change_detail' => array(
+                    'name' => 'mcp_get_change_detail',
+                    'description' => 'Get full detail of a single changelog entry including before/after state snapshots and arguments used.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'id' => array('type' => 'integer', 'description' => 'Changelog entry ID.'),
+                        ),
+                        'required' => array('id'),
+                    ),
+                ),
+                'mcp_rollback_change' => array(
+                    'name' => 'mcp_rollback_change',
+                    'description' => 'Rollback a specific changelog entry, reverting the change to the before-state. Only works on entries that have not already been rolled back.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'id' => array('type' => 'integer', 'description' => 'Changelog entry ID to rollback.'),
+                        ),
+                        'required' => array('id'),
+                    ),
+                ),
+                'mcp_redo_change' => array(
+                    'name' => 'mcp_redo_change',
+                    'description' => 'Redo a previously rolled back changelog entry, re-applying the after-state. Only works on entries that have been rolled back.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'id' => array('type' => 'integer', 'description' => 'Changelog entry ID to redo.'),
+                        ),
+                        'required' => array('id'),
+                    ),
+                ),
+                'mcp_rollback_session' => array(
+                    'name' => 'mcp_rollback_session',
+                    'description' => 'Rollback all changes made in a specific session (by session_id), in reverse chronological order (LIFO). Returns count of changes rolled back.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'session_id' => array('type' => 'string', 'description' => 'Session ID to rollback all changes for.'),
+                        ),
+                        'required' => array('session_id'),
+                    ),
+                ),
             );
 
             // Merge Snippets tools if a snippet plugin is available
@@ -1450,6 +1518,12 @@ class StifliFlexMcpModel {
             'wp_update_nav_menu_item' => 'edit_theme_options',
             'wp_delete_nav_menu_item' => 'edit_theme_options',
             'wp_delete_nav_menu' => 'edit_theme_options',
+            // Changelog
+            'mcp_get_changelog' => 'manage_options',
+            'mcp_get_change_detail' => 'manage_options',
+            'mcp_rollback_change' => 'manage_options',
+            'mcp_redo_change' => 'manage_options',
+            'mcp_rollback_session' => 'manage_options',
         );
 
         // Merge WooCommerce capabilities if available
@@ -1510,6 +1584,26 @@ class StifliFlexMcpModel {
         if (!empty($required_cap) && !current_user_can($required_cap)) {
             return array('jsonrpc' => '2.0', 'id' => $id, 'error' => array('code' => 'permission_denied', 'message' => 'Insufficient permissions to execute ' . $tool . '. Required capability: ' . $required_cap));
         }
+
+        // Change Tracker: capture before-state for mutating tools
+        $changeSnapshot = null;
+        if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) && get_option( 'sflmcp_changelog_enabled', true ) ) {
+            $changeTracker  = StifliFlexMcp_ChangeTracker::getInstance();
+            $changeSnapshot = $changeTracker->captureBeforeState( $tool, is_array( $args ) ? $args : array() );
+        }
+
+        // Helper closure to record a tracked change before any early return
+        $recordChangeIfNeeded = function() use ( $tool, $args, &$changeSnapshot, &$r ) {
+            if ( null !== $changeSnapshot && ! isset( $r['error'] ) && class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+                try {
+                    $tracker = StifliFlexMcp_ChangeTracker::getInstance();
+                    $tracker->recordChange( $tool, is_array( $args ) ? $args : array(), $changeSnapshot, $r );
+                } catch ( \Exception $e ) {
+                    stifli_flex_mcp_log( 'ChangeTracker error: ' . $e->getMessage() );
+                }
+            }
+        };
+
         switch ($tool) {
             case 'mcp_ping':
                 $pingData = array(
@@ -3759,7 +3853,87 @@ class StifliFlexMcpModel {
                 
                 $addResultText($r, 'Site health: ' . wp_json_encode($health, JSON_PRETTY_PRINT));
                 break;
-                
+
+            /* ── Changelog / Audit Log Tools ───────────────────── */
+
+            case 'mcp_get_changelog':
+                $tracker  = StifliFlexMcp_ChangeTracker::getInstance();
+                $cl_page  = max( 1, intval( $args['page'] ?? 1 ) );
+                $cl_pp    = max( 1, min( 100, intval( $args['per_page'] ?? 25 ) ) );
+                $cl_f     = array( 'limit' => $cl_pp, 'offset' => ( $cl_page - 1 ) * $cl_pp );
+                if ( ! empty( $args['tool_name'] ) )      $cl_f['tool_name']      = sanitize_text_field( $args['tool_name'] );
+                if ( ! empty( $args['operation_type'] ) )  $cl_f['operation_type']  = sanitize_key( $args['operation_type'] );
+                if ( ! empty( $args['object_type'] ) )     $cl_f['object_type']     = sanitize_key( $args['object_type'] );
+                if ( ! empty( $args['date_from'] ) )       $cl_f['date_from']       = sanitize_text_field( $args['date_from'] ) . ' 00:00:00';
+                if ( ! empty( $args['date_to'] ) )         $cl_f['date_to']         = sanitize_text_field( $args['date_to'] ) . ' 23:59:59';
+                if ( isset( $args['rolled_back'] ) )       $cl_f['rolled_back']     = intval( $args['rolled_back'] );
+                $cl_data  = $tracker->getHistory( $cl_f );
+                $addResultText( $r, wp_json_encode( array(
+                    'page'     => $cl_page,
+                    'per_page' => $cl_pp,
+                    'total'    => $cl_data['total'],
+                    'rows'     => $cl_data['rows'],
+                ), JSON_PRETTY_PRINT ) );
+                break;
+
+            case 'mcp_get_change_detail':
+                $cl_id = intval( $args['id'] ?? 0 );
+                if ( ! $cl_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: id' );
+                    break;
+                }
+                global $wpdb;
+                $cl_tbl = $wpdb->prefix . 'sflmcp_changelog';
+                $cl_row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$cl_tbl}` WHERE id = %d", $cl_id ), ARRAY_A );
+                if ( ! $cl_row ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Changelog entry not found.' );
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( $cl_row, JSON_PRETTY_PRINT ) );
+                break;
+
+            case 'mcp_rollback_change':
+                $cl_id = intval( $args['id'] ?? 0 );
+                if ( ! $cl_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: id' );
+                    break;
+                }
+                $cl_res = StifliFlexMcp_ChangeTracker::getInstance()->rollback( $cl_id );
+                if ( $cl_res['success'] ) {
+                    $addResultText( $r, 'Rollback successful: ' . $cl_res['message'] );
+                } else {
+                    $r['error'] = array( 'code' => -32603, 'message' => $cl_res['message'] );
+                }
+                break;
+
+            case 'mcp_redo_change':
+                $cl_id = intval( $args['id'] ?? 0 );
+                if ( ! $cl_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: id' );
+                    break;
+                }
+                $cl_res = StifliFlexMcp_ChangeTracker::getInstance()->redo( $cl_id );
+                if ( $cl_res['success'] ) {
+                    $addResultText( $r, 'Redo successful: ' . $cl_res['message'] );
+                } else {
+                    $r['error'] = array( 'code' => -32603, 'message' => $cl_res['message'] );
+                }
+                break;
+
+            case 'mcp_rollback_session':
+                $cl_sid = sanitize_text_field( $args['session_id'] ?? '' );
+                if ( empty( $cl_sid ) ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: session_id' );
+                    break;
+                }
+                $cl_res = StifliFlexMcp_ChangeTracker::getInstance()->rollbackSession( $cl_sid );
+                if ( $cl_res['success'] ) {
+                    $addResultText( $r, sprintf( 'Session rollback complete: %d changes reverted. %s', $cl_res['rolled_back'], $cl_res['message'] ) );
+                } else {
+                    $r['error'] = array( 'code' => -32603, 'message' => $cl_res['message'] );
+                }
+                break;
+
             default:
                 // Try to route to WooCommerce modules if tool starts with wc_
                 if ( strpos( $tool, 'wc_' ) === 0 && class_exists( 'WooCommerce' ) ) {
@@ -3773,7 +3947,8 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Products' ) ) {
                         $result = StifliFlexMcp_WC_Products::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $r; // Return $r which was modified by reference
+                            $recordChangeIfNeeded();
+                            return $r;
                         }
                     }
                     
@@ -3781,7 +3956,8 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Orders' ) ) {
                         $result = StifliFlexMcp_WC_Orders::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $r; // Return $r which was modified by reference
+                            $recordChangeIfNeeded();
+                            return $r;
                         }
                     }
                     
@@ -3789,7 +3965,8 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Customers' ) ) {
                         $result = StifliFlexMcp_WC_Customers::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $r; // Return $r which was modified by reference
+                            $recordChangeIfNeeded();
+                            return $r;
                         }
                     }
                     
@@ -3797,7 +3974,8 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_Coupons' ) ) {
                         $result = StifliFlexMcp_WC_Coupons::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $r; // Return $r which was modified by reference
+                            $recordChangeIfNeeded();
+                            return $r;
                         }
                     }
                     
@@ -3805,7 +3983,8 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_WC_System' ) ) {
                         $result = StifliFlexMcp_WC_System::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
-                            return $r; // Return $r which was modified by reference
+                            $recordChangeIfNeeded();
+                            return $r;
                         }
                     }
                 }
@@ -3816,6 +3995,7 @@ class StifliFlexMcpModel {
                     if ( class_exists( 'StifliFlexMcp_Snippets' ) ) {
                         $result = StifliFlexMcp_Snippets::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
+                            $recordChangeIfNeeded();
                             return $r;
                         }
                     }
@@ -3823,17 +4003,25 @@ class StifliFlexMcpModel {
 
                 // Try Custom Tools (from sflmcp_custom_tools table)
                 if ( strpos( $tool, 'custom_' ) === 0 ) {
-                    return $this->dispatchCustomTool( $tool, $args, $rpcId, $r );
+                    $r = $this->dispatchCustomTool( $tool, $args, $id, $r );
+                    $recordChangeIfNeeded();
+                    return $r;
                 }
                 
                 // Try WordPress Abilities (ability_* tools from sflmcp_abilities table)
                 if ( strpos( $tool, 'ability_' ) === 0 ) {
-                    return $this->dispatchAbility( $tool, $args, $rpcId, $r );
+                    $r = $this->dispatchAbility( $tool, $args, $id, $r );
+                    $recordChangeIfNeeded();
+                    return $r;
                 }
                 
                 // If not handled by any WooCommerce module or unknown tool
                 $r['error'] = array('code' => -42609, 'message' => 'Unknown tool');
         }
+
+        // Change Tracker: record change if operation succeeded
+        $recordChangeIfNeeded();
+
         return $r;
     }
 

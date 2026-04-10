@@ -150,6 +150,7 @@ require_once __DIR__ . '/models/frame.php';
 require_once __DIR__ . '/models/dispatcher.php';
 require_once __DIR__ . '/models/req.php';
 require_once __DIR__ . '/models/model.php';
+require_once __DIR__ . '/models/class-change-tracker.php';
 require_once __DIR__ . '/controller.php';
 require_once __DIR__ . '/mod.php';
 
@@ -522,6 +523,13 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('fetch', 'Fetch content from a URL.', 'WordPress - Utilities', 1),
 		array('wp_generate_image', 'Generate an image using AI and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
 		array('wp_generate_video', 'Generate a video using AI (Google Veo or OpenAI Sora) and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
+		
+		// Changelog / Audit Log
+		array('mcp_get_changelog', 'Get the changelog/audit log of MCP tool operations with filters and pagination.', 'WordPress - Changelog', 1),
+		array('mcp_get_change_detail', 'Get full detail of a single changelog entry including before/after state.', 'WordPress - Changelog', 1),
+		array('mcp_rollback_change', 'Rollback a specific changelog entry to its before-state.', 'WordPress - Changelog', 1),
+		array('mcp_redo_change', 'Redo a previously rolled-back changelog entry.', 'WordPress - Changelog', 1),
+		array('mcp_rollback_session', 'Rollback all changes made in a specific session (LIFO order).', 'WordPress - Changelog', 1),
 	);
 	
 	// Snippet tools (requires WPCode or Code Snippets plugin)
@@ -1372,6 +1380,20 @@ function stifli_flex_mcp_ensure_clean_queue_event() {
 		$args = (isset($event->args) && is_array($event->args)) ? $event->args : array();
 		wp_unschedule_event($event->timestamp, 'sflmcp_clean_queue', $args);
 		wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'sflmcp_clean_queue');
+	}
+}
+
+function stifli_flex_mcp_ensure_clean_changelog_event() {
+	$event = wp_get_scheduled_event('sflmcp_clean_changelog');
+	if (!$event) {
+		wp_schedule_event(time() + DAY_IN_SECONDS, 'daily', 'sflmcp_clean_changelog');
+		return;
+	}
+	$schedule = isset($event->schedule) ? $event->schedule : '';
+	if ('daily' !== $schedule) {
+		$args = (isset($event->args) && is_array($event->args)) ? $event->args : array();
+		wp_unschedule_event($event->timestamp, 'sflmcp_clean_changelog', $args);
+		wp_schedule_event(time() + DAY_IN_SECONDS, 'daily', 'sflmcp_clean_changelog');
 	}
 }
 
@@ -2336,10 +2358,14 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_system_profiles();
 
+	// Changelog table (Change Tracker)
+	StifliFlexMcp_ChangeTracker::createTable();
+
 	// OAuth 2.1 tables
 	StifliFlexMcp_OAuth_Storage::create_tables();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
+	stifli_flex_mcp_ensure_clean_changelog_event();
 	stifli_flex_mcp_ensure_automation_cron();
 	
 	// Authentication now uses WordPress Application Passwords (no custom token needed)
@@ -2347,10 +2373,12 @@ function stifli_flex_mcp_activate() {
 
 function stifli_flex_mcp_deactivate() {
 	wp_clear_scheduled_hook('sflmcp_clean_queue');
+	wp_clear_scheduled_hook('sflmcp_clean_changelog');
 	wp_clear_scheduled_hook('sflmcp_process_automation_tasks');
 }
 
 add_action('sflmcp_clean_queue', 'stifli_flex_mcp_clean_queue');
+add_action('sflmcp_clean_changelog', 'stifli_flex_mcp_clean_changelog');
 function stifli_flex_mcp_clean_queue() {
 	global $wpdb;
 	$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_queue');
@@ -2365,6 +2393,14 @@ function stifli_flex_mcp_clean_queue() {
 	// Also clean expired OAuth codes and tokens.
 	if ( class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
 		StifliFlexMcp_OAuth_Storage::get_instance()->cleanup_expired();
+	}
+}
+
+function stifli_flex_mcp_clean_changelog() {
+	if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+		$days = intval( get_option( 'sflmcp_changelog_retention_days', 90 ) );
+		if ( $days < 1 ) { $days = 90; }
+		StifliFlexMcp_ChangeTracker::getInstance()->purge( $days );
 	}
 }
 

@@ -28,7 +28,7 @@ $sflmcp_drop_tables = static function ( array $tables, $wpdb, $wrap_table ) {
 };
 
 // Drop all plugin tables
-$sflmcp_drop_tables( array( 'sflmcp_queue', 'sflmcp_tools', 'sflmcp_profile_tools', 'sflmcp_profiles', 'sflmcp_custom_tools' ), $wpdb, $sflmcp_wrap_table );
+$sflmcp_drop_tables( array( 'sflmcp_queue', 'sflmcp_tools', 'sflmcp_profile_tools', 'sflmcp_profiles', 'sflmcp_custom_tools', 'sflmcp_changelog' ), $wpdb, $sflmcp_wrap_table );
 
 // Delete all plugin options
 delete_option('stifli_flex_mcp_token');
