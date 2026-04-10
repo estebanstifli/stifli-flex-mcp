@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WP Abilities Directory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  font-family: Arial;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 30px;
+}
+
+h1 { color: #38bdf8; }
+
+input {
+  padding: 10px;
+  width: 300px;
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid #334155;
+  text-align: left;
+}
+
+th {
+  cursor: pointer;
+  background: #1e293b;
+}
+
+tr:hover {
+  background: #1e293b;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.high { background: #22c55e; }
+.medium { background: #f59e0b; }
+.noise { background: #ef4444; }
+
+</style>
+</head>
+
+<body>
+
+<h1>🚀 WordPress Abilities Plugins Directory</h1>
+
+<p>Auto-generated from 58,000+ plugins</p>
+
+<input type="text" id="search" placeholder="Search plugin...">
+
+<table id="table">
+<thead>
+<tr>
+  <th onclick="sortTable(0)">Plugin</th>
+  <th onclick="sortTable(1)">Score</th>
+  <th onclick="sortTable(2)">Confidence</th>
+  <th>Patterns</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<script>
+const CSV_URL = "plugin_ranked_summary.csv";
+
+let tableData = [];
+
+fetch(CSV_URL)
+  .then(res => res.text())
+  .then(text => {
+    const rows = text.split("\n").slice(1);
+    rows.forEach(row => {
+      const cols = row.split(",");
+      if (cols.length < 10) return;
+
+      tableData.push({
+        slug: cols[0],
+        score: parseInt(cols[10]) || 0,
+        confidence: cols[11],
+        patterns: cols[12]
+      });
+    });
+
+    renderTable(tableData);
+  });
+
+function renderTable(data) {
+  const tbody = document.querySelector("tbody");
+  tbody.innerHTML = "";
+
+  data.forEach(p => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        <a href="https://wordpress.org/plugins/${p.slug}/" target="_blank">
+          ${p.slug}
+        </a>
+      </td>
+      <td>${p.score}</td>
+      <td><span class="badge ${p.confidence}">${p.confidence}</span></td>
+      <td>${p.patterns}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("search").addEventListener("input", e => {
+  const value = e.target.value.toLowerCase();
+  const filtered = tableData.filter(p =>
+    p.slug.toLowerCase().includes(value)
+  );
+  renderTable(filtered);
+});
+
+function sortTable(n) {
+  tableData.sort((a, b) => {
+    if (n === 1) return b.score - a.score;
+    return a.slug.localeCompare(b.slug);
+  });
+  renderTable(tableData);
+}
+</script>
+
+</body>
+</html>
