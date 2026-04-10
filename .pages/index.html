@@ -7,18 +7,36 @@
 
 <style>
 body {
-  font-family: Arial;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: #0f172a;
-  color: #e2e8f0;
-  padding: 30px;
+  color: #cbd5e1;
+  padding: 30px 40px;
+  line-height: 1.6;
 }
 
-h1 { color: #38bdf8; }
+h1 { color: #38bdf8; margin-bottom: 4px; }
+
+p { color: #64748b; margin-top: 0; }
 
 input {
-  padding: 10px;
-  width: 300px;
+  padding: 10px 14px;
+  width: 340px;
   margin-bottom: 20px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus {
+  border-color: #38bdf8;
+}
+
+input::placeholder {
+  color: #475569;
 }
 
 table {
@@ -27,29 +45,76 @@ table {
 }
 
 th, td {
-  padding: 10px;
-  border-bottom: 1px solid #334155;
+  padding: 12px 14px;
+  border-bottom: 1px solid #1e293b;
   text-align: left;
+  font-size: 14px;
 }
 
 th {
   cursor: pointer;
   background: #1e293b;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+th:hover {
+  color: #38bdf8;
 }
 
 tr:hover {
+  background: #1e293b88;
+}
+
+/* Plugin slug link */
+td a {
+  color: #7dd3fc;
+  text-decoration: none;
+  font-weight: 500;
+  font-family: 'Cascadia Code', 'Fira Code', 'SF Mono', monospace;
+  font-size: 13px;
+  padding: 3px 7px;
+  border-radius: 4px;
   background: #1e293b;
+  border: 1px solid #334155;
+  transition: all 0.15s;
+}
+
+td a:hover {
+  color: #fff;
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+}
+
+/* Score column */
+td:nth-child(2) {
+  font-weight: 700;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Patterns column */
+td:nth-child(4) {
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .badge {
-  padding: 4px 8px;
-  border-radius: 5px;
-  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.high { background: #22c55e; }
-.medium { background: #f59e0b; }
-.noise { background: #ef4444; }
+.high { background: #166534; color: #4ade80; }
+.medium { background: #713f12; color: #fbbf24; }
+.noise { background: #7f1d1d; color: #fca5a5; }
 
 </style>
 </head>
