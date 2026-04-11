@@ -1052,6 +1052,7 @@
 			email_subject: $('#sflmcp-email-subject').val(),
 			webhook_url: $('#sflmcp-webhook-url').val(),
 			draft_post_type: $('#sflmcp-draft-post-type').val(),
+			token_budget_monthly: $('#sflmcp-token-budget').val() || 0,
 			status: status
 		};
 

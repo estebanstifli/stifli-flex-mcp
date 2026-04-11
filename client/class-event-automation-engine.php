@@ -857,6 +857,11 @@ class StifliFlexMcp_Event_Automation_Engine {
 
 		$engine = StifliFlexMcp_Automation_Engine::get_instance();
 
+		// Set source context for event-triggered automations
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			StifliFlexMcp_ChangeTracker::setSourceContext( 'event_automation', 'Event Automation' );
+		}
+
 		// Build a temporary task-like object
 		$task = (object) array(
 			'id'            => 0,

@@ -27,6 +27,13 @@ class StifliFlexMcp_ChangeTracker {
 	private $session_id = '';
 
 	/**
+	 * Source context for the current request.
+	 * Set by callers before dispatching tools.
+	 * array( 'source' => string, 'label' => string )
+	 */
+	private static $source_context = null;
+
+	/**
 	 * Tools that mutate data and should be tracked.
 	 * Mapped to their operation type and object type so the tracker knows
 	 * what to snapshot before execution.
@@ -36,15 +43,15 @@ class StifliFlexMcp_ChangeTracker {
 	private static $tracked_tools = array(
 		// --- WordPress Posts / Pages ---
 		'wp_create_post'            => array( 'create', 'post', null ),
-		'wp_update_post'            => array( 'update', 'post', 'post_id' ),
-		'wp_delete_post'            => array( 'delete', 'post', 'post_id' ),
+		'wp_update_post'            => array( 'update', 'post', 'ID' ),
+		'wp_delete_post'            => array( 'delete', 'post', 'ID' ),
 		'wp_create_page'            => array( 'create', 'page', null ),
-		'wp_update_page'            => array( 'update', 'page', 'page_id' ),
-		'wp_delete_page'            => array( 'delete', 'page', 'page_id' ),
+		'wp_update_page'            => array( 'update', 'page', 'ID' ),
+		'wp_delete_page'            => array( 'delete', 'page', 'ID' ),
 		// --- Comments ---
 		'wp_create_comment'         => array( 'create', 'comment', null ),
-		'wp_update_comment'         => array( 'update', 'comment', 'comment_id' ),
-		'wp_delete_comment'         => array( 'delete', 'comment', 'comment_id' ),
+		'wp_update_comment'         => array( 'update', 'comment', 'comment_ID' ),
+		'wp_delete_comment'         => array( 'delete', 'comment', 'comment_ID' ),
 		// --- User Meta ---
 		'wp_update_user_meta'       => array( 'update', 'user_meta', 'user_id' ),
 		'wp_delete_user_meta'       => array( 'delete', 'user_meta', 'user_id' ),
@@ -62,8 +69,8 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_upload_image'           => array( 'file_create', 'media', null ),
 		'wp_generate_image'         => array( 'file_create', 'media', null ),
 		'wp_generate_video'         => array( 'file_create', 'media', null ),
-		'wp_update_media_item'      => array( 'update', 'media', 'attachment_id' ),
-		'wp_delete_media_item'      => array( 'file_delete', 'media', 'attachment_id' ),
+		'wp_update_media_item'      => array( 'update', 'media', 'ID' ),
+		'wp_delete_media_item'      => array( 'file_delete', 'media', 'ID' ),
 		// --- Navigation Menus ---
 		'wp_create_nav_menu'        => array( 'create', 'nav_menu', null ),
 		'wp_add_nav_menu_item'      => array( 'create', 'nav_menu_item', null ),
@@ -71,8 +78,8 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_delete_nav_menu_item'   => array( 'delete', 'nav_menu_item', 'menu_item_id' ),
 		'wp_delete_nav_menu'        => array( 'delete', 'nav_menu', 'menu_id' ),
 		// --- Options / Settings ---
-		'wp_update_option'          => array( 'update', 'option', 'option_name' ),
-		'wp_delete_option'          => array( 'delete', 'option', 'option_name' ),
+		'wp_update_option'          => array( 'update', 'option', 'option' ),
+		'wp_delete_option'          => array( 'delete', 'option', 'option' ),
 		'wp_update_settings'        => array( 'update', 'option', null ),
 		// --- Post Meta ---
 		'wp_update_post_meta'       => array( 'update', 'post_meta', 'post_id' ),
@@ -148,6 +155,57 @@ class StifliFlexMcp_ChangeTracker {
 		$this->session_id = sanitize_text_field( (string) $session_id );
 	}
 
+	/**
+	 * Set the source context for the current request.
+	 *
+	 * @param string $source One of: mcp, chat_agent, copilot, automation, event_automation, wp_admin.
+	 * @param string $label  Human-readable label (e.g. OAuth client name, task name).
+	 */
+	public static function setSourceContext( $source, $label = '' ) {
+		self::$source_context = array(
+			'source' => sanitize_key( $source ),
+			'label'  => sanitize_text_field( (string) $label ),
+		);
+	}
+
+	/**
+	 * Auto-detect the source of the current request.
+	 *
+	 * @return array array( 'source' => string, 'label' => string )
+	 */
+	private static function detectSource() {
+		if ( null !== self::$source_context ) {
+			return self::$source_context;
+		}
+
+		// Auto-detect from request context
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$action = isset( $_REQUEST['action'] ) ? sanitize_key( $_REQUEST['action'] ) : '';
+			if ( 'sflmcp_client_execute_tool' === $action ) {
+				return array( 'source' => 'chat_agent', 'label' => 'AI Chat Agent' );
+			}
+			if ( 'sflmcp_copilot_execute_tool' === $action ) {
+				return array( 'source' => 'copilot', 'label' => 'Copilot Editor' );
+			}
+		}
+
+		if ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) {
+			return array( 'source' => 'automation', 'label' => 'Scheduled Task' );
+		}
+
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return array( 'source' => 'mcp', 'label' => '' );
+		}
+
+		return array( 'source' => 'wp_admin', 'label' => '' );
+	}
+
+	/** Reset source context (for test isolation). */
+	public static function resetSourceContext() {
+		self::$source_context = null;
+	}
+
 	/* ------------------------------------------------------------------ */
 	/*  PUBLIC API : before / after / rollback / redo / query              */
 	/* ------------------------------------------------------------------ */
@@ -202,6 +260,7 @@ class StifliFlexMcp_ChangeTracker {
 		$after_json   = null !== $after_state ? wp_json_encode( $after_state, JSON_UNESCAPED_SLASHES ) : null;
 		$args_json    = wp_json_encode( $args, JSON_UNESCAPED_SLASHES );
 		$file_backup  = isset( $snapshot['file_backup_path'] ) ? $snapshot['file_backup_path'] : null;
+		$src          = self::detectSource();
 
 		$wpdb->insert(
 			$this->table,
@@ -216,11 +275,13 @@ class StifliFlexMcp_ChangeTracker {
 				'before_state'     => $before_json,
 				'after_state'      => $after_json,
 				'file_backup_path' => $file_backup,
+				'source'           => $src['source'],
+				'source_label'     => $src['label'] ? $src['label'] : null,
 				'user_id'          => get_current_user_id(),
 				'ip_address'       => self::getClientIp(),
-				'created_at'       => gmdate( 'Y-m-d H:i:s' ),
+				'created_at'       => current_time( 'mysql' ),
 			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
 	}
 
@@ -247,7 +308,7 @@ class StifliFlexMcp_ChangeTracker {
 		if ( $result['success'] ) {
 			$wpdb->update(
 				$this->table,
-				array( 'rolled_back' => 1, 'rolled_back_at' => gmdate( 'Y-m-d H:i:s' ) ),
+				array( 'rolled_back' => 1, 'rolled_back_at' => current_time( 'mysql' ) ),
 				array( 'id' => $changelog_id ),
 				array( '%d', '%s' ),
 				array( '%d' )
@@ -359,6 +420,10 @@ class StifliFlexMcp_ChangeTracker {
 			$where[]  = 'rolled_back = %d';
 			$values[] = (int) $filters['rolled_back'];
 		}
+		if ( ! empty( $filters['source'] ) ) {
+			$where[]  = 'source = %s';
+			$values[] = $filters['source'];
+		}
 
 		$limit  = isset( $filters['limit'] ) ? max( 1, intval( $filters['limit'] ) ) : 50;
 		$offset = isset( $filters['offset'] ) ? max( 0, intval( $filters['offset'] ) ) : 0;
@@ -394,7 +459,7 @@ class StifliFlexMcp_ChangeTracker {
 	 */
 	public function purge( $days = 30 ) {
 		global $wpdb;
-		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
+		$cutoff = wp_date( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
 
 		// Clean file backups first
 		$backups = $wpdb->get_col(
@@ -692,6 +757,54 @@ class StifliFlexMcp_ChangeTracker {
 				}
 				break;
 
+			case 'comment':
+				$comment = get_comment( (int) $object_id, ARRAY_A );
+				if ( $comment ) {
+					return $comment;
+				}
+				break;
+
+			case 'term':
+			case 'category':
+			case 'tag':
+				$taxonomy = 'term';
+				if ( 'category' === $obj_type ) {
+					$taxonomy = 'category';
+				} elseif ( 'tag' === $obj_type ) {
+					$taxonomy = 'post_tag';
+				} elseif ( isset( $args['taxonomy'] ) ) {
+					$taxonomy = $args['taxonomy'];
+				}
+				$term = get_term( (int) $object_id, $taxonomy, ARRAY_A );
+				if ( $term && ! is_wp_error( $term ) ) {
+					return $term;
+				}
+				break;
+
+			case 'media':
+				$post = get_post( (int) $object_id, ARRAY_A );
+				if ( $post ) {
+					$post['meta'] = get_post_meta( (int) $object_id );
+					$post['file'] = get_attached_file( (int) $object_id );
+					return $post;
+				}
+				break;
+
+			case 'nav_menu':
+				$menu = wp_get_nav_menu_object( (int) $object_id );
+				if ( $menu ) {
+					return (array) $menu;
+				}
+				break;
+
+			case 'nav_menu_item':
+				$post = get_post( (int) $object_id, ARRAY_A );
+				if ( $post ) {
+					$post['meta'] = get_post_meta( (int) $object_id );
+					return $post;
+				}
+				break;
+
 			case 'option':
 				return array( 'option_name' => $object_id, 'option_value' => get_option( $object_id ) );
 
@@ -699,6 +812,13 @@ class StifliFlexMcp_ChangeTracker {
 				$mk = isset( $args['meta_key'] ) ? $args['meta_key'] : null;
 				if ( $mk ) {
 					return array( 'meta_key' => $mk, 'meta_value' => get_post_meta( (int) $object_id, $mk, true ) );
+				}
+				break;
+
+			case 'user_meta':
+				$mk = isset( $args['meta_key'] ) ? $args['meta_key'] : null;
+				if ( $mk ) {
+					return array( 'meta_key' => $mk, 'meta_value' => get_user_meta( (int) $object_id, $mk, true ) );
 				}
 				break;
 
@@ -712,12 +832,92 @@ class StifliFlexMcp_ChangeTracker {
 				}
 				break;
 
+			case 'product_variation':
+				if ( function_exists( 'wc_get_product' ) ) {
+					$v = wc_get_product( (int) $object_id );
+					if ( $v ) {
+						return $v->get_data();
+					}
+				}
+				break;
+
+			case 'product_category':
+			case 'product_tag':
+				$taxonomy = 'product_category' === $obj_type ? 'product_cat' : 'product_tag';
+				$term = get_term( (int) $object_id, $taxonomy, ARRAY_A );
+				if ( $term && ! is_wp_error( $term ) ) {
+					return $term;
+				}
+				break;
+
 			case 'order':
 				if ( function_exists( 'wc_get_order' ) ) {
 					$o = wc_get_order( (int) $object_id );
 					if ( $o ) {
 						return $o->get_data();
 					}
+				}
+				break;
+
+			case 'coupon':
+				$post = get_post( (int) $object_id, ARRAY_A );
+				if ( $post ) {
+					$post['meta'] = get_post_meta( (int) $object_id );
+					return $post;
+				}
+				break;
+
+			case 'tax_rate':
+				global $wpdb;
+				$rate = $wpdb->get_row(
+					$wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id = %d", (int) $object_id ),
+					ARRAY_A
+				);
+				if ( $rate ) {
+					return $rate;
+				}
+				break;
+
+			case 'shipping_zone':
+				if ( class_exists( 'WC_Shipping_Zone' ) ) {
+					$zone = new WC_Shipping_Zone( (int) $object_id );
+					return array(
+						'zone_id'    => $zone->get_id(),
+						'zone_name'  => $zone->get_zone_name(),
+						'zone_order' => $zone->get_zone_order(),
+					);
+				}
+				break;
+
+			case 'payment_gateway':
+				if ( function_exists( 'WC' ) ) {
+					$gateways = WC()->payment_gateways()->payment_gateways();
+					if ( isset( $gateways[ $object_id ] ) ) {
+						return array(
+							'id'       => $object_id,
+							'enabled'  => $gateways[ $object_id ]->enabled,
+							'settings' => $gateways[ $object_id ]->settings,
+						);
+					}
+				}
+				break;
+
+			case 'wc_setting':
+				if ( ! empty( $object_id ) ) {
+					return array( 'option_value' => get_option( $object_id ) );
+				}
+				break;
+
+			case 'webhook':
+				if ( class_exists( 'WC_Webhook' ) ) {
+					$wh = new WC_Webhook( (int) $object_id );
+					return array(
+						'webhook_id'   => $wh->get_id(),
+						'name'         => $wh->get_name(),
+						'status'       => $wh->get_status(),
+						'topic'        => $wh->get_topic(),
+						'delivery_url' => $wh->get_delivery_url(),
+					);
 				}
 				break;
 		}
@@ -1322,6 +1522,8 @@ class StifliFlexMcp_ChangeTracker {
 			before_state LONGTEXT DEFAULT NULL,
 			after_state LONGTEXT DEFAULT NULL,
 			file_backup_path VARCHAR(500) DEFAULT NULL,
+			source VARCHAR(50) DEFAULT NULL,
+			source_label VARCHAR(255) DEFAULT NULL,
 			user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			ip_address VARCHAR(45) DEFAULT NULL,
 			rolled_back TINYINT(1) NOT NULL DEFAULT 0,
@@ -1332,10 +1534,26 @@ class StifliFlexMcp_ChangeTracker {
 			KEY idx_tool (tool_name),
 			KEY idx_object (object_type, object_id),
 			KEY idx_created (created_at),
-			KEY idx_rolled_back (rolled_back)
+			KEY idx_rolled_back (rolled_back),
+			KEY idx_source (source)
 		) {$charset_collate};";
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+	}
+
+	/**
+	 * Add source columns to existing tables (migration).
+	 * Safe to call multiple times — checks before altering.
+	 */
+	public static function migrateAddSourceColumns() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_changelog';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+		if ( ! in_array( 'source', $cols, true ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `source` VARCHAR(50) DEFAULT NULL AFTER `file_backup_path`, ADD COLUMN `source_label` VARCHAR(255) DEFAULT NULL AFTER `source`, ADD KEY `idx_source` (`source`)" );
+		}
 	}
 }
 

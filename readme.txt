@@ -4,8 +4,8 @@ Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
-Tested up to: 7.0
-Stable tag: 3.1.1
+Tested up to: 6.9
+Stable tag: 3.1.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -187,50 +187,6 @@ StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard se
 * Safe Mode — non-sensitive reads only
 * Development/Debug — diagnostic tools
 
-**🌐 Supported AI Platforms**
-
-StifLi Flex MCP works with all major AI platforms — both as a built-in AI Chat Agent and as an MCP server for external AI clients:
-
-**Built-in AI Chat Agent (direct API integration):**
-
-* **OpenAI** — GPT-5.4, GPT-5.4 Pro, GPT-5.3, GPT-5.3 Mini
-* **Anthropic Claude** — Claude 4.6 Opus, Claude 4.6 Sonnet, Claude 4.5 Haiku
-* **Google Gemini** — Gemini 3.1 Pro, Gemini 3 Flash, Gemini 3.1 Flash-Lite
-
-**MCP Server (external AI clients via OAuth 2.1):**
-
-* **Claude Desktop** — Full MCP support via Connectors with automatic OAuth flow
-* **ChatGPT** — via Apps & Connectors with OAuth 2.1 authentication
-* **LibreChat** — Full MCP integration with SSE streaming
-* **Cline** — VS Code AI extension with native MCP support
-* **Roo Code** — VS Code AI agent with MCP client
-* **Cursor** — AI code editor with MCP server support
-* **Windsurf** — AI-powered IDE with MCP integration
-* **Claude Code** — CLI-based AI agent with MCP support
-* **Any MCP-compatible client** — JSON-RPC 2.0 + SSE + OAuth 2.1
-
-**Local & Cloud AI Providers (via MCP clients):**
-
-* **Groq** — Llama 3.3, Mixtral, Gemma 2 (fast inference)
-* **Azure OpenAI** — Azure-hosted OpenAI deployments
-* **AWS Bedrock** — Claude, Llama, Titan models
-* **Ollama / LM Studio** — Local self-hosted models (no external data transmission)
-* **Custom endpoints** — Connect any MCP-compatible server or proxy
-
-**📐 MCP Spec Compliance**
-
-StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-06-18 specification](https://modelcontextprotocol.io/specification/2025-06-18/) — the latest version of the MCP standard:
-
-* JSON-RPC 2.0 protocol with `initialize`, `tools/list`, and `tools/call` methods
-* Server-Sent Events (SSE) streaming at `/wp-json/stifli-flex-mcp/v1/sse`
-* OAuth 2.1 with PKCE (S256) for secure MCP client authentication
-* Dynamic Client Registration (RFC 7591) for automatic MCP client onboarding
-* Protected Resource Metadata (RFC 9728) and Authorization Server Metadata (RFC 8414) auto-discovery
-* 117+ discoverable MCP tools with structured JSON input schemas
-* Tool capability: `tools.listChanged = true` for dynamic MCP tool management
-* Session-based message queue with heartbeat and idle timeout
-* Compatible with WordPress Application Passwords as fallback authentication
-
 **Demo & Installation Tutorial:**
 
 https://youtu.be/KHr1zt2R8Ew
@@ -374,31 +330,6 @@ It takes less than a minute:
 
 The plugin uses OAuth 2.1 — no API keys or passwords needed. Your session stays active for up to 90 days.
 
-= OAuth works but Claude/ChatGPT says "Authorization failed" =
-
-This is usually caused by Cloudflare's "Block AI Bots" setting (enabled by default on new domains) or similar WAF rules from Sucuri, Wordfence, SiteGround, WP Engine, etc.
-
-**What happens:** The OAuth consent screen works fine (it runs in your browser), but after the token exchange, the AI backend servers (Anthropic, OpenAI) try to reach your MCP endpoint — and the firewall blocks them as bot traffic, returning a 403 before the request ever reaches WordPress.
-
-**How to confirm:** Check your firewall logs. You'll see the OAuth/token requests succeed but subsequent MCP requests from Anthropic or OpenAI IPs are blocked.
-
-**Option 1 — Disable AI bot blocking:**
-
-* **Cloudflare:** Dashboard → Security → Settings → turn off "Block AI Bots". Note: this is all-or-nothing — you cannot allow only Anthropic/OpenAI while blocking others.
-* **Sucuri / Wordfence / other WAFs:** Whitelist the AI provider's IP ranges or user agents (e.g., `python-httpx` for Anthropic, `ChatGPT-User` for OpenAI).
-
-**Option 2 — Use Application Passwords (bypasses the firewall):**
-
-If you cannot change your firewall settings, use WordPress Application Passwords instead of OAuth. This connects directly from Claude Desktop on your machine, bypassing the AI provider's proxy entirely:
-
-1. Go to **Users → Your Profile** in WordPress admin
-2. Scroll to **Application Passwords** section
-3. Enter a name (e.g., "Claude Desktop") and click **Add New Application Password**
-4. Copy the generated password (shown only once)
-5. In `claude_desktop_config.json`, configure the MCP server with your username and the application password as HTTP Basic Auth headers
-
-This method works even behind strict firewalls because all requests come from your own computer.
-
 == Screenshots ==
 
 1. AI Copilot - Floating assistant inside the WordPress editor with quick actions
@@ -409,32 +340,7 @@ This method works even behind strict firewalls because all requests come from yo
 6. MCP Server - Tool profiles management
 7. MCP Server - WordPress and WooCommerce tools management
 
-== External Services ==
-
-This plugin connects to third-party AI services to power the AI Chat Agent, AI Copilot, image generation, and video generation features. **No data is transmitted until you explicitly configure an API key and initiate a request.**
-
-**What data is sent:** Your WordPress content (post text, metadata, product details) as included in AI prompts, and MCP tool execution results when using the MCP server with external AI clients.
-
-**When data is sent:** Only when you have configured an API key for a provider AND actively send a message to the AI agent or Copilot, or when an external MCP client makes an authenticated request to the MCP server endpoint.
-
-**Supported services and their policies:**
-
-* **OpenAI** — Used for GPT models (AI Chat Agent, AI Copilot), DALL·E / gpt-image-1 (image generation), and Sora (video generation)
-  [Terms of Use](https://openai.com/policies/terms-of-use) | [Privacy Policy](https://openai.com/policies/privacy-policy)
-
-* **Anthropic Claude** — Used for Claude AI models (AI Chat Agent, AI Copilot)
-  [Terms of Service](https://www.anthropic.com/legal/consumer-terms) | [Privacy Policy](https://www.anthropic.com/legal/privacy)
-
-* **Google Gemini** — Used for Gemini AI models (AI Chat Agent, AI Copilot), Imagen 4 (image generation), and Veo 2/3 (video generation)
-  [Terms of Service](https://ai.google.dev/terms) | [Privacy Policy](https://policies.google.com/privacy)
-
-When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
-
 == Changelog ==
-
-= 3.1.1 =
-* Compatibility: Tested with WordPress 7.0 RC
-
 = 3.1.0 =
 * **🔐 OAuth 2.1 Authentication** — Connect ChatGPT, Claude Desktop, and any MCP client with one click!
 * New: Full OAuth 2.1 implementation with PKCE (S256) — the most secure authentication standard

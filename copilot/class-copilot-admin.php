@@ -1274,6 +1274,10 @@ class StifliFlexMcp_Copilot_Admin {
 			wp_send_json_error( array( 'message' => __( 'MCP model not available', 'stifli-flex-mcp' ) ) );
 		}
 
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			StifliFlexMcp_ChangeTracker::setSourceContext( 'copilot', 'Copilot Editor' );
+		}
+
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );
 
 		if ( isset( $result['error'] ) ) {

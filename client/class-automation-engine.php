@@ -229,6 +229,21 @@ class StifliFlexMcp_Automation_Engine {
 			// Lock for up to 3 minutes (longer than MAX_EXECUTION_TIME to prevent stale locks)
 			set_transient( $lock_key, time(), 3 * MINUTE_IN_SECONDS );
 
+			// Move next_run to the future BEFORE executing.
+			// Primary guard against duplicate execution: even if the transient lock
+			// fails (DB race, object-cache flush), the SQL WHERE next_run <= NOW()
+			// will no longer pick up this task during execution.
+			$future_next_run = $this->calculate_next_run( $task );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update(
+				$table,
+				array( 'next_run' => $future_next_run ),
+				array( 'id' => $task->id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			stifli_flex_mcp_log( sprintf( '[Automation] Task %d next_run moved to %s before execution', $task->id, $future_next_run ) );
+
 			try {
 				$this->execute_task( $task );
 			} finally {
@@ -274,6 +289,32 @@ class StifliFlexMcp_Automation_Engine {
 			stifli_flex_mcp_log( sprintf( '[Automation] Switched to user ID: %d for task execution', $task_user_id ) );
 		} else {
 			stifli_flex_mcp_log( '[Automation] Warning: No user available for task execution, tools may fail' );
+		}
+
+		// Check monthly token budget before execution
+		$budget = intval( $task->token_budget_monthly ?? 0 );
+		if ( $budget > 0 ) {
+			$tokens_used = $this->get_monthly_tokens_used( $task->id );
+			if ( $tokens_used >= $budget ) {
+				stifli_flex_mcp_log( sprintf(
+					'[Automation] Task %d skipped: monthly token budget exceeded (%d / %d)',
+					$task->id, $tokens_used, $budget
+				) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->update(
+					$task_table,
+					array(
+						'last_run'   => current_time( 'mysql', true ),
+						'last_error' => sprintf( __( 'Monthly token budget exceeded: %d / %d tokens used', 'stifli-flex-mcp' ), $tokens_used, $budget ),
+						'next_run'   => $this->calculate_next_run( $task ),
+					),
+					array( 'id' => $task->id ),
+					array( '%s', '%s', '%s' ),
+					array( '%d' )
+				);
+				wp_set_current_user( $original_user_id );
+				return array( 'success' => false, 'error' => 'Token budget exceeded' );
+			}
 		}
 
 		// Create log entry
@@ -789,6 +830,10 @@ class StifliFlexMcp_Automation_Engine {
 			);
 		}
 
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			StifliFlexMcp_ChangeTracker::setSourceContext( 'automation', 'Automation Task' );
+		}
+
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );
 
 		stifli_flex_mcp_log( '[Automation] execute_tool - END ' . $tool_name . ' error=' . ( isset( $result['error'] ) ? 'yes' : 'no' ) );
@@ -1156,6 +1201,30 @@ class StifliFlexMcp_Automation_Engine {
 			array( '%d', '%d', '%s', '%s' ),
 			array( '%d' )
 		);
+	}
+
+	/**
+	 * Get total tokens used by a task in the current calendar month.
+	 *
+	 * @param int $task_id Task ID.
+	 * @return int Total tokens (input + output) used this month.
+	 */
+	private function get_monthly_tokens_used( $task_id ) {
+		global $wpdb;
+
+		$table        = $wpdb->prefix . 'sflmcp_automation_logs';
+		$period_start = gmdate( 'Y-m-01 00:00:00' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$spent = $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(tokens_input), 0) + COALESCE(SUM(tokens_output), 0)
+			 FROM {$table}
+			 WHERE task_id = %d AND status = 'success' AND started_at >= %s",
+			$task_id,
+			$period_start
+		) );
+
+		return intval( $spent );
 	}
 
 	/**

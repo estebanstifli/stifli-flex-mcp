@@ -456,10 +456,31 @@ class StifliFlexMcp_Automation_Admin {
 				</div>
 			</div>
 
-			<!-- Step 5: Output Actions -->
+			<!-- Step 5: Guardrails -->
 			<div class="sflmcp-form-section">
 				<h2>
 					<span class="sflmcp-step-number">5</span>
+					<?php esc_html_e( 'Guardrails', 'stifli-flex-mcp' ); ?>
+				</h2>
+
+				<div class="sflmcp-form-row">
+					<label for="sflmcp-token-budget"><?php esc_html_e( 'Monthly Token Budget', 'stifli-flex-mcp' ); ?></label>
+					<div style="display: flex; align-items: center; gap: 10px;">
+						<input type="number" id="sflmcp-token-budget" name="token_budget_monthly" min="0" step="1000"
+							   value="<?php echo esc_attr( $task ? intval( $task->token_budget_monthly ?? 0 ) : '0' ); ?>"
+							   placeholder="0" style="max-width: 180px;">
+						<span class="description"><?php esc_html_e( 'tokens/month (0 = unlimited)', 'stifli-flex-mcp' ); ?></span>
+					</div>
+					<p class="description" style="margin-top: 6px;">
+						<?php esc_html_e( 'If the task exceeds this budget in a calendar month, it will be skipped until next month. Tip: a typical daily blog post task uses ~10,000-30,000 tokens per execution.', 'stifli-flex-mcp' ); ?>
+					</p>
+				</div>
+			</div>
+
+			<!-- Step 6: Output Actions -->
+			<div class="sflmcp-form-section">
+				<h2>
+					<span class="sflmcp-step-number">6</span>
 					<?php esc_html_e( 'Output Actions', 'stifli-flex-mcp' ); ?>
 				</h2>
 
@@ -828,6 +849,8 @@ class StifliFlexMcp_Automation_Admin {
 		}
 
 		// Build output config
+		$token_budget_monthly = isset( $_POST['token_budget_monthly'] ) ? intval( $_POST['token_budget_monthly'] ) : 0;
+
 		$output_action = 'log';
 		$output_config = array();
 
@@ -864,6 +887,7 @@ class StifliFlexMcp_Automation_Admin {
 			'allowed_tools'     => $allowed_tools,
 			'output_action'     => $output_action,
 			'output_config'     => wp_json_encode( $output_config ),
+			'token_budget_monthly' => $token_budget_monthly,
 			'status'            => $status,
 			'next_run'          => $next_run,
 			'updated_at'        => $now,

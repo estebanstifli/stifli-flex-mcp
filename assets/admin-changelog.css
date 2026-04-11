@@ -144,10 +144,29 @@
 	color: #50575e;
 }
 
-/* Action buttons */
+/* Source badge */
+.sflmcp-source-badge {
+	display: inline-block;
+	padding: 1px 6px;
+	border-radius: 3px;
+	font-size: 11px;
+	background: #f0f0f1;
+	color: #50575e;
+	white-space: nowrap;
+}
+.sflmcp-source-badge.source-mcp { background: #e7f5fe; color: #0073aa; }
+.sflmcp-source-badge.source-chat_agent { background: #edfaef; color: #00a32a; }
+.sflmcp-source-badge.source-copilot { background: #f3e8fd; color: #7b2cf5; }
+.sflmcp-source-badge.source-automation { background: #fdf8e7; color: #996800; }
+.sflmcp-source-badge.source-event_automation { background: #fef1e6; color: #b35900; }
+.sflmcp-source-badge.source-wp_admin { background: #f0f0f1; color: #50575e; }
+
+/* Action buttons — always visible */
 .sflmcp-changelog-table .row-actions {
 	display: flex;
-	gap: 6px;
+	gap: 4px;
+	visibility: visible;
+	white-space: nowrap;
 }
 
 .sflmcp-changelog-table .row-actions .button {
@@ -155,6 +174,7 @@
 	height: 26px;
 	line-height: 24px;
 	font-size: 12px;
+	white-space: nowrap;
 }
 
 .sflmcp-btn-rollback { color: #d63638 !important; border-color: #d63638 !important; }

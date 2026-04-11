@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.1.1
+Version: 3.1.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1975,7 +1975,20 @@ function stifli_flex_mcp_maybe_create_automation_tasks_table() {
 
 	$like = $wpdb->esc_like($table_name);
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name) {
+	$table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like)) === $table_name;
+
+	if ( $table_exists ) {
+		// Migration: add columns if missing (for sites that already had the table).
+		$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table_name", 0 ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+		if ( is_array( $columns ) && ! in_array( 'last_success', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE $table_name ADD COLUMN last_success datetime DEFAULT NULL AFTER last_run" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+		}
+		if ( is_array( $columns ) && ! in_array( 'last_error', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE $table_name ADD COLUMN last_error text DEFAULT NULL AFTER last_success" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+		}
+		if ( is_array( $columns ) && ! in_array( 'token_budget_monthly', $columns, true ) ) {
+			$wpdb->query( "ALTER TABLE $table_name ADD COLUMN token_budget_monthly int(11) DEFAULT 0 AFTER max_retries" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+		}
 		return;
 	}
 
@@ -2000,6 +2013,7 @@ function stifli_flex_mcp_maybe_create_automation_tasks_table() {
 		last_error text DEFAULT NULL,
 		retry_count int(11) DEFAULT 0,
 		max_retries int(11) DEFAULT 3,
+		token_budget_monthly int(11) DEFAULT 0,
 		created_by bigint(20) DEFAULT 0,
 		created_at datetime DEFAULT CURRENT_TIMESTAMP,
 		updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -2011,15 +2025,6 @@ function stifli_flex_mcp_maybe_create_automation_tasks_table() {
 
 	require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 	dbDelta($sql);
-
-	// Migration: add columns if missing (for sites that already had the table).
-	$columns = $wpdb->get_col( "SHOW COLUMNS FROM $table_name", 0 ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
-	if ( is_array( $columns ) && ! in_array( 'last_success', $columns, true ) ) {
-		$wpdb->query( "ALTER TABLE $table_name ADD COLUMN last_success datetime DEFAULT NULL AFTER last_run" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
-	}
-	if ( is_array( $columns ) && ! in_array( 'last_error', $columns, true ) ) {
-		$wpdb->query( "ALTER TABLE $table_name ADD COLUMN last_error text DEFAULT NULL AFTER last_success" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
-	}
 }
 
 /**
@@ -2360,6 +2365,7 @@ function stifli_flex_mcp_activate() {
 
 	// Changelog table (Change Tracker)
 	StifliFlexMcp_ChangeTracker::createTable();
+	StifliFlexMcp_ChangeTracker::migrateAddSourceColumns();
 
 	// OAuth 2.1 tables
 	StifliFlexMcp_OAuth_Storage::create_tables();
@@ -2519,6 +2525,11 @@ add_action('plugins_loaded', function() {
 	// OAuth 2.1 tables (idempotent - CREATE TABLE IF NOT EXISTS)
 	if ( class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
 		StifliFlexMcp_OAuth_Storage::create_tables();
+	}
+
+	// Changelog source columns migration
+	if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+		StifliFlexMcp_ChangeTracker::migrateAddSourceColumns();
 	}
 	
 	stifli_flex_mcp_seed_custom_tools_examples();

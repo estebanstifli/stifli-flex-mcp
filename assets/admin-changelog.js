@@ -19,10 +19,11 @@
 			object_type: $('#sflmcp-filter-object').val(),
 			date_from: $('#sflmcp-filter-date-from').val(),
 			date_to: $('#sflmcp-filter-date-to').val(),
-			rolled_back: $('#sflmcp-filter-status').val()
+			rolled_back: $('#sflmcp-filter-status').val(),
+			source: $('#sflmcp-filter-source').val()
 		};
 
-		$('#sflmcp-changelog-body').html('<tr><td colspan="8" style="text-align:center;padding:20px;">' + sflmcpChangelog.i18n.loading + '</td></tr>');
+		$('#sflmcp-changelog-body').html('<tr><td colspan="9" style="text-align:center;padding:20px;">' + sflmcpChangelog.i18n.loading + '</td></tr>');
 
 		$.post(sflmcpChangelog.ajaxUrl, filters, function(response) {
 			if (response.success) {
@@ -41,7 +42,7 @@
 		$body.empty();
 
 		if (!rows || rows.length === 0) {
-			$body.html('<tr><td colspan="8"><div class="sflmcp-changelog-empty"><span class="dashicons dashicons-clipboard"></span><p>' + sflmcpChangelog.i18n.noEntries + '</p></div></td></tr>');
+			$body.html('<tr><td colspan="9"><div class="sflmcp-changelog-empty"><span class="dashicons dashicons-clipboard"></span><p>' + sflmcpChangelog.i18n.noEntries + '</p></div></td></tr>');
 			return;
 		}
 
@@ -53,11 +54,11 @@
 			tr.append($('<td>').html('<code>' + escHtml(row.tool_name) + '</code>'));
 			tr.append($('<td>').html('<span class="sflmcp-op-badge op-' + escHtml(row.operation_type) + '">' + escHtml(row.operation_type) + '</span>'));
 			tr.append($('<td>').html('<span class="sflmcp-obj-badge">' + escHtml(row.object_type) + '</span>' + (row.object_id ? ' <strong>#' + escHtml(row.object_id) + '</strong>' : '')));
+			tr.append($('<td>').html('<span class="sflmcp-source-badge source-' + escHtml(row.source || 'unknown') + '">' + escHtml(row.source_display || row.source || '-') + '</span>'));
 			tr.append($('<td>').text(row.created_at));
 
 			// User
-			var userText = row.user_id > 0 ? sflmcpChangelog.i18n.user + ' #' + row.user_id : '-';
-			tr.append($('<td>').text(userText));
+			tr.append($('<td>').text(row.user_display || '-'));
 
 			// Status
 			var statusText = rolledBack ? '↩ ' + sflmcpChangelog.i18n.rolledBack : '✓ ' + sflmcpChangelog.i18n.active;
@@ -65,7 +66,7 @@
 
 			// Actions
 			var actions = $('<td>').addClass('row-actions');
-			actions.append($('<button>').addClass('button button-small').text(sflmcpChangelog.i18n.viewDetail).attr('data-id', row.id).on('click', function() { showDetail(row.id); }));
+			actions.append($('<button>').addClass('button button-small').text('🔍 ' + (sflmcpChangelog.i18n.viewDetail || sflmcpChangelog.i18n.detail || 'View')).attr('data-id', row.id).on('click', function() { showDetail(row.id); }));
 
 			if (rolledBack) {
 				actions.append($('<button>').addClass('button button-small sflmcp-btn-redo').text(sflmcpChangelog.i18n.redo).attr('data-id', row.id).on('click', function() { redoChange(row.id); }));
@@ -117,8 +118,9 @@
 				$('#detail-operation').html('<span class="sflmcp-op-badge op-' + escHtml(row.operation_type) + '">' + escHtml(row.operation_type) + '</span>');
 				$('#detail-object').text(row.object_type + (row.object_id ? ' #' + row.object_id : ''));
 				$('#detail-subtype').text(row.object_subtype || '-');
-				$('#detail-user').text(row.user_id > 0 ? sflmcpChangelog.i18n.user + ' #' + row.user_id : '-');
+				$('#detail-user').text(row.user_display || (row.user_id > 0 ? 'User #' + row.user_id : '-'));
 				$('#detail-ip').text(row.ip_address || '-');
+				$('#detail-source').text(row.source_display || row.source || '-');
 				$('#detail-date').text(row.created_at);
 				$('#detail-session').text(row.session_id || '-');
 				$('#detail-status').text(parseInt(row.rolled_back) === 1 ? sflmcpChangelog.i18n.rolledBack + ' (' + row.rolled_back_at + ')' : sflmcpChangelog.i18n.active);
@@ -230,7 +232,7 @@
 
 		$('#sflmcp-filter-apply').on('click', function() { loadChangelog(1); });
 		$('#sflmcp-filter-reset').on('click', function() {
-			$('#sflmcp-filter-tool, #sflmcp-filter-operation, #sflmcp-filter-object, #sflmcp-filter-status').val('');
+			$('#sflmcp-filter-tool, #sflmcp-filter-operation, #sflmcp-filter-object, #sflmcp-filter-status, #sflmcp-filter-source').val('');
 			$('#sflmcp-filter-date-from, #sflmcp-filter-date-to').val('');
 			loadChangelog(1);
 		});

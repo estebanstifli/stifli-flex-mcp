@@ -1299,6 +1299,10 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 		stifli_flex_mcp_log( '[AJAX] execute_tool START (sync): ' . $tool_name );
 		$ajax_start = microtime( true );
 
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			StifliFlexMcp_ChangeTracker::setSourceContext( 'chat_agent', 'AI Chat Agent' );
+		}
+
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );
 
 		$elapsed = round( microtime( true ) - $ajax_start, 1 );
@@ -1394,6 +1398,11 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 		}
 
 		$start  = microtime( true );
+
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			StifliFlexMcp_ChangeTracker::setSourceContext( 'chat_agent', 'AI Chat Agent' );
+		}
+
 		$result = $stifliFlexMcp->model->dispatchTool( $job['tool'], $job['args'], null );
 		$elapsed = round( microtime( true ) - $start, 1 );
 
