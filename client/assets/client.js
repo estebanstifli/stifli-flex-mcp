@@ -21,8 +21,16 @@
         settings: sflmcpClient.settings || {},
         advanced: sflmcpClient.advanced || {},
         saveTimeout: null,
-        advancedSaveTimeout: null
+        advancedSaveTimeout: null,
+        sessionId: generateSessionId()
     };
+
+    /**
+     * Generate a unique session ID for change tracking
+     */
+    function generateSessionId() {
+        return 'chat-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10);
+    }
 
     // Cache DOM elements (chat tab)
     let $chatMessages, $chatInput, $sendBtn, $clearBtn;
@@ -957,7 +965,8 @@
                     action: 'sflmcp_client_execute_tool',
                     nonce: sflmcpClient.nonce,
                     tool_name: toolCall.name,
-                    arguments: JSON.stringify(toolCall.arguments)
+                    arguments: JSON.stringify(toolCall.arguments),
+                    session_id: state.sessionId
                 },
                 success: function(response) {
                     var elapsed = Math.round((Date.now() - ajaxStart) / 1000);
@@ -1214,6 +1223,7 @@
         state.chatHistory = [];
         state.pendingToolCalls = [];
         state.currentToolIndex = 0;
+        state.sessionId = generateSessionId();
         
         // Clear history on server
         $.ajax({

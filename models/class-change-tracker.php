@@ -155,6 +155,11 @@ class StifliFlexMcp_ChangeTracker {
 		$this->session_id = sanitize_text_field( (string) $session_id );
 	}
 
+	/** Get the current session id. */
+	public function getSessionId() {
+		return $this->session_id;
+	}
+
 	/**
 	 * Set the source context for the current request.
 	 *
@@ -1548,10 +1553,10 @@ class StifliFlexMcp_ChangeTracker {
 	public static function migrateAddSourceColumns() {
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_changelog';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix is safe.
 		$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
 		if ( ! in_array( 'source', $cols, true ) ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- schema migration for plugin-managed changelog table.
 			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `source` VARCHAR(50) DEFAULT NULL AFTER `file_backup_path`, ADD COLUMN `source_label` VARCHAR(255) DEFAULT NULL AFTER `source`, ADD KEY `idx_source` (`source`)" );
 		}
 	}

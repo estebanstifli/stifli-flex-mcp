@@ -25,6 +25,7 @@
         busy: false,
         conversation: [],
         xhr: null,
+        sessionId: 'copilot-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10),
     };
 
     /* -------------------------------------------------------
@@ -601,10 +602,11 @@
                 url: sflmcpCopilot.ajaxUrl,
                 method: 'POST',
                 data: {
-                    action:    'sflmcp_copilot_execute_tool',
-                    nonce:     sflmcpCopilot.nonce,
-                    tool_name: name,
-                    arguments: JSON.stringify(tc.arguments || {}),
+                    action:     'sflmcp_copilot_execute_tool',
+                    nonce:      sflmcpCopilot.nonce,
+                    tool_name:  name,
+                    arguments:  JSON.stringify(tc.arguments || {}),
+                    session_id: state.sessionId,
                 },
                 success: function (res) {
                     var output;

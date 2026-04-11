@@ -208,7 +208,7 @@ class StifliFlexMcp_Automation_Engine {
 		$now   = current_time( 'mysql', true );
 
 		// Get active tasks that are due
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$tasks = $wpdb->get_results( $wpdb->prepare(
 			"SELECT * FROM {$table} WHERE status = 'active' AND next_run <= %s ORDER BY next_run ASC LIMIT 3",
 			$now
@@ -261,7 +261,7 @@ class StifliFlexMcp_Automation_Engine {
 	public function execute_task( $task ) {
 		global $wpdb;
 
-		set_time_limit( 120 );
+		set_time_limit( 120 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- long-running AI task requires extended execution time.
 
 		$task_table = $wpdb->prefix . 'sflmcp_automation_tasks';
 		$log_table  = $wpdb->prefix . 'sflmcp_automation_logs';
@@ -305,7 +305,8 @@ class StifliFlexMcp_Automation_Engine {
 					$task_table,
 					array(
 						'last_run'   => current_time( 'mysql', true ),
-						'last_error' => sprintf( __( 'Monthly token budget exceeded: %d / %d tokens used', 'stifli-flex-mcp' ), $tokens_used, $budget ),
+						/* translators: %1$d: tokens used this month, %2$d: monthly token budget */
+					'last_error' => sprintf( __( 'Monthly token budget exceeded: %1$d / %2$d tokens used', 'stifli-flex-mcp' ), $tokens_used, $budget ),
 						'next_run'   => $this->calculate_next_run( $task ),
 					),
 					array( 'id' => $task->id ),
@@ -319,6 +320,12 @@ class StifliFlexMcp_Automation_Engine {
 
 		// Create log entry
 		$log_id = $this->create_log_entry( $task->id, $task->prompt );
+
+		// Set session_id for ChangeTracker — groups all tool calls in this task run.
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			StifliFlexMcp_ChangeTracker::setSourceContext( 'automation', 'Automation Task' );
+			StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( 'auto-' . intval( $task->id ) . '-' . time() );
+		}
 
 		try {
 			// Get settings from AI Chat Agent configuration
@@ -427,6 +434,14 @@ class StifliFlexMcp_Automation_Engine {
 			'tools_executed' => array(),
 			'tokens_used'    => 0,
 		);
+
+		// Ensure session_id is set (may already be set by event automation caller).
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+			if ( ! $tracker->getSessionId() ) {
+				$tracker->setSessionId( 'auto-internal-' . wp_generate_uuid4() );
+			}
+		}
 
 		try {
 			// Get settings from AI Chat Agent configuration
@@ -1215,7 +1230,7 @@ class StifliFlexMcp_Automation_Engine {
 		$table        = $wpdb->prefix . 'sflmcp_automation_logs';
 		$period_start = gmdate( 'Y-m-01 00:00:00' );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$spent = $wpdb->get_var( $wpdb->prepare(
 			"SELECT COALESCE(SUM(tokens_input), 0) + COALESCE(SUM(tokens_output), 0)
 			 FROM {$table}
@@ -1534,7 +1549,7 @@ class StifliFlexMcp_Automation_Engine {
 
 		$table = $wpdb->prefix . 'sflmcp_automation_tasks';
 		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$task = $wpdb->get_row( $wpdb->prepare(
 			"SELECT * FROM {$table} WHERE id = %d",
 			$task_id

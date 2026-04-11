@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class StifliFlexMcp_Copilot_Admin {
 
 	/** Asset version — bump when JS/CSS change. */
-	const ASSET_VERSION = '1.1.0';
+	const ASSET_VERSION = '1.1.1';
 
 	/** Nonce action used by all Copilot AJAX calls. */
 	const NONCE_ACTION = 'sflmcp_copilot';
@@ -1276,6 +1276,10 @@ class StifliFlexMcp_Copilot_Admin {
 
 		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
 			StifliFlexMcp_ChangeTracker::setSourceContext( 'copilot', 'Copilot Editor' );
+			$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
+			if ( $session_id ) {
+				StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( $session_id );
+			}
 		}
 
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );

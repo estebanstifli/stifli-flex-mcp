@@ -123,6 +123,12 @@
 				$('#detail-source').text(row.source_display || row.source || '-');
 				$('#detail-date').text(row.created_at);
 				$('#detail-session').text(row.session_id || '-');
+				// Show session rollback button if session exists and entry is not yet rolled back
+				if (row.session_id && parseInt(row.rolled_back) !== 1) {
+					$('#sflmcp-rollback-session-btn').data('session-id', row.session_id).show();
+				} else {
+					$('#sflmcp-rollback-session-btn').hide();
+				}
 				$('#detail-status').text(parseInt(row.rolled_back) === 1 ? sflmcpChangelog.i18n.rolledBack + ' (' + row.rolled_back_at + ')' : sflmcpChangelog.i18n.active);
 
 				$('#detail-args').text(formatJson(row.args_json));
@@ -144,6 +150,24 @@
 		}, function(response) {
 			if (response.success) {
 				alert(response.data.message);
+				loadChangelog(currentPage);
+			} else {
+				alert(sflmcpChangelog.i18n.error + ': ' + (response.data || ''));
+			}
+		});
+	}
+
+	function rollbackSession(sessionId) {
+		if (!confirm(sflmcpChangelog.i18n.confirmSessionRollback)) return;
+
+		$.post(sflmcpChangelog.ajaxUrl, {
+			action: 'sflmcp_rollback_session',
+			nonce: sflmcpChangelog.nonce,
+			session_id: sessionId
+		}, function(response) {
+			if (response.success) {
+				alert(response.data.message);
+				$('#sflmcp-modal-overlay').removeClass('active');
 				loadChangelog(currentPage);
 			} else {
 				alert(sflmcpChangelog.i18n.error + ': ' + (response.data || ''));
@@ -243,6 +267,12 @@
 			if (e.target === this) {
 				$('#sflmcp-modal-overlay').removeClass('active');
 			}
+		});
+
+		// Session rollback button inside detail modal
+		$('#sflmcp-rollback-session-btn').on('click', function() {
+			var sid = $(this).data('session-id');
+			if (sid) { rollbackSession(sid); }
 		});
 
 		$(document).on('keydown', function(e) {

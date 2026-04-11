@@ -56,7 +56,7 @@ class StifliFlexMcp_Event_Trigger_Registry {
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_event_triggers';
 		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE is_active = 1 ORDER BY category, trigger_name", ARRAY_A );
 		
 		if ( ! empty( $rows ) ) {

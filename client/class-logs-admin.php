@@ -33,6 +33,7 @@ class StifliFlexMcp_Logs_Admin {
 		add_action( 'wp_ajax_sflmcp_get_changelog_detail', array( $this, 'ajax_get_changelog_detail' ) );
 		add_action( 'wp_ajax_sflmcp_rollback_change', array( $this, 'ajax_rollback_change' ) );
 		add_action( 'wp_ajax_sflmcp_redo_change', array( $this, 'ajax_redo_change' ) );
+		add_action( 'wp_ajax_sflmcp_rollback_session', array( $this, 'ajax_rollback_session' ) );
 		add_action( 'wp_ajax_sflmcp_purge_changelog', array( $this, 'ajax_purge_changelog' ) );
 		add_action( 'wp_ajax_sflmcp_export_changelog', array( $this, 'ajax_export_changelog' ) );
 		add_action( 'wp_ajax_sflmcp_toggle_changelog', array( $this, 'ajax_toggle_changelog' ) );
@@ -106,6 +107,8 @@ class StifliFlexMcp_Logs_Admin {
 					'next'             => __( 'Next', 'stifli-flex-mcp' ),
 					'entries'          => __( 'entries', 'stifli-flex-mcp' ),
 					'page'             => __( 'Page', 'stifli-flex-mcp' ),
+					'confirmSessionRollback' => __( 'Are you sure you want to rollback ALL changes from this session? This will undo every change made during this conversation.', 'stifli-flex-mcp' ),
+					'rollbackSession'  => __( 'Rollback Entire Session', 'stifli-flex-mcp' ),
 				),
 			) );
 		} else {
@@ -350,7 +353,7 @@ class StifliFlexMcp_Logs_Admin {
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'IP Address', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-ip"></span></div>
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Source', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-source"></span></div>
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Date', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-date"></span></div>
-						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Session', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-session"></span></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Session', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-session"></span> <button id="sflmcp-rollback-session-btn" class="button button-small sflmcp-btn-rollback" style="display:none;margin-left:8px;" title="<?php esc_attr_e( 'Rollback Entire Session', 'stifli-flex-mcp' ); ?>">⏪ <?php esc_html_e( 'Rollback Entire Session', 'stifli-flex-mcp' ); ?></button></div>
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Status', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-status"></span></div>
 					</div>
 					<h4><?php esc_html_e( 'Arguments', 'stifli-flex-mcp' ); ?></h4>
@@ -521,6 +524,7 @@ class StifliFlexMcp_Logs_Admin {
 		// Compute stats
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_changelog';
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix is safe; SchemaChange is a false positive triggered by the string 'create' in WHERE values.
 		$stats = array(
 			'total'       => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" ),
 			'creates'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE operation_type IN ('create','file_create')" ),
@@ -528,6 +532,7 @@ class StifliFlexMcp_Logs_Admin {
 			'deletes'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE operation_type IN ('delete','file_delete')" ),
 			'rolled_back' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}` WHERE rolled_back = 1" ),
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		wp_send_json_success( array(
 			'rows'  => $result['rows'],
@@ -623,6 +628,30 @@ class StifliFlexMcp_Logs_Admin {
 
 		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
 		$result = $tracker->redo( $id );
+
+		if ( $result['success'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( $result['message'] );
+		}
+	}
+
+	/**
+	 * AJAX handler: Rollback all changes in a session
+	 */
+	public function ajax_rollback_session() {
+		check_ajax_referer( 'sflmcp_changelog', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Insufficient permissions' );
+		}
+
+		$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
+		if ( empty( $session_id ) ) {
+			wp_send_json_error( 'Invalid session ID' );
+		}
+
+		$tracker = StifliFlexMcp_ChangeTracker::getInstance();
+		$result = $tracker->rollbackSession( $session_id );
 
 		if ( $result['success'] ) {
 			wp_send_json_success( $result );

@@ -86,7 +86,7 @@ class StifliFlexMcp_Event_Automation_Engine {
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_event_automations';
 		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$this->active_automations = $wpdb->get_results(
 			"SELECT * FROM {$table} WHERE status = 'active'",
 			ARRAY_A
@@ -860,6 +860,7 @@ class StifliFlexMcp_Event_Automation_Engine {
 		// Set source context for event-triggered automations
 		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
 			StifliFlexMcp_ChangeTracker::setSourceContext( 'event_automation', 'Event Automation' );
+			StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( 'event-' . wp_generate_uuid4() );
 		}
 
 		// Build a temporary task-like object
@@ -948,7 +949,7 @@ class StifliFlexMcp_Event_Automation_Engine {
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_event_automations';
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$wpdb->query( $wpdb->prepare(
 			"UPDATE {$table} SET run_count = run_count + 1, last_run = %s WHERE id = %d",
 			current_time( 'mysql' ),

@@ -300,6 +300,15 @@ class StifliFlexMcp {
 		$qp = $request->get_param('token') ? 'present' : 'none';
 		$hdr = $request->get_header('Authorization') ? 'present' : 'none';
 		stifli_flex_mcp_log(sprintf('handleDirectJsonRPC: id=%s method=%s header=%s query=%s', $id, $method, $hdr, $qp));
+
+		// Set session_id for ChangeTracker — use query param or generate per request.
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			$sess = sanitize_text_field( $request->get_param( 'session_id' ) );
+			if ( ! $sess ) {
+				$sess = 'mcp-' . wp_generate_uuid4();
+			}
+			StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( $sess );
+		}
 		if (json_last_error() !== JSON_ERROR_NONE) {
 			return new WP_REST_Response(array(
 				'jsonrpc' => '2.0',
@@ -448,7 +457,10 @@ class StifliFlexMcp {
 		}
 
 		// Pass session_id to ChangeTracker for grouping
-		if ( $sess && class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+			if ( ! $sess ) {
+				$sess = 'sse-' . wp_generate_uuid4();
+			}
 			StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( $sess );
 		}
 

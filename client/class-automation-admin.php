@@ -261,7 +261,7 @@ class StifliFlexMcp_Automation_Admin {
 		if ( $edit_id > 0 ) {
 			global $wpdb;
 			$table = $wpdb->prefix . 'sflmcp_automation_tasks';
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 			$task = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $edit_id ) );
 		}
 		?>
@@ -803,7 +803,7 @@ class StifliFlexMcp_Automation_Admin {
 			$where = $wpdb->prepare( ' WHERE status = %s', $status );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$tasks = $wpdb->get_results( "SELECT * FROM {$table}{$where} ORDER BY created_at DESC" );
 
 		wp_send_json_success( array( 'tasks' => $tasks ) );
@@ -971,7 +971,7 @@ class StifliFlexMcp_Automation_Admin {
 
 		// If activating, recalculate next_run
 		if ( 'active' === $status ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 			$task = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $task_id ) );
 			if ( $task ) {
 				$data['next_run']    = $this->engine->calculate_next_run( $task );
@@ -1053,7 +1053,7 @@ class StifliFlexMcp_Automation_Admin {
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
 
-		set_time_limit( 120 );
+		set_time_limit( 120 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- long-running AI task requires extended execution time.
 
 		$prompt        = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : '';
 		$system_prompt = isset( $_POST['system_prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['system_prompt'] ) ) : '';
@@ -1084,7 +1084,7 @@ class StifliFlexMcp_Automation_Admin {
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
 		}
 
-		set_time_limit( 120 );
+		set_time_limit( 120 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- long-running AI task requires extended execution time.
 
 		$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
 
@@ -1139,7 +1139,7 @@ class StifliFlexMcp_Automation_Admin {
 
 		$where = implode( ' AND ', $where_clauses );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table names from $wpdb->prefix are safe; dynamic WHERE built from prepare()d clauses.
 		$logs = $wpdb->get_results( $wpdb->prepare(
 			"SELECT l.*, t.task_name 
 			 FROM {$logs_table} l 
@@ -1151,7 +1151,7 @@ class StifliFlexMcp_Automation_Admin {
 		) );
 
 		// Get tasks for filter dropdown
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix is safe.
 		$tasks = $wpdb->get_results( "SELECT id, task_name FROM {$tasks_table} ORDER BY task_name" );
 
 		// Calculate stats

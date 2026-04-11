@@ -3884,6 +3884,7 @@ class StifliFlexMcpModel {
                 }
                 global $wpdb;
                 $cl_tbl = $wpdb->prefix . 'sflmcp_changelog';
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
                 $cl_row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$cl_tbl}` WHERE id = %d", $cl_id ), ARRAY_A );
                 if ( ! $cl_row ) {
                     $r['error'] = array( 'code' => -32602, 'message' => 'Changelog entry not found.' );
@@ -3928,7 +3929,7 @@ class StifliFlexMcpModel {
                 }
                 $cl_res = StifliFlexMcp_ChangeTracker::getInstance()->rollbackSession( $cl_sid );
                 if ( $cl_res['success'] ) {
-                    $addResultText( $r, sprintf( 'Session rollback complete: %d changes reverted. %s', $cl_res['rolled_back'], $cl_res['message'] ) );
+                    $addResultText( $r, 'Session rollback complete. ' . $cl_res['message'] );
                 } else {
                     $r['error'] = array( 'code' => -32603, 'message' => $cl_res['message'] );
                 }

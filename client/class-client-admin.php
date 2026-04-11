@@ -148,7 +148,7 @@ class StifliFlexMcp_Client_Admin {
 			'sflmcp-client',
 			plugin_dir_url( __FILE__ ) . 'assets/client.js',
 			array( 'jquery' ),
-			'1.0.8',
+			'1.0.9',
 			true
 		);
 
@@ -361,9 +361,9 @@ class StifliFlexMcp_Client_Admin {
 		// Get enabled tools count
 		global $wpdb;
 		$tools_table = $wpdb->prefix . 'sflmcp_tools';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$enabled_tools = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tools_table} WHERE enabled = 1" );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$total_tools = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tools_table}" );
 		$configure_url = admin_url( 'admin.php?page=sflmcp-server&tab=profiles' );
 		?>
@@ -1290,7 +1290,8 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 
 		// ── Async path for long-running tools ──────────────────────────────
 		if ( in_array( $tool_name, self::$async_tools, true ) ) {
-			$job_id = $this->start_async_tool( $tool_name, $arguments );
+			$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
+			$job_id = $this->start_async_tool( $tool_name, $arguments, $session_id );
 			wp_send_json_success( array( 'async' => true, 'job_id' => $job_id ) );
 			return; // wp_send_json_success calls die(), but return for clarity.
 		}
@@ -1301,6 +1302,10 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 
 		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
 			StifliFlexMcp_ChangeTracker::setSourceContext( 'chat_agent', 'AI Chat Agent' );
+			$session_id = isset( $_POST['session_id'] ) ? sanitize_text_field( wp_unslash( $_POST['session_id'] ) ) : '';
+			if ( $session_id ) {
+				StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( $session_id );
+			}
 		}
 
 		$result = $stifliFlexMcp->model->dispatchTool( $tool_name, $arguments, null );
@@ -1338,15 +1343,16 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 	 * @param array  $arguments  Tool arguments.
 	 * @return string Job UUID.
 	 */
-	private function start_async_tool( $tool_name, $arguments ) {
+	private function start_async_tool( $tool_name, $arguments, $session_id = '' ) {
 		$job_id = wp_generate_uuid4();
 
 		set_transient( 'sflmcp_job_' . $job_id, array(
-			'status'  => 'running',
-			'user_id' => get_current_user_id(),
-			'tool'    => $tool_name,
-			'args'    => $arguments,
-			'started' => time(),
+			'status'     => 'running',
+			'user_id'    => get_current_user_id(),
+			'tool'       => $tool_name,
+			'args'       => $arguments,
+			'session_id' => $session_id,
+			'started'    => time(),
 		), 600 ); // 10 min TTL.
 
 		if ( function_exists( 'fastcgi_finish_request' ) ) {
@@ -1401,6 +1407,9 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 
 		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
 			StifliFlexMcp_ChangeTracker::setSourceContext( 'chat_agent', 'AI Chat Agent' );
+			if ( ! empty( $job['session_id'] ) ) {
+				StifliFlexMcp_ChangeTracker::getInstance()->setSessionId( $job['session_id'] );
+			}
 		}
 
 		$result = $stifliFlexMcp->model->dispatchTool( $job['tool'], $job['args'], null );

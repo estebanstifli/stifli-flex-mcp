@@ -224,7 +224,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 		if ( $edit_id > 0 ) {
 			global $wpdb;
 			$table = $wpdb->prefix . 'sflmcp_event_automations';
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 			$automation = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $edit_id ), ARRAY_A );
 		}
 
@@ -623,7 +623,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 
 		$where_sql = implode( ' AND ', $where );
 		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe; dynamic WHERE built from prepare()d clauses.
 		$automations = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY created_at DESC", ARRAY_A );
 
 		// Get trigger names
@@ -654,8 +654,8 @@ class StifliFlexMcp_Event_Automation_Admin {
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_event_automations';
 		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$automation = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
+			$automation = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
 
 		if ( ! $automation ) {
 			wp_send_json_error( array( 'message' => __( 'Automation not found', 'stifli-flex-mcp' ) ) );
@@ -830,7 +830,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 		if ( ! empty( $_POST['include_tools'] ) ) {
 			global $wpdb;
 			$tools_table = $wpdb->prefix . 'sflmcp_tools';
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 			$tools = $wpdb->get_results( "SELECT tool_name, tool_description, category FROM {$tools_table} WHERE enabled = 1 ORDER BY category, tool_name", ARRAY_A );
 			$response['tools'] = array_map( function( $t ) {
 				return array(
@@ -874,7 +874,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 
 		$where_sql = implode( ' AND ', $where );
 		
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table names from $wpdb->prefix are safe; dynamic WHERE built from prepare()d clauses.
 		$logs = $wpdb->get_results( 
 			"SELECT l.*, a.automation_name 
 			 FROM {$logs_table} l 
@@ -886,7 +886,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 		);
 
 		// Get automations for filter dropdown
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$automations = $wpdb->get_results( "SELECT id, automation_name FROM {$auto_table} ORDER BY automation_name", ARRAY_A );
 
 		wp_send_json_success( array( 

@@ -67,7 +67,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// OAuth Clients (Dynamic Client Registration - RFC 7591)
 		$clients_table = $wpdb->prefix . 'sflmcp_oauth_clients';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- CREATE TABLE for plugin-managed OAuth table.
 		$wpdb->query(
 			"CREATE TABLE IF NOT EXISTS {$clients_table} (
 				id BIGINT UNSIGNED AUTO_INCREMENT,
@@ -87,7 +87,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// Authorization Codes (temporary, single-use)
 		$codes_table = $wpdb->prefix . 'sflmcp_oauth_codes';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- CREATE TABLE for plugin-managed OAuth table.
 		$wpdb->query(
 			"CREATE TABLE IF NOT EXISTS {$codes_table} (
 				id BIGINT UNSIGNED AUTO_INCREMENT,
@@ -109,7 +109,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// Access Tokens + Refresh Tokens
 		$tokens_table = $wpdb->prefix . 'sflmcp_oauth_tokens';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- CREATE TABLE for plugin-managed OAuth table.
 		$wpdb->query(
 			"CREATE TABLE IF NOT EXISTS {$tokens_table} (
 				id BIGINT UNSIGNED AUTO_INCREMENT,
@@ -223,7 +223,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		$table = $wpdb->prefix . 'sflmcp_oauth_clients';
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		return $wpdb->get_row(
 			$wpdb->prepare( "SELECT * FROM {$table} WHERE client_id = %s", $client_id )
 		);
@@ -318,7 +318,7 @@ class StifliFlexMcp_OAuth_Storage {
 		$now       = gmdate( 'Y-m-d H:i:s' );
 
 		// Atomically mark as used and return.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$table} SET used = 1 WHERE code_hash = %s AND used = 0 AND expires_at > %s",
@@ -331,7 +331,7 @@ class StifliFlexMcp_OAuth_Storage {
 			return null;
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		return $wpdb->get_row(
 			$wpdb->prepare( "SELECT * FROM {$table} WHERE code_hash = %s", $code_hash )
 		);
@@ -413,7 +413,7 @@ class StifliFlexMcp_OAuth_Storage {
 		$table = $wpdb->prefix . 'sflmcp_oauth_tokens';
 		$now   = gmdate( 'Y-m-d H:i:s' );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		return $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT * FROM {$table} WHERE access_token_hash = %s AND access_expires_at > %s AND revoked = 0",
@@ -437,7 +437,7 @@ class StifliFlexMcp_OAuth_Storage {
 		$now   = gmdate( 'Y-m-d H:i:s' );
 
 		// A grant is still usable if either the access token or the refresh token hasn't expired.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$count = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(*) FROM {$table} WHERE client_id = %s AND user_id = %d AND revoked = 0 AND (access_expires_at > %s OR refresh_expires_at > %s)",
@@ -466,7 +466,7 @@ class StifliFlexMcp_OAuth_Storage {
 		$now   = gmdate( 'Y-m-d H:i:s' );
 
 		// Find and revoke old token pair atomically.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$old = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT * FROM {$table} WHERE refresh_token_hash = %s AND client_id = %s AND refresh_expires_at > %s AND revoked = 0",
@@ -481,7 +481,7 @@ class StifliFlexMcp_OAuth_Storage {
 		}
 
 		// Revoke old token pair.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- plugin-managed OAuth table.
 		$wpdb->update(
 			$table,
 			array( 'revoked' => 1 ),
@@ -509,7 +509,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// Try access token first (or as hinted).
 		if ( 'refresh_token' !== $token_type_hint ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$table} SET revoked = 1 WHERE access_token_hash = %s AND revoked = 0",
@@ -523,7 +523,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// Try refresh token.
 		if ( 'access_token' !== $token_type_hint ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 			$wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$table} SET revoked = 1 WHERE refresh_token_hash = %s AND revoked = 0",
@@ -552,7 +552,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// Expired authorization codes.
 		$codes_table = $wpdb->prefix . 'sflmcp_oauth_codes';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$wpdb->query(
 			$wpdb->prepare( "DELETE FROM {$codes_table} WHERE expires_at < %s", $now )
 		);
@@ -560,7 +560,7 @@ class StifliFlexMcp_OAuth_Storage {
 		// Expired or revoked tokens (keep revoked ones for 24h for audit, then delete).
 		$tokens_table = $wpdb->prefix . 'sflmcp_oauth_tokens';
 		$cutoff       = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$tokens_table} WHERE (refresh_expires_at < %s) OR (revoked = 1 AND created_at < %s)",
@@ -582,7 +582,7 @@ class StifliFlexMcp_OAuth_Storage {
 		$table = $wpdb->prefix . 'sflmcp_oauth_tokens';
 		$now   = gmdate( 'Y-m-d H:i:s' );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		return $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT t.*, c.client_name FROM {$table} t
@@ -605,7 +605,7 @@ class StifliFlexMcp_OAuth_Storage {
 
 		$table = $wpdb->prefix . 'sflmcp_oauth_clients';
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		return $wpdb->get_results( "SELECT * FROM {$table} ORDER BY created_at DESC" );
 	}
 
@@ -620,14 +620,14 @@ class StifliFlexMcp_OAuth_Storage {
 
 		// Revoke all tokens for this client.
 		$tokens_table = $wpdb->prefix . 'sflmcp_oauth_tokens';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
 		$wpdb->query(
 			$wpdb->prepare( "UPDATE {$tokens_table} SET revoked = 1 WHERE client_id = %s", $client_id )
 		);
 
 		// Delete the client.
 		$clients_table = $wpdb->prefix . 'sflmcp_oauth_clients';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- plugin-managed OAuth table.
 		$deleted = $wpdb->delete( $clients_table, array( 'client_id' => $client_id ), array( '%s' ) );
 
 		return false !== $deleted;

@@ -163,6 +163,27 @@ Just copy the SSE URL from the Settings page, paste it into your AI client, and 
 
 The server exposes 117+ tools (55 WordPress + 61 WooCommerce + 1 Core + Abilities + Custom Tools) that external AI agents can discover and execute.
 
+**⏪ Roll Back — The Only MCP Server With Undo**
+
+Mistakes happen. You asked ChatGPT to update your landing page and the result isn't what you expected? No problem — **roll back the change with one click** and your site is restored instantly.
+
+StifLi Flex MCP is the **only MCP server for WordPress that tracks every change and lets you undo it**. Every modification made by any AI — whether from ChatGPT, Claude Desktop, the built-in Chat Agent, the Copilot, or automated tasks — is recorded with a full before/after snapshot.
+
+* **One-click Undo** — Roll back any change from the Logs & Roll Back page in your admin panel
+* **Redo support** — Changed your mind? Re-apply a rolled-back change just as easily
+* **Session rollback** — Undo an entire AI conversation's changes at once, in the correct order
+* **Full audit trail** — See exactly what was changed, when, by whom, and from which source
+* **Works across everything** — Posts, pages, products, orders, options, menus, media, code snippets, and more
+* **AI-accessible** — Your AI agent can also query and rollback changes through dedicated tools
+
+💡 Real-world examples:
+
+* 🛒 "ChatGPT updated all my product prices but used the wrong currency — roll it back!"
+* 📝 "Claude rewrote my About page and I prefer the original — undo!"
+* ⚙️ "An automation changed my site settings at 3 AM — I can see exactly what happened and revert it"
+* 🎨 "The AI-generated image doesn't match my brand — remove it and restore the previous one"
+* 🔗 "I told the AI to delete a menu item by mistake — bring it back!"
+
 **🛡️ Security — OAuth 2.1 Built In**
 
 StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard security protocol — to authenticate external AI clients. No API keys to copy, no passwords to share. Just paste the URL, authorize once, and you're connected.
@@ -292,6 +313,10 @@ Yes! The plugin includes 61 WooCommerce tools. They activate automatically when 
 
 Absolutely! Go to **MCP Server → Custom Tools** and create PHP-powered tools that expose any plugin's functionality to your AI agent. Built-in examples included.
 
+= What happens if the AI makes a mistake? =
+
+No worries — StifLi Flex MCP is the only MCP server with a built-in **Roll Back** system. Every change made by any AI (ChatGPT, Claude, the Chat Agent, Copilot, or automations) is tracked with a full before/after snapshot. Go to **Logs & Roll Back** in your admin panel and undo any change with one click. You can even roll back an entire session at once.
+
 = Can the AI generate images? =
 
 Yes! The `wp_generate_image` tool supports multiple providers:
@@ -341,6 +366,24 @@ The plugin uses OAuth 2.1 — no API keys or passwords needed. Your session stay
 7. MCP Server - WordPress and WooCommerce tools management
 
 == Changelog ==
+= 3.1.2 =
+* **⏪ Roll Back — Undo Any AI Change Instantly!**
+* New: Full change tracking — every modification by ChatGPT, Claude, AI Chat Agent, Copilot, or automations is recorded
+* New: One-click rollback — undo any change from the Logs & Roll Back admin page
+* New: Redo support — re-apply a rolled-back change if you change your mind
+* New: Session rollback — undo all changes from an entire AI conversation at once (LIFO order)
+* New: Before/after snapshots — see exactly what changed with full state comparison
+* New: Source tracking — every change shows where it came from (MCP Connection, Chat Agent, Copilot, Automation, Event, WP Admin)
+* New: 5 MCP tools — `mcp_get_changelog`, `mcp_get_change_detail`, `mcp_rollback_change`, `mcp_redo_change`, `mcp_rollback_session`
+* New: Changelog admin page with filters, search, detail modal, CSV export, and automatic purge
+* New: Works across 60+ mutating tools — posts, pages, products, orders, options, menus, media, snippets, and more
+* New: File backup & restore — even deleted media files can be recovered
+* Improved: The only MCP server for WordPress with built-in undo capabilities
+
+= 3.1.1 =
+* Fix: Plugin Check compliance — resolved all PHPCS warnings (InterpolatedNotPrepared, UnescapedDBParameter, SchemaChange, i18n placeholders)
+* Improved: Added comprehensive phpcs:ignore annotations with explanatory comments for false positives
+
 = 3.1.0 =
 * **🔐 OAuth 2.1 Authentication** — Connect ChatGPT, Claude Desktop, and any MCP client with one click!
 * New: Full OAuth 2.1 implementation with PKCE (S256) — the most secure authentication standard

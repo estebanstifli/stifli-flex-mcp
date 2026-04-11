@@ -280,12 +280,13 @@ function stifli_flex_mcp_maybe_add_tools_token_column() {
 	);
 	$column = $wpdb->get_var($wpdb->prepare($columns_query, 'token_estimate'));
 	if (null === $column) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.NotPrepared -- schema migration for plugin-managed table.
 		$wpdb->query(
 			sprintf(
 				'ALTER TABLE %s ADD COLUMN token_estimate INT UNSIGNED NOT NULL DEFAULT 0 AFTER enabled',
 				StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools')
 			)
-		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.PreparedSQL.NotPrepared -- schema migration for plugin-managed table
+		);
 	}
 }
 
@@ -1026,7 +1027,7 @@ function stifli_flex_mcp_apply_active_profile() {
 	
 	// Enable only tools in the active profile
 	$placeholders = implode(',', array_fill(0, count($profile_tools), '%s'));
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk update for profile application.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from helper is safe; placeholders are dynamically generated from array count.
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$tools_table} SET enabled = 1 WHERE tool_name IN ({$placeholders})",
@@ -1044,6 +1045,7 @@ if (!function_exists('stifli_flex_mcp_maybe_create_custom_tools_table')) {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange -- schema check for plugin-managed table.
 		if ($wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ) !== $table_name) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange -- CREATE TABLE for plugin-managed table.
 			$sql = "CREATE TABLE $table_safe (
 				id bigint(20) NOT NULL AUTO_INCREMENT,
 				tool_name varchar(100) NOT NULL,
@@ -2047,11 +2049,11 @@ function stifli_flex_mcp_maybe_create_automation_logs_table() {
 		$column_names = array_map(function($col) { return $col->Field; }, $columns);
 
 		if (!in_array('prompt_used', $column_names, true)) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema migration for plugin-managed table.
 			$wpdb->query("ALTER TABLE {$table_name} ADD COLUMN prompt_used longtext AFTER error_message");
 		}
 		if (!in_array('tools_results', $column_names, true)) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema migration for plugin-managed table.
 			$wpdb->query("ALTER TABLE {$table_name} ADD COLUMN tools_results longtext AFTER tools_called");
 		}
 		return;
@@ -2227,7 +2229,7 @@ function stifli_flex_mcp_maybe_add_output_columns() {
 	) );
 
 	if ( ! $column_exists ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema migration for plugin-managed table.
 		$wpdb->query( "ALTER TABLE {$table_name} 
 			ADD COLUMN output_email tinyint(1) DEFAULT 0 AFTER max_tokens,
 			ADD COLUMN email_recipients text AFTER output_email,
