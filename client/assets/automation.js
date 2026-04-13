@@ -335,7 +335,29 @@
 		// Initialize selected tools from hidden field
 		const existingTools = $('#sflmcp-allowed-tools').val();
 		if (existingTools) {
-			state.selectedTools = existingTools.split(',');
+			// Handle legacy JSON format from older saves
+			try {
+				const parsed = JSON.parse(existingTools);
+				if (parsed && parsed.mode) {
+					// Restore tools_mode radio from saved config
+					$('[name="tools_mode"][value="' + parsed.mode + '"]').prop('checked', true).trigger('change');
+					// Extract tool names from the correct array
+					if (parsed.mode === 'custom' && Array.isArray(parsed.custom)) {
+						state.selectedTools = parsed.custom.filter(Boolean);
+					} else if (parsed.mode === 'detected' && Array.isArray(parsed.detected)) {
+						state.detectedTools = parsed.detected.filter(Boolean);
+						state.selectedTools = parsed.detected.filter(Boolean);
+					}
+					// Update hidden fields with comma-separated values
+					$('#sflmcp-allowed-tools').val(state.selectedTools.join(','));
+					$('#sflmcp-detected-tools').val(state.detectedTools.join(','));
+				} else {
+					state.selectedTools = existingTools.split(',').filter(Boolean);
+				}
+			} catch (e) {
+				// Plain comma-separated format
+				state.selectedTools = existingTools.split(',').filter(Boolean);
+			}
 			updateToolsUI();
 		}
 

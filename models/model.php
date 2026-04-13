@@ -529,12 +529,12 @@ class StifliFlexMcpModel {
                 ),
                 'wp_upload_image' => array(
                     'name' => 'wp_upload_image',
-                    'description' => 'Upload an image from base64 data and create a media attachment. Useful for AI-generated images. Returns attachment ID and URL.',
+                    'description' => 'Upload an image from base64 data and create a media attachment. Useful for AI-generated images. Accepts raw base64 or data URL (data:image/png;base64,...). Returns attachment ID and URL.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
-                            'image_data' => array('type' => 'string', 'description' => 'Base64 encoded image data'),
-                            'filename' => array('type' => 'string', 'description' => 'Filename with extension (e.g., "image.png")'),
+                            'image_data' => array('type' => 'string', 'description' => 'Base64 encoded image data. Accepts raw base64 string or data URL (e.g. data:image/png;base64,iVBOR...). Whitespace and newlines are stripped automatically.'),
+                            'filename' => array('type' => 'string', 'description' => 'Filename with extension (e.g., "image.png"). If extension is missing or wrong, it will be corrected based on the actual image format.'),
                             'alt_text' => array('type' => 'string', 'description' => 'Alt text for the image'),
                             'title' => array('type' => 'string', 'description' => 'Title for the image'),
                             'post_id' => array('type' => 'integer', 'description' => 'Optional post ID to attach the image to'),
@@ -2160,11 +2160,49 @@ class StifliFlexMcpModel {
                 if (!$image_data) { $r['error'] = array('code' => -42602, 'message' => 'image_data required'); break; }
                 if (!current_user_can('upload_files')) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to upload files'); break; }
                 
-                // Decode base64 (remove data:image/png;base64, prefix if present)
-                $image_data = preg_replace('/^data:image\/\w+;base64,/', '', $image_data);
+                // Normalize base64: accept data URL or raw base64
+                $detected_mime = null;
+                $image_data = trim($image_data);
+                if (preg_match('/^data:([^;]+);base64,(.*)$/s', $image_data, $b64match)) {
+                    $detected_mime = $b64match[1];
+                    $image_data = $b64match[2];
+                }
+                // Strip whitespace/newlines that LLMs may inject
+                $image_data = preg_replace('/\s+/', '', $image_data);
+                // Fix base64 padding if missing
+                $pad = strlen($image_data) % 4;
+                if ($pad) {
+                    $image_data .= str_repeat('=', 4 - $pad);
+                }
                 $decoded = base64_decode($image_data, true);
                 
-                if ($decoded === false) { $r['error'] = array('code' => -42602, 'message' => 'Invalid base64 data'); break; }
+                if ($decoded === false || strlen($decoded) < 8) { $r['error'] = array('code' => -42602, 'message' => 'Invalid base64 data'); break; }
+                
+                // Detect MIME from binary header if not from data URL
+                if (!$detected_mime) {
+                    $header = substr($decoded, 0, 16);
+                    if (substr($header, 0, 8) === "\x89PNG\r\n\x1a\n") {
+                        $detected_mime = 'image/png';
+                    } elseif (substr($header, 0, 2) === "\xff\xd8") {
+                        $detected_mime = 'image/jpeg';
+                    } elseif (substr($header, 0, 4) === 'GIF8') {
+                        $detected_mime = 'image/gif';
+                    } elseif (substr($header, 0, 4) === 'RIFF' && substr($header, 8, 4) === 'WEBP') {
+                        $detected_mime = 'image/webp';
+                    }
+                }
+                // Ensure filename has the right extension based on detected MIME
+                if ($detected_mime) {
+                    $mime_to_ext = array('image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp');
+                    $ext = isset($mime_to_ext[$detected_mime]) ? $mime_to_ext[$detected_mime] : null;
+                    if ($ext) {
+                        $current_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+                        if (!$current_ext || !in_array($current_ext, array('png', 'jpg', 'jpeg', 'gif', 'webp'), true)) {
+                            $filename = pathinfo($filename, PATHINFO_FILENAME) . '.' . $ext;
+                            $filename = sanitize_file_name($filename);
+                        }
+                    }
+                }
                 
                 // Save to temp file
                 if (!function_exists('wp_upload_dir')) {

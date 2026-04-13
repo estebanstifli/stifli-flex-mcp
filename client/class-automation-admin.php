@@ -369,6 +369,20 @@ class StifliFlexMcp_Automation_Admin {
 				$enabled_tools_count = count( $stifliFlexMcp->model->getToolsList() );
 			}
 			?>
+<?php
+			// Parse saved tools config for edit mode.
+			$saved_tools_mode    = 'profile';
+			$saved_custom_tools  = '';
+			$saved_detected_tools = '';
+			if ( $task && ! empty( $task->allowed_tools ) ) {
+				$saved_config = json_decode( $task->allowed_tools, true );
+				if ( is_array( $saved_config ) && isset( $saved_config['mode'] ) ) {
+					$saved_tools_mode    = $saved_config['mode'];
+					$saved_custom_tools  = ! empty( $saved_config['custom'] ) ? implode( ',', $saved_config['custom'] ) : '';
+					$saved_detected_tools = ! empty( $saved_config['detected'] ) ? implode( ',', $saved_config['detected'] ) : '';
+				}
+			}
+			?>
 			<div class="sflmcp-form-section">
 				<h2 class="sflmcp-section-header-inline">
 					<span class="sflmcp-step-number">3</span>
@@ -384,21 +398,21 @@ class StifliFlexMcp_Automation_Admin {
 					<label><?php esc_html_e( 'Tools Mode', 'stifli-flex-mcp' ); ?></label>
 					<div class="sflmcp-radio-group">
 						<label class="sflmcp-radio-option">
-							<input type="radio" name="tools_mode" value="profile" checked>
+							<input type="radio" name="tools_mode" value="profile" <?php checked( $saved_tools_mode, 'profile' ); ?>>
 							<span class="sflmcp-radio-label">
 								<strong><?php esc_html_e( 'Use Active Profile', 'stifli-flex-mcp' ); ?></strong>
 								<span><?php esc_html_e( 'Use tools from active MCP profile', 'stifli-flex-mcp' ); ?></span>
 							</span>
 						</label>
 						<label class="sflmcp-radio-option">
-							<input type="radio" name="tools_mode" value="detected">
+							<input type="radio" name="tools_mode" value="detected" <?php checked( $saved_tools_mode, 'detected' ); ?>>
 							<span class="sflmcp-radio-label">
 								<strong><?php esc_html_e( 'Detected Tools Only', 'stifli-flex-mcp' ); ?></strong>
 								<span><?php esc_html_e( 'Only tools detected during test - saves tokens significantly (recommended)', 'stifli-flex-mcp' ); ?></span>
 							</span>
 						</label>
 						<label class="sflmcp-radio-option">
-							<input type="radio" name="tools_mode" value="custom">
+							<input type="radio" name="tools_mode" value="custom" <?php checked( $saved_tools_mode, 'custom' ); ?>>
 							<span class="sflmcp-radio-label">
 								<strong><?php esc_html_e( 'Custom Selection', 'stifli-flex-mcp' ); ?></strong>
 								<span><?php esc_html_e( 'Manually select tools - saves tokens vs full profile', 'stifli-flex-mcp' ); ?></span>
@@ -407,7 +421,7 @@ class StifliFlexMcp_Automation_Admin {
 					</div>
 				</div>
 
-				<div id="sflmcp-custom-tools-section" class="sflmcp-form-row" style="display:none;">
+				<div id="sflmcp-custom-tools-section" class="sflmcp-form-row" style="display:<?php echo 'custom' === $saved_tools_mode ? 'block' : 'none'; ?>;">
 					<label><?php esc_html_e( 'Select Tools', 'stifli-flex-mcp' ); ?></label>
 					<div class="sflmcp-tools-selector">
 						<div class="sflmcp-tools-header">
@@ -419,9 +433,8 @@ class StifliFlexMcp_Automation_Admin {
 						</div>
 						<div id="sflmcp-tools-list" class="sflmcp-tools-list"></div>
 					</div>
-					<input type="hidden" id="sflmcp-allowed-tools" name="allowed_tools" value="<?php echo esc_attr( $task ? $task->allowed_tools : '' ); ?>">
-					<input type="hidden" id="sflmcp-detected-tools" name="detected_tools" value="">
-					<input type="hidden" id="sflmcp-tools-mode" name="tools_mode" value="profile">
+					<input type="hidden" id="sflmcp-allowed-tools" name="allowed_tools" value="<?php echo esc_attr( $saved_custom_tools ); ?>">
+					<input type="hidden" id="sflmcp-detected-tools" name="detected_tools" value="<?php echo esc_attr( $saved_detected_tools ); ?>">
 				</div>
 			</div>
 
