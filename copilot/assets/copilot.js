@@ -499,6 +499,17 @@
         // Collect fresh context right before sending.
         var pageContext = collectPageContext();
 
+        // ── Route: WebMCP local chat (no API key) ──
+        var useWebMCP = !sflmcpCopilot.hasApiKey
+            && window.SflmcpWebMCP
+            && window.SflmcpWebMCP.available;
+
+        if (useWebMCP) {
+            sendMessageWebMCP(msg, pageContext);
+            return;
+        }
+
+        // ── Route: Server API ──
         state.xhr = $.ajax({
             url: sflmcpCopilot.ajaxUrl,
             method: 'POST',
@@ -529,6 +540,83 @@
                 state.xhr = null;
             },
         });
+    }
+
+    /**
+     * Send a message through Chrome's built-in Prompt API (Gemini Nano).
+     * Used when no API key is configured and WebMCP is available.
+     */
+    function sendMessageWebMCP(msg, pageContext) {
+        window.SflmcpWebMCP.chat(msg, pageContext, state.conversation)
+            .then(function (result) {
+                setThinking(false);
+
+                // Track conversation locally.
+                state.conversation.push({ role: 'user', content: msg });
+                if (result.text) {
+                    state.conversation.push({ role: 'assistant', content: result.text });
+                }
+
+                // Show text response.
+                if (result.text) {
+                    addMessage('assistant', formatMarkdown(result.text));
+                }
+
+                // Handle tool calls — execute locally via copilot-editor bridge.
+                if (result.tool_calls && result.tool_calls.length) {
+                    executeWebMCPTools(result.tool_calls, pageContext);
+                } else {
+                    state.busy = false;
+                    $send.prop('disabled', false);
+                }
+            })
+            .catch(function (err) {
+                setThinking(false);
+                addMessage('assistant', '<span class="sflmcp-copilot-error">' + escapeHtml(sflmcpCopilot.i18n.error + ' ' + (err.message || 'WebMCP chat failed')) + '</span>');
+                state.busy = false;
+                $send.prop('disabled', false);
+            });
+    }
+
+    /**
+     * Execute tool calls from WebMCP local chat, then feed results back.
+     */
+    function executeWebMCPTools(toolCalls, pageContext) {
+        var results = [];
+
+        for (var i = 0; i < toolCalls.length; i++) {
+            var tc = toolCalls[i];
+            var name = tc.name || '';
+
+            if (name.indexOf('copilot_') === 0 && window.SflmcpCopilotEditor) {
+                addMessage('tool', '✏️ <em>' + escapeHtml(name) + '</em>');
+                try {
+                    var localResult = window.SflmcpCopilotEditor.execute(name, tc.arguments || {});
+                    results.push({ name: name, output: localResult });
+                } catch (err) {
+                    results.push({ name: name, output: { error: err.message } });
+                }
+            } else {
+                addMessage('tool', '⚠️ <em>' + escapeHtml(name) + ' (not available locally)</em>');
+                results.push({ name: name, output: { error: 'Tool not available in WebMCP mode' } });
+            }
+        }
+
+        // Feed tool results back to the local AI for a summary.
+        var feedbackMsg = 'Tool results:\n' + JSON.stringify(results, null, 2) + '\nBriefly confirm what was done.';
+        window.SflmcpWebMCP.chat(feedbackMsg, pageContext, state.conversation)
+            .then(function (result) {
+                if (result.text) {
+                    state.conversation.push({ role: 'assistant', content: result.text });
+                    addMessage('assistant', formatMarkdown(result.text));
+                }
+                state.busy = false;
+                $send.prop('disabled', false);
+            })
+            .catch(function () {
+                state.busy = false;
+                $send.prop('disabled', false);
+            });
     }
 
     /**

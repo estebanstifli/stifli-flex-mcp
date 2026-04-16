@@ -28,4 +28,28 @@ jQuery(function($) {
 			alert('Network error');
 		});
 	});
+
+	// WebMCP form.
+	$('#sflmcp-copilot-webmcp-form').on('submit', function(e) {
+		e.preventDefault();
+		var $btn = $(this).find('#sflmcp-copilot-webmcp-save');
+		$btn.prop('disabled', true);
+
+		$.post(ajaxurl, {
+			action: 'sflmcp_copilot_save_webmcp',
+			nonce:  $('#sflmcp_copilot_webmcp_nonce').val(),
+			webmcp_enabled:  $('#sflmcp-webmcp-enabled').is(':checked') ? '1' : '0',
+			webmcp_language: $('#sflmcp-webmcp-language').val()
+		}, function(res) {
+			$btn.prop('disabled', false);
+			if (res.success) {
+				$('#sflmcp-copilot-settings-notice').slideDown().delay(3000).slideUp();
+			} else {
+				alert(res.data && res.data.message ? res.data.message : 'Error saving settings');
+			}
+		}).fail(function() {
+			$btn.prop('disabled', false);
+			alert('Network error');
+		});
+	});
 });

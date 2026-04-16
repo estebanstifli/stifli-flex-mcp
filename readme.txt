@@ -79,8 +79,6 @@ Here are just a few examples of what you can ask your AI agent:
 * 🔍 "What are the top 10 most commented posts on my site?"
 * 📊 "List all products with stock below 5 units"
 * 🏷️ "Create a 20% discount coupon valid for the next 7 days"
-* 🖼️ "Show me the last 10 images uploaded to the media library"
-* ⚙️ "What is my site's tagline and timezone?"
 * 📦 "Update the price of product #123 to $29.99"
 * 💬 "Show me all pending comments so I can review them"
 * 🧩 "What plugins are currently active?"
@@ -103,12 +101,6 @@ Generate stunning images and videos directly from your AI agent or the dedicated
 
 Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simple PHP snippets that expose plugin functionality to your AI agent:
 
-* Query Contact Form 7 submissions through conversation
-* Get Yoast SEO scores and recommendations
-* Control WP Super Cache settings with natural language
-* Access Advanced Custom Fields data
-* Build custom WooCommerce reports
-
 No coding experience required — use the built-in examples as templates.
 
 **🧩 Code Snippet Management — Design and Develop Through Conversation**
@@ -119,7 +111,6 @@ Create, edit, activate, and manage code snippets on your WordPress site entirely
 * **Custom CSS on demand** — "Create a CSS snippet that hides the sidebar on mobile devices"
 * **JavaScript injection** — "Add a JS snippet that shows a sticky banner with a 10% discount code"
 * **Full lifecycle management** — List, create, edit, activate, deactivate, and delete snippets from conversation
-* **Automatic provider detection** — Works with whichever snippet plugin you have installed, no extra configuration
 * **Safe by design** — PHP code is sanitized automatically, removing stray `<?php` tags and markdown artifacts from AI-generated output
 
 This opens up powerful possibilities: customize your theme's appearance, add tracking scripts, inject schema markup for SEO, modify WooCommerce checkout behavior, add custom shortcodes — all through natural language. Ask your AI agent to build it, test it, and activate it, without ever touching a code editor.
@@ -141,14 +132,8 @@ Schedule AI-powered tasks to run automatically on your WordPress site:
 
 **🎯 Event Automations — Trigger AI on WordPress Events**
 
-Run AI workflows automatically when specific events happen:
+Run AI workflows automatically when specific events happen
 
-* **WordPress Triggers** — New post published, user registered, comment posted
-* **WooCommerce Triggers** — New order received, order status changed, order completed, refunded
-* **Conditional Logic** — Run only when conditions are met (post type, status, category)
-* **Dynamic Prompts** — Use placeholders like `{{post.title}}` for context-aware AI
-* **Rate Limiting** — Prevent runaway executions with configurable cooldowns
-* **Test Mode** — Preview your prompt with real trigger data before going live
 
 **📡 Full MCP Server — Connect External AI Clients**
 
@@ -157,7 +142,7 @@ StifLi Flex MCP also works as a standards-compliant Model Context Protocol (MCP)
 * **ChatGPT** — via Apps & Connectors with OAuth 2.1 authentication
 * **Claude Desktop** — via Connectors with automatic OAuth flow
 * **LibreChat** — full MCP integration
-* **Any MCP-compatible client** — JSON-RPC 2.0 + SSE + OAuth 2.1
+* **Any MCP-compatible client** 
 
 Just copy the SSE URL from the Settings page, paste it into your AI client, and authorize. That's it — no tokens to manage, no passwords to share. The server handles discovery, registration, and authentication automatically following the latest security standards (OAuth 2.1, PKCE, RFC 9728, RFC 8414, RFC 7591).
 
@@ -210,47 +195,26 @@ StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard se
 
 **🌐 Supported AI Platforms**
 
-StifLi Flex MCP works with all major AI platforms — both as a built-in AI Chat Agent and as an MCP server for external AI clients:
+StifLi Flex MCP integrates with:
 
-**Built-in AI Chat Agent (direct API integration):**
+**Built-in AI Chat Agent:**
+* OpenAI — GPT-5.4, GPT-5.3, GPT-5.4 Mini
+* Anthropic Claude — Opus, Sonnet, Haiku
+* Google Gemini — Pro, Flash, Flash-Lite
 
-* **OpenAI** — GPT-5.4, GPT-5.4 Pro, GPT-5.3, GPT-5.3 Mini
-* **Anthropic Claude** — Claude 4.6 Opus, Claude 4.6 Sonnet, Claude 4.5 Haiku
-* **Google Gemini** — Gemini 3.1 Pro, Gemini 3 Flash, Gemini 3.1 Flash-Lite
+**MCP Server (External Clients via OAuth 2.1):**
+* Claude Desktop, ChatGPT, LibreChat
+* Cursor, Cline, Roo Code, Windsurf, Claude Code
 
-**MCP Server (external AI clients via OAuth 2.1):**
+**Cloud & Local Providers (via MCP clients):**
+* Groq, Azure OpenAI, AWS Bedrock
+* Ollama, LM Studio, self-hosted solutions
 
-* **Claude Desktop** — Full MCP support via Connectors with automatic OAuth flow
-* **ChatGPT** — via Apps & Connectors with OAuth 2.1 authentication
-* **LibreChat** — Full MCP integration with SSE streaming
-* **Cline** — VS Code AI extension with native MCP support
-* **Roo Code** — VS Code AI agent with MCP client
-* **Cursor** — AI code editor with MCP server support
-* **Windsurf** — AI-powered IDE with MCP integration
-* **Claude Code** — CLI-based AI agent with MCP support
-* **Any MCP-compatible client** — JSON-RPC 2.0 + SSE + OAuth 2.1
-
-**Local & Cloud AI Providers (via MCP clients):**
-
-* **Groq** — Llama 3.3, Mixtral, Gemma 2 (fast inference)
-* **Azure OpenAI** — Azure-hosted OpenAI deployments
-* **AWS Bedrock** — Claude, Llama, Titan models
-* **Ollama / LM Studio** — Local self-hosted models (no external data transmission)
-* **Custom endpoints** — Connect any MCP-compatible server or proxy
+All connections use OAuth 2.1, SSE, and JSON-RPC 2.0 for secure, flexible, and scalable AI deployments.
 
 **📐 MCP Spec Compliance**
 
-StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-06-18 specification](https://modelcontextprotocol.io/specification/2025-06-18/) — the latest version of the MCP standard:
-
-* JSON-RPC 2.0 protocol with `initialize`, `tools/list`, and `tools/call` methods
-* Server-Sent Events (SSE) streaming at `/wp-json/stifli-flex-mcp/v1/sse`
-* OAuth 2.1 with PKCE (S256) for secure MCP client authentication
-* Dynamic Client Registration (RFC 7591) for automatic MCP client onboarding
-* Protected Resource Metadata (RFC 9728) and Authorization Server Metadata (RFC 8414) auto-discovery
-* 117+ discoverable MCP tools with structured JSON input schemas
-* Tool capability: `tools.listChanged = true` for dynamic MCP tool management
-* Session-based message queue with heartbeat and idle timeout
-* Compatible with WordPress Application Passwords as fallback authentication
+StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-06-18 specification](https://modelcontextprotocol.io/specification/2025-06-18/) — the latest version of the MCP standard.
 
 **Demo & Installation Tutorial:**
 
