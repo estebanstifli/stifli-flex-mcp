@@ -20,6 +20,14 @@
 	var MAX_WAIT  = 5000; // ms
 	var POLL_INTERVAL = 200;
 
+	/** Debug logging — only output when WP_DEBUG / SFLMCP_DEBUG is active. */
+	var _debug = (typeof window.sflmcpCopilot !== 'undefined' && window.sflmcpCopilot.debug);
+	function dbg() {
+		if (_debug && typeof console !== 'undefined') {
+			console.log.apply(console, arguments);
+		}
+	}
+
 	function waitForModelContext(cb) {
 		if (typeof navigator !== 'undefined' && navigator.modelContext) {
 			cb(navigator.modelContext);
@@ -316,9 +324,15 @@
 	/** Minimal HTML-strip for context collection. */
 	function stripTags(s) {
 		if (typeof s !== 'string') return '';
-		var d = document.createElement('div');
-		d.innerHTML = s;
-		return d.textContent || d.innerText || '';
+		// Replace HTML tags with empty string, then decode common entities.
+		return s.replace(/<[^>]*>/g, '')
+			.replace(/&amp;/g, '&')
+			.replace(/&lt;/g, '<')
+			.replace(/&gt;/g, '>')
+			.replace(/&quot;/g, '"')
+			.replace(/&#039;/g, "'")
+			.replace(/&nbsp;/g, ' ')
+			.trim();
 	}
 
 	/* =====================================================================
@@ -327,6 +341,14 @@
 
 	function registerTools(mc) {
 		var defs = buildToolDefinitions();
+
+		// Filter out disabled tools from settings.
+		var disabled = (window.sflmcpCopilot && window.sflmcpCopilot.webmcpDisabledTools) || [];
+		if (disabled.length) {
+			defs = defs.filter(function (d) {
+				return disabled.indexOf(d.name) === -1;
+			});
+		}
 
 		if (!defs.length) return;
 
@@ -372,8 +394,8 @@
 			})(defs[i]);
 		}
 
-		if (registered > 0 && typeof console !== 'undefined' && console.info) {
-			console.info('[StifLi WebMCP] Registered ' + registered + ' editor tools with navigator.modelContext');
+		if (registered > 0) {
+			dbg('[StifLi WebMCP] Registered ' + registered + ' editor tools with navigator.modelContext');
 		}
 
 		// Activate visual indicators in the Copilot widget.
@@ -398,14 +420,14 @@
 		// Green dot on toggle bubble.
 		var dot = document.getElementById('sflmcp-copilot-webmcp-dot');
 		if (dot) {
-			dot.style.display = '';
+			dot.classList.remove('sflmcp-hidden');
 			dot.title = 'WebMCP active (' + toolCount + ' tools)';
 		}
 
 		// Badge in panel header.
 		var badge = document.getElementById('sflmcp-copilot-badge-webmcp');
 		if (badge) {
-			badge.style.display = '';
+			badge.classList.remove('sflmcp-hidden');
 			badge.title = 'WebMCP — Browser AI (' + toolCount + ' tools, free)';
 		}
 
@@ -494,6 +516,22 @@
 		},
 
 		_buildSystemPrompt: function () {
+			// If the user provided a custom system prompt in settings, use it.
+			var custom = (window.sflmcpCopilot && window.sflmcpCopilot.webmcpSystemPrompt) || '';
+			if (custom.trim()) {
+				// Append the dynamic tool list so the model knows what's available.
+				var toolLines = [];
+				if (this._toolDefs.length) {
+					toolLines.push('');
+					toolLines.push('AVAILABLE TOOLS:');
+					for (var t = 0; t < this._toolDefs.length; t++) {
+						var td = this._toolDefs[t];
+						toolLines.push('- ' + td.name + ': ' + td.description);
+					}
+				}
+				return custom.trim() + '\n' + toolLines.join('\n');
+			}
+
 			var parts = [];
 
 			// ── 1. Identity & Context ──
@@ -569,15 +607,17 @@
 
 			// Create or re-use session.
 			if (!this._session) {
-				var avail = await LanguageModel.availability();
+				var lang = (window.sflmcpCopilot && window.sflmcpCopilot.webmcpLanguage) || 'en';
+				var langOpts = { expectedInputLanguages: [lang], expectedOutputLanguages: [lang] };
+
+				var avail = await LanguageModel.availability(langOpts);
 				if (avail === 'unavailable') {
 					throw new Error('Gemini Nano is not available on this device');
 				}
 
-				var lang = (window.sflmcpCopilot && window.sflmcpCopilot.webmcpLanguage) || 'en';
-
 				this._session = await LanguageModel.create({
 					systemPrompt: this._buildSystemPrompt(),
+					expectedInputLanguages: [lang],
 					expectedOutputLanguages: [lang],
 				});
 			}
@@ -605,11 +645,11 @@
 			}
 			prompt += 'User: ' + msg;
 
-			console.log('[StifLi WebMCP] Prompt sent to Gemini Nano:', prompt);
+			dbg('[StifLi WebMCP] Prompt sent to Gemini Nano:', prompt);
 
 			var response = await this._session.prompt(prompt);
 
-			console.log('[StifLi WebMCP] Raw response from Gemini Nano:', response);
+			dbg('[StifLi WebMCP] Raw response from Gemini Nano:', response);
 
 			// Parse tool calls from the response.
 			// Supports multiple formats Gemini Nano may produce:
@@ -649,7 +689,64 @@
 
 			cleanText = cleanText.trim();
 
-			console.log('[StifLi WebMCP] Parsed result — text:', cleanText, '| tool_calls:', toolCalls);
+			// ── Smart fallback: Nano often modifies content as plain text instead
+			// of emitting a tool_call. Detect echoed blocks and auto-apply:
+			//   ≥3 blocks → copilot_replace_content (full rewrite)
+			//   1-2 blocks → copilot_update_block / copilot_insert_block (partial edit) ──
+			if (!toolCalls.length && cleanText) {
+				var echoBlocks = this._parseBlockEcho(cleanText);
+
+				if (echoBlocks.length >= 3) {
+					// Full content rewrite.
+					var html = this._blocksToHtml(echoBlocks);
+					if (html) {
+						toolCalls.push({
+							id: 'webmcp-auto-' + Date.now(),
+							name: 'copilot_replace_content',
+							arguments: { content: html },
+						});
+						dbg('[StifLi WebMCP] Auto-detected full content echo (' + echoBlocks.length + ' blocks), created copilot_replace_content');
+						cleanText = null;
+					}
+				} else if (echoBlocks.length >= 1) {
+					// Partial edit: 1-2 blocks. Determine the total block count
+					// from the context we injected into the prompt.
+					var totalBlocks = this._getCurrentBlockCount();
+
+					for (var bi = 0; bi < echoBlocks.length; bi++) {
+						var eb = echoBlocks[bi];
+						var blockContent = this._mdToHtml(eb.content);
+						// Strip code fences.
+						blockContent = blockContent.replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+						if (!blockContent) continue;
+						// Wrap in <p> if no HTML tags.
+						if (blockContent.indexOf('<') === -1) {
+							blockContent = '<p>' + blockContent + '</p>';
+						}
+
+						if (eb.index >= totalBlocks) {
+							// New block — insert at the end.
+							toolCalls.push({
+								id: 'webmcp-auto-' + Date.now() + '-' + bi,
+								name: 'copilot_insert_block',
+								arguments: { content: blockContent },
+							});
+							dbg('[StifLi WebMCP] Auto-detected new block [' + eb.index + '], created copilot_insert_block');
+						} else {
+							// Existing block — update in place.
+							toolCalls.push({
+								id: 'webmcp-auto-' + Date.now() + '-' + bi,
+								name: 'copilot_update_block',
+								arguments: { block_index: eb.index, content: blockContent },
+							});
+							dbg('[StifLi WebMCP] Auto-detected modified block [' + eb.index + '], created copilot_update_block');
+						}
+					}
+					if (toolCalls.length) { cleanText = null; }
+				}
+			}
+
+			dbg('[StifLi WebMCP] Parsed result — text:', cleanText, '| tool_calls:', toolCalls);
 
 			return {
 				text: cleanText || null,
@@ -749,6 +846,97 @@
 		},
 
 		/**
+		 * Parse [N] core/TYPE: content lines from Nano's echoed response.
+		 */
+		_parseBlockEcho: function (text) {
+			var blocks = [];
+			var lines = text.split('\n');
+			for (var i = 0; i < lines.length; i++) {
+				// Match both plain "[6] core/paragraph:" and bold "**[6] core/paragraph:**"
+				var m = lines[i].match(/^\s*\*{0,2}\[(\d+)\]\s*core\/(\w+):\*{0,2}\s*(.*)/);
+				if (m) {
+					blocks.push({ index: parseInt(m[1], 10), type: m[2], content: m[3].trim() });
+				}
+			}
+			return blocks;
+		},
+
+		/**
+		 * Get the current block count from the Gutenberg editor.
+		 * Used to determine if a block index is existing or new.
+		 */
+		_getCurrentBlockCount: function () {
+			try {
+				if (typeof wp !== 'undefined' && wp.data) {
+					var blockEditor = wp.data.select('core/block-editor');
+					if (blockEditor) {
+						var blocks = blockEditor.getBlocks();
+						if (blocks) return blocks.length;
+					}
+				}
+			} catch (_) {}
+			return 0;
+		},
+
+		/**
+		 * Reconstruct HTML from parsed blocks.
+		 */
+		_blocksToHtml: function (blocks) {
+			var parts = [];
+			for (var i = 0; i < blocks.length; i++) {
+				var raw = blocks[i].content;
+				if (!raw) continue;
+
+				// Strip code fences that the context may have included.
+				raw = raw.replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+				if (!raw) continue;
+
+				// Skip excerpt references.
+				if (/^\[Excerpt:/.test(raw)) continue;
+
+				// Horizontal rule.
+				if (raw === '---') { parts.push('<hr>'); continue; }
+
+				// Convert markdown formatting.
+				raw = this._mdToHtml(raw);
+
+				// Headings: # … through ######.
+				var hMatch = raw.match(/^(#{1,6})\s+(.*)/);
+				if (hMatch) {
+					var lvl = hMatch[1].length;
+					parts.push('<h' + lvl + '>' + hMatch[2] + '</h' + lvl + '>');
+					continue;
+				}
+
+				// List items: "*   item1*   item2" on one line (context format).
+				if (/^\*\s{1,}/.test(raw)) {
+					var items = raw.split(/\*\s{2,}/);
+					parts.push('<ul>');
+					for (var j = 0; j < items.length; j++) {
+						var item = items[j].replace(/^\*\s*/, '').trim();
+						if (item) parts.push('<li>' + item + '</li>');
+					}
+					parts.push('</ul>');
+					continue;
+				}
+
+				// Regular paragraph.
+				parts.push('<p>' + raw + '</p>');
+			}
+			return parts.length ? parts.join('\n') : null;
+		},
+
+		/**
+		 * Convert basic Markdown formatting to HTML.
+		 * Handles **bold** → <strong>, keeping it simple and safe.
+		 */
+		_mdToHtml: function (text) {
+			// Bold: **text** → <strong>text</strong>
+			text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+			return text;
+		},
+
+		/**
 		 * Reset the session (e.g. when context changes).
 		 */
 		resetSession: function () {
@@ -766,19 +954,33 @@
 
 	window.SflmcpWebMCP = webmcpApi;
 
+	/**
+	 * Build tool definitions filtered by settings.
+	 */
+	function buildFilteredToolDefs() {
+		var defs = buildToolDefinitions();
+		var disabled = (window.sflmcpCopilot && window.sflmcpCopilot.webmcpDisabledTools) || [];
+		if (disabled.length) {
+			defs = defs.filter(function (d) {
+				return disabled.indexOf(d.name) === -1;
+			});
+		}
+		return defs;
+	}
+
 	function init() {
 		waitForModelContext(function (mc) {
 			// Editor bridge may not be ready yet (Gutenberg lazy-loads).
 			if (window.SflmcpCopilotEditor && window.SflmcpCopilotEditor.editorType()) {
 				registerTools(mc);
-				webmcpApi._toolDefs = buildToolDefinitions();
+				webmcpApi._toolDefs = buildFilteredToolDefs();
 			} else {
 				// Wait for Gutenberg to initialize.
 				var editorWait = setInterval(function () {
 					if (window.SflmcpCopilotEditor && window.SflmcpCopilotEditor.editorType()) {
 						clearInterval(editorWait);
 						registerTools(mc);
-						webmcpApi._toolDefs = buildToolDefinitions();
+						webmcpApi._toolDefs = buildFilteredToolDefs();
 					}
 				}, 300);
 

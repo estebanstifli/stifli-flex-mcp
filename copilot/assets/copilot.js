@@ -499,9 +499,8 @@
         // Collect fresh context right before sending.
         var pageContext = collectPageContext();
 
-        // ── Route: WebMCP local chat (no API key) ──
-        var useWebMCP = !sflmcpCopilot.hasApiKey
-            && window.SflmcpWebMCP
+        // ── Route: WebMCP local chat (preferred when enabled) ──
+        var useWebMCP = window.SflmcpWebMCP
             && window.SflmcpWebMCP.available;
 
         if (useWebMCP) {

@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class StifliFlexMcp_Copilot_Admin {
 
 	/** Asset version — bump when JS/CSS change. */
-	const ASSET_VERSION = '1.1.6';
+	const ASSET_VERSION = '1.1.8';
 
 	/** Nonce action used by all Copilot AJAX calls. */
 	const NONCE_ACTION = 'sflmcp_copilot';
@@ -74,11 +74,17 @@ class StifliFlexMcp_Copilot_Admin {
 	 */
 	public function get_webmcp_settings() {
 		$defaults = array(
-			'enabled'  => false,
-			'language' => 'en',
+			'enabled'        => false,
+			'language'       => 'en',
+			'system_prompt'  => '',
+			'disabled_tools' => array(),
 		);
 		$saved = get_option( self::WEBMCP_OPTION_KEY, array() );
-		return wp_parse_args( $saved, $defaults );
+		$settings = wp_parse_args( $saved, $defaults );
+		if ( ! is_array( $settings['disabled_tools'] ) ) {
+			$settings['disabled_tools'] = array();
+		}
+		return $settings;
 	}
 
 	/* ----------------------------------------------------------
@@ -92,6 +98,12 @@ class StifliFlexMcp_Copilot_Admin {
 
 		// Settings page script (needed regardless of copilot enabled state).
 		if ( str_ends_with( $hook, '_page_sflmcp-copilot' ) ) {
+			wp_enqueue_style(
+				'sflmcp-copilot-settings',
+				plugin_dir_url( __FILE__ ) . 'assets/copilot-settings.css',
+				array(),
+				self::ASSET_VERSION
+			);
 			wp_enqueue_script(
 				'sflmcp-copilot-settings',
 				plugin_dir_url( __FILE__ ) . 'assets/copilot-settings.js',
@@ -202,10 +214,13 @@ class StifliFlexMcp_Copilot_Admin {
 		$webmcp_settings = $this->get_webmcp_settings();
 
 		wp_localize_script( 'sflmcp-copilot', 'sflmcpCopilot', array(
-			'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
-			'nonce'          => wp_create_nonce( self::NONCE_ACTION ),
-			'hasApiKey'      => $has_api_key,
-			'webmcpLanguage' => $webmcp_settings['language'],
+			'ajaxUrl'              => admin_url( 'admin-ajax.php' ),
+			'nonce'                => wp_create_nonce( self::NONCE_ACTION ),
+			'hasApiKey'            => $has_api_key,
+			'debug'                => ( defined( 'SFLMCP_DEBUG' ) && SFLMCP_DEBUG ),
+			'webmcpLanguage'       => $webmcp_settings['language'],
+			'webmcpSystemPrompt'   => $webmcp_settings['system_prompt'],
+			'webmcpDisabledTools'  => $webmcp_settings['disabled_tools'],
 			'screen'         => array(
 				'id'       => $screen ? $screen->id : '',
 				'base'     => $screen ? $screen->base : '',
@@ -247,8 +262,8 @@ class StifliFlexMcp_Copilot_Admin {
 		$show_webmcp_badge = $webmcp_on; // JS will hide if navigator.modelContext is absent.
 		?>
 		<div id="sflmcp-copilot-widget" class="sflmcp-copilot-widget"
-			data-has-api="<?php echo $show_api_badge ? '1' : '0'; ?>"
-			data-webmcp="<?php echo $show_webmcp_badge ? '1' : '0'; ?>">
+			data-has-api="<?php echo esc_attr( $show_api_badge ? '1' : '0' ); ?>"
+			data-webmcp="<?php echo esc_attr( $show_webmcp_badge ? '1' : '0' ); ?>">
 			<!-- Toggle bubble -->
 			<button type="button" id="sflmcp-copilot-toggle" class="sflmcp-copilot-toggle" aria-label="<?php esc_attr_e( 'Toggle AI Copilot', 'stifli-flex-mcp' ); ?>">
 				<span class="sflmcp-copilot-icon">
@@ -257,7 +272,7 @@ class StifliFlexMcp_Copilot_Admin {
 					</svg>
 				</span>
 				<!-- WebMCP active dot — shown by JS when navigator.modelContext registers tools -->
-				<span id="sflmcp-copilot-webmcp-dot" class="sflmcp-copilot-webmcp-dot" style="display:none;" title="<?php esc_attr_e( 'WebMCP active (Browser AI)', 'stifli-flex-mcp' ); ?>"></span>
+				<span id="sflmcp-copilot-webmcp-dot" class="sflmcp-copilot-webmcp-dot sflmcp-hidden" title="<?php esc_attr_e( 'WebMCP active (Browser AI)', 'stifli-flex-mcp' ); ?>"></span>
 			</button>
 
 			<!-- Chat panel -->
@@ -273,7 +288,7 @@ class StifliFlexMcp_Copilot_Admin {
 									API
 								</span>
 							<?php endif; ?>
-							<span id="sflmcp-copilot-badge-webmcp" class="sflmcp-copilot-badge sflmcp-copilot-badge--webmcp" style="display:none;" title="<?php esc_attr_e( 'WebMCP — Browser AI (free)', 'stifli-flex-mcp' ); ?>">
+							<span id="sflmcp-copilot-badge-webmcp" class="sflmcp-copilot-badge sflmcp-copilot-badge--webmcp sflmcp-hidden" title="<?php esc_attr_e( 'WebMCP — Browser AI (free)', 'stifli-flex-mcp' ); ?>">
 								<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
 								WebMCP
 							</span>
@@ -1038,19 +1053,19 @@ class StifliFlexMcp_Copilot_Admin {
 			?>
 			<h2>
 				<?php esc_html_e( 'WebMCP — Browser AI (Zero Cost)', 'stifli-flex-mcp' ); ?>
-				<span style="background:#e67e22;color:#fff;font-size:11px;padding:2px 8px;border-radius:3px;margin-left:8px;vertical-align:middle;font-weight:600;letter-spacing:.5px;">BETA</span>
+				<span class="sflmcp-webmcp-beta-badge">BETA</span>
 			</h2>
 			<p class="description">
 				<?php esc_html_e( 'WebMCP lets Chrome\'s built-in AI (Gemini Nano) control the WordPress editor directly — no API key needed, zero cost. The browser\'s native AI discovers the editor tools and can modify titles, content, blocks, categories, tags and more.', 'stifli-flex-mcp' ); ?>
 			</p>
-			<p class="description" style="color:#e67e22;">
+			<p class="description sflmcp-webmcp-beta-notice">
 				<strong><?php esc_html_e( 'Beta Notice:', 'stifli-flex-mcp' ); ?></strong>
 				<?php esc_html_e( 'This feature uses Chrome\'s experimental Gemini Nano model which runs locally in the browser. Nano is a compact model with limited reasoning — results may vary depending on task complexity. Quality will improve as Google updates the on-device model.', 'stifli-flex-mcp' ); ?>
 			</p>
 
-			<div style="background:#f0f6fc;border:1px solid #c3d9ed;border-radius:4px;padding:12px 16px;margin:12px 0 20px;">
+			<div class="sflmcp-webmcp-requirements">
 				<strong><?php esc_html_e( 'Requirements to use WebMCP:', 'stifli-flex-mcp' ); ?></strong>
-				<ol style="margin:8px 0 0 18px;">
+				<ol>
 					<li><?php esc_html_e( 'Chrome version 146.0.7672.0 or higher (Chrome Canary or Beta recommended).', 'stifli-flex-mcp' ); ?></li>
 					<li><?php
 						printf(
@@ -1102,14 +1117,65 @@ class StifliFlexMcp_Copilot_Admin {
 							</p>
 						</td>
 					</tr>
+					<tr>
+						<th scope="row">
+							<label for="sflmcp-webmcp-system-prompt"><?php esc_html_e( 'System Prompt', 'stifli-flex-mcp' ); ?></label>
+						</th>
+						<td>
+							<textarea id="sflmcp-webmcp-system-prompt" name="webmcp_system_prompt" rows="12" class="large-text code"><?php echo esc_textarea( $webmcp_opts['system_prompt'] ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'Custom system prompt injected into Gemini Nano. Leave empty to use the built-in default. Use this to experiment with instructions that improve tool usage.', 'stifli-flex-mcp' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<?php esc_html_e( 'Enabled Tools', 'stifli-flex-mcp' ); ?>
+						</th>
+						<td>
+							<p class="description sflmcp-webmcp-tools-description">
+								<?php esc_html_e( 'Uncheck tools to disable them. Fewer tools = smaller system prompt = better results from Gemini Nano.', 'stifli-flex-mcp' ); ?>
+							</p>
+							<?php
+							$all_tools = array(
+								'copilot_set_title'        => __( 'Set post title', 'stifli-flex-mcp' ),
+								'copilot_set_excerpt'      => __( 'Set excerpt', 'stifli-flex-mcp' ),
+								'copilot_set_slug'         => __( 'Set URL slug', 'stifli-flex-mcp' ),
+								'copilot_set_status'       => __( 'Change post status', 'stifli-flex-mcp' ),
+								'copilot_set_categories'   => __( 'Set categories', 'stifli-flex-mcp' ),
+								'copilot_set_tags'         => __( 'Set tags', 'stifli-flex-mcp' ),
+								'copilot_replace_content'  => __( 'Replace entire content', 'stifli-flex-mcp' ),
+								'copilot_find_replace'     => __( 'Find & replace text', 'stifli-flex-mcp' ),
+								'copilot_insert_block'     => __( 'Insert new block', 'stifli-flex-mcp' ),
+								'copilot_update_block'     => __( 'Update block by index', 'stifli-flex-mcp' ),
+								'copilot_delete_block'     => __( 'Delete block by index', 'stifli-flex-mcp' ),
+								'copilot_set_featured_image'   => __( 'Set featured image', 'stifli-flex-mcp' ),
+								'copilot_insert_image_block'   => __( 'Insert image block', 'stifli-flex-mcp' ),
+								'copilot_get_context'      => __( 'Read editor context', 'stifli-flex-mcp' ),
+							);
+							$disabled = $webmcp_opts['disabled_tools'];
+							foreach ( $all_tools as $tool_name => $label ) :
+								$is_disabled = in_array( $tool_name, $disabled, true );
+							?>
+								<label class="sflmcp-webmcp-tool-label">
+									<input type="checkbox"
+										class="sflmcp-webmcp-tool-check"
+										data-tool="<?php echo esc_attr( $tool_name ); ?>"
+										<?php checked( ! $is_disabled ); ?>>
+									<code><?php echo esc_html( $tool_name ); ?></code>
+									&mdash; <?php echo esc_html( $label ); ?>
+								</label>
+							<?php endforeach; ?>
+						</td>
+					</tr>
 				</table>
 
 				<?php submit_button( __( 'Save WebMCP Settings', 'stifli-flex-mcp' ), 'secondary', 'sflmcp-copilot-webmcp-save' ); ?>
 			</form>
 
-			<details style="margin-top:10px;">
-				<summary style="cursor:pointer;font-weight:600;"><?php esc_html_e( 'Registered WebMCP Tools (14)', 'stifli-flex-mcp' ); ?></summary>
-				<p style="margin:8px 0 0 18px;">
+			<details class="sflmcp-webmcp-details">
+				<summary><?php esc_html_e( 'Registered WebMCP Tools (14)', 'stifli-flex-mcp' ); ?></summary>
+				<p>
 					<code>copilot_set_title</code>, <code>copilot_set_excerpt</code>, <code>copilot_set_slug</code>,
 					<code>copilot_set_status</code>, <code>copilot_set_categories</code>, <code>copilot_set_tags</code>,
 					<code>copilot_replace_content</code>, <code>copilot_find_replace</code>, <code>copilot_insert_block</code>,
@@ -1165,9 +1231,23 @@ class StifliFlexMcp_Copilot_Admin {
 			$language = 'en';
 		}
 
+		$system_prompt = '';
+		if ( isset( $_POST['webmcp_system_prompt'] ) ) {
+			$system_prompt = sanitize_textarea_field( wp_unslash( $_POST['webmcp_system_prompt'] ) );
+		}
+
+		$disabled_tools = array();
+		if ( ! empty( $_POST['webmcp_disabled_tools'] ) && is_array( $_POST['webmcp_disabled_tools'] ) ) {
+			foreach ( $_POST['webmcp_disabled_tools'] as $tool ) {
+				$disabled_tools[] = sanitize_text_field( wp_unslash( $tool ) );
+			}
+		}
+
 		update_option( self::WEBMCP_OPTION_KEY, array(
-			'enabled'  => $enabled,
-			'language' => $language,
+			'enabled'        => $enabled,
+			'language'       => $language,
+			'system_prompt'  => $system_prompt,
+			'disabled_tools' => $disabled_tools,
 		) );
 
 		wp_send_json_success();

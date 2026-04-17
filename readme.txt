@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.1.3
+Stable tag: 3.1.5
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -93,15 +93,7 @@ Generate stunning images and videos directly from your AI agent or the dedicated
 
 * **Image Generation** — "Generate a hero image for my blog post about AI" using OpenAI (gpt-image-1, DALL·E 2/3) or Google Gemini (Imagen 4)
 * **Video Generation** — "Create a 5-second product showcase video" using OpenAI Sora or Google Veo 2/3
-* **Auto-save to Media Library** — Generated images and videos are automatically saved and ready to use
-* **Multi-provider** — Choose your preferred provider and model per generation type
-* **Multimedia Settings** — Dedicated admin page to configure providers, API keys, default sizes, quality, and post-processing options
 
-**🚀 Extend With Custom Tools**
-
-Transform ANY WordPress plugin into an AI tool! Custom Tools lets you write simple PHP snippets that expose plugin functionality to your AI agent:
-
-No coding experience required — use the built-in examples as templates.
 
 **🧩 Code Snippet Management — Design and Develop Through Conversation**
 
@@ -134,7 +126,6 @@ Schedule AI-powered tasks to run automatically on your WordPress site:
 
 Run AI workflows automatically when specific events happen
 
-
 **📡 Full MCP Server — Connect External AI Clients**
 
 StifLi Flex MCP also works as a standards-compliant Model Context Protocol (MCP) server, so you can connect external AI clients:
@@ -146,7 +137,6 @@ StifLi Flex MCP also works as a standards-compliant Model Context Protocol (MCP)
 
 Just copy the SSE URL from the Settings page, paste it into your AI client, and authorize. That's it — no tokens to manage, no passwords to share. The server handles discovery, registration, and authentication automatically following the latest security standards (OAuth 2.1, PKCE, RFC 9728, RFC 8414, RFC 7591).
 
-The server exposes 117+ tools (55 WordPress + 61 WooCommerce + 1 Core + Abilities + Custom Tools) that external AI agents can discover and execute.
 
 **⏪ Roll Back — The Only MCP Server With Undo**
 
@@ -210,7 +200,6 @@ StifLi Flex MCP integrates with:
 * Groq, Azure OpenAI, AWS Bedrock
 * Ollama, LM Studio, self-hosted solutions
 
-All connections use OAuth 2.1, SSE, and JSON-RPC 2.0 for secure, flexible, and scalable AI deployments.
 
 **📐 MCP Spec Compliance**
 
@@ -420,6 +409,14 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.1.5 =
+* Fixed: OAuth re-authorization crash when reconnecting previously authorized clients (ChatGPT, Claude Desktop) 
+
+
+= 3.1.4 =
+* **🌐 WebMCP — Browser AI (Beta)** — Use Chrome's built-in Gemini Nano to edit posts directly, no API key needed!
+* Note: Beta feature — Gemini Nano is a compact on-device model with limited reasoning; works best for simple editing tasks
+
 = 3.1.3 =
 * Fixed: Minor bug fixes and stability improvements
 

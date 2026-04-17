@@ -252,7 +252,7 @@ class StifliFlexMcp_OAuth_Server {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
 				stifli_flex_mcp_log( sprintf( 'OAuth: Auto-granting for previously authorized client %s, user %d', $client_id, get_current_user_id() ) );
 			}
-			$code = $storage->create_authorization_code(
+			$code = $storage->create_code(
 				$client_id,
 				get_current_user_id(),
 				$redirect_uri,

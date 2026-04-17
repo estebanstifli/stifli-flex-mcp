@@ -35,12 +35,28 @@ jQuery(function($) {
 		var $btn = $(this).find('#sflmcp-copilot-webmcp-save');
 		$btn.prop('disabled', true);
 
-		$.post(ajaxurl, {
+		// Collect disabled tools (unchecked checkboxes).
+		var disabledTools = [];
+		$('.sflmcp-webmcp-tool-check').each(function() {
+			if (!$(this).is(':checked')) {
+				disabledTools.push($(this).data('tool'));
+			}
+		});
+
+		var data = {
 			action: 'sflmcp_copilot_save_webmcp',
 			nonce:  $('#sflmcp_copilot_webmcp_nonce').val(),
-			webmcp_enabled:  $('#sflmcp-webmcp-enabled').is(':checked') ? '1' : '0',
-			webmcp_language: $('#sflmcp-webmcp-language').val()
-		}, function(res) {
+			webmcp_enabled:       $('#sflmcp-webmcp-enabled').is(':checked') ? '1' : '0',
+			webmcp_language:      $('#sflmcp-webmcp-language').val(),
+			webmcp_system_prompt: $('#sflmcp-webmcp-system-prompt').val()
+		};
+
+		// Send disabled tools as array.
+		for (var i = 0; i < disabledTools.length; i++) {
+			data['webmcp_disabled_tools[' + i + ']'] = disabledTools[i];
+		}
+
+		$.post(ajaxurl, data, function(res) {
 			$btn.prop('disabled', false);
 			if (res.success) {
 				$('#sflmcp-copilot-settings-notice').slideDown().delay(3000).slideUp();
