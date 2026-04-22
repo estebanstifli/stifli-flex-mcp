@@ -46,7 +46,6 @@ class StifliFlexMcpModel {
                     'woocommerce_' => array('WooCommerce', 'woocommerce/woocommerce.php'),
                     'w3tc_' => array('W3 Total Cache', 'w3-total-cache/w3-total-cache.php'),
                     'wp_super_cache_' => array('WP Super Cache', 'wp-super-cache/wp-cache.php'),
-                    'elementor_' => array('Elementor', 'elementor/elementor.php'),
                     'wpcf7_' => array('Contact Form 7', 'contact-form-7/wp-contact-form-7.php'),
                     'yoast_' => array('Yoast SEO', 'wordpress-seo/wp-seo.php'),
                     'rank_math_' => array('Rank Math', 'seo-by-rank-math/rank-math.php'),
@@ -162,11 +161,18 @@ class StifliFlexMcpModel {
     /**
      * Clasificación de intención y confirmación por tool.
      */
-    private function getIntentForTool(string $name): array {
+    public function getIntentForTool(string $name): array {
         // Escritura/mutación
         $WRITE = array(
             'wp_create_post','wp_update_post','wp_delete_post',
             'wp_create_comment','wp_update_comment','wp_delete_comment',
+            'wp_rm_update_post_seo',
+            // Yoast SEO write
+            'yoast_set_meta',
+            // ACF write
+            'acf_update_field',
+            // Gravity Forms write
+            'gf_update_entry',
             // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
             'wp_upload_image_from_url',
             'wp_upload_image',
@@ -208,7 +214,8 @@ class StifliFlexMcpModel {
             'snippet_create','snippet_update','snippet_delete',
             'snippet_activate','snippet_deactivate',
             // Changelog write operations
-            'mcp_rollback_change','mcp_redo_change','mcp_rollback_session'
+            'mcp_rollback_change','mcp_redo_change','mcp_rollback_session',
+            
         );
 
         // Lectura sensible (requiere permisos elevados o toca red externa)
@@ -216,6 +223,23 @@ class StifliFlexMcpModel {
             'wp_get_option',        // requiere manage_options en dispatch
             'wp_get_post_meta',     // requiere manage_options en dispatch
             'wp_get_settings',      // requiere manage_options
+            'wp_rm_get_head',
+            'wp_rm_get_post_seo',
+            // Yoast SEO reads
+            'yoast_get_meta',
+            'yoast_reindex',
+            // ACF reads
+            'acf_get_field_groups',
+            'acf_get_fields',
+            // WPForms reads
+            'wpforms_list_forms',
+            'wpforms_get_entries',
+            // Gravity Forms reads
+            'gf_list_forms',
+            'gf_get_entries',
+            // Forminator reads
+            'forminator_list_forms',
+            'forminator_get_entries',
             'fetch',                // red externa: tratar como lectura sensible
             // WordPress - Additional sensitive reads
             'wp_get_user_meta',     // user privacy data
@@ -281,6 +305,11 @@ class StifliFlexMcpModel {
         foreach ($tools as $tool) {
             $name = StifliFlexMcpUtils::getArrayValue($tool, 'name', '');
             if ('' === $name) {
+                continue;
+            }
+
+            $allowed_by_integration = apply_filters('sflmcp_is_tool_enabled_for_integrations', true, $name, 'list', $tool);
+            if (!$allowed_by_integration) {
                 continue;
             }
             
@@ -791,6 +820,232 @@ class StifliFlexMcpModel {
                             'body'    => array('type' => 'string'),
                         ),
                         'required' => array('url'),
+                    ),
+                ),
+
+                // Rank Math SEO
+                'wp_rm_get_head' => array(
+                    'name' => 'wp_rm_get_head',
+                    'description' => 'Get rendered SEO head HTML for a URL using Rank Math endpoint. Requires Rank Math Headless CMS Support enabled.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'url' => array('type' => 'string'),
+                        ),
+                        'required' => array('url'),
+                    ),
+                ),
+                'wp_rm_get_post_seo' => array(
+                    'name' => 'wp_rm_get_post_seo',
+                    'description' => 'Get Rank Math SEO post meta fields for a post ID.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+                'wp_rm_update_post_seo' => array(
+                    'name' => 'wp_rm_update_post_seo',
+                    'description' => 'Update Rank Math SEO post meta fields for a post ID.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                            'title' => array('type' => 'string'),
+                            'description' => array('type' => 'string'),
+                            'focus_keyword' => array('type' => 'string'),
+                            'canonical_url' => array('type' => 'string'),
+                            'facebook_title' => array('type' => 'string'),
+                            'facebook_description' => array('type' => 'string'),
+                            'facebook_image' => array('type' => 'string'),
+                            'twitter_title' => array('type' => 'string'),
+                            'twitter_description' => array('type' => 'string'),
+                            'twitter_image' => array('type' => 'string'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+
+                // Yoast SEO
+                'yoast_get_meta' => array(
+                    'name' => 'yoast_get_meta',
+                    'description' => 'Get Yoast SEO meta fields for a post (title, description, focus keyword, canonical, robots, OG, Twitter). Requires Yoast SEO plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer', 'description' => 'Post ID to read Yoast meta from'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+                'yoast_set_meta' => array(
+                    'name' => 'yoast_set_meta',
+                    'description' => 'Set Yoast SEO meta fields for a post. Accepts title, description, focus_keyword, canonical, noindex, nofollow, facebook_title, facebook_description, facebook_image, twitter_title, twitter_description, twitter_image. Requires Yoast SEO plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'              => array('type' => 'integer'),
+                            'title'                => array('type' => 'string'),
+                            'description'          => array('type' => 'string'),
+                            'focus_keyword'        => array('type' => 'string'),
+                            'canonical'            => array('type' => 'string'),
+                            'noindex'              => array('type' => 'boolean'),
+                            'nofollow'             => array('type' => 'boolean'),
+                            'facebook_title'       => array('type' => 'string'),
+                            'facebook_description' => array('type' => 'string'),
+                            'facebook_image'       => array('type' => 'string'),
+                            'twitter_title'        => array('type' => 'string'),
+                            'twitter_description'  => array('type' => 'string'),
+                            'twitter_image'        => array('type' => 'string'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+                'yoast_reindex' => array(
+                    'name' => 'yoast_reindex',
+                    'description' => 'Clear Yoast SEO indexables cache for a post or for all posts (site-wide). Requires Yoast SEO plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer', 'description' => 'Post ID to reindex, or omit for site-wide cache clear'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+
+                // Advanced Custom Fields (ACF)
+                'acf_get_field_groups' => array(
+                    'name' => 'acf_get_field_groups',
+                    'description' => 'List all ACF field groups with their keys, titles and location rules. Requires Advanced Custom Fields plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(),
+                        'required' => array(),
+                    ),
+                ),
+                'acf_get_fields' => array(
+                    'name' => 'acf_get_fields',
+                    'description' => 'Get ACF field values for a post. Returns field keys, names, types and current values. Requires ACF plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer', 'description' => 'Post ID to read ACF fields from'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+                'acf_update_field' => array(
+                    'name' => 'acf_update_field',
+                    'description' => 'Update an ACF field value for a post by field name or key. Requires ACF plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'     => array('type' => 'integer'),
+                            'field_name'  => array('type' => 'string', 'description' => 'ACF field name or key'),
+                            'value'       => array('description' => 'New field value (string, number, boolean, array)'),
+                        ),
+                        'required' => array('post_id', 'field_name', 'value'),
+                    ),
+                ),
+
+                // WPForms
+                'wpforms_list_forms' => array(
+                    'name' => 'wpforms_list_forms',
+                    'description' => 'List all WPForms forms (ID, title, status, created date). Requires WPForms plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'limit'  => array('type' => 'integer', 'description' => 'Max forms to return (default 50)'),
+                            'offset' => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wpforms_get_entries' => array(
+                    'name' => 'wpforms_get_entries',
+                    'description' => 'Get form entries for a WPForms form. Returns entry ID, date, fields and status. Requires WPForms plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'form_id' => array('type' => 'integer'),
+                            'limit'   => array('type' => 'integer', 'description' => 'Max entries (default 20)'),
+                            'offset'  => array('type' => 'integer'),
+                            'status'  => array('type' => 'string', 'description' => 'Entry status: active, spam, trash or empty for all'),
+                        ),
+                        'required' => array('form_id'),
+                    ),
+                ),
+
+                // Gravity Forms
+                'gf_list_forms' => array(
+                    'name' => 'gf_list_forms',
+                    'description' => 'List all Gravity Forms (ID, title, description, entry count). Requires Gravity Forms plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'active' => array('type' => 'boolean', 'description' => 'Filter by active status'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'gf_get_entries' => array(
+                    'name' => 'gf_get_entries',
+                    'description' => 'Get entries for a Gravity Forms form. Requires Gravity Forms plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'form_id'    => array('type' => 'integer'),
+                            'page_size'  => array('type' => 'integer', 'description' => 'Entries per page (default 20)'),
+                            'offset'     => array('type' => 'integer'),
+                            'status'     => array('type' => 'string', 'description' => 'active, spam, trash or empty for all'),
+                            'search_value' => array('type' => 'string'),
+                            'field_id'   => array('type' => 'string', 'description' => 'Field ID for search filter'),
+                        ),
+                        'required' => array('form_id'),
+                    ),
+                ),
+                'gf_update_entry' => array(
+                    'name' => 'gf_update_entry',
+                    'description' => 'Update a Gravity Forms entry (status, is_read, is_starred, or field values). Requires Gravity Forms plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'entry_id'     => array('type' => 'integer'),
+                            'status'       => array('type' => 'string', 'description' => 'active, spam, trash'),
+                            'is_read'      => array('type' => 'boolean'),
+                            'is_starred'   => array('type' => 'boolean'),
+                            'field_values' => array('type' => 'object', 'description' => 'Object of field_id => value to update'),
+                        ),
+                        'required' => array('entry_id'),
+                    ),
+                ),
+
+                // Forminator
+                'forminator_list_forms' => array(
+                    'name' => 'forminator_list_forms',
+                    'description' => 'List all Forminator forms (custom forms, polls, quizzes). Requires Forminator plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'type'  => array('type' => 'string', 'description' => 'Form type: custom-forms (default), poll, quiz'),
+                            'limit' => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'forminator_get_entries' => array(
+                    'name' => 'forminator_get_entries',
+                    'description' => 'Get submission entries for a Forminator form. Requires Forminator plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'form_id' => array('type' => 'integer'),
+                            'per_page' => array('type' => 'integer', 'description' => 'Entries per page (default 20)'),
+                            'page'    => array('type' => 'integer'),
+                        ),
+                        'required' => array('form_id'),
                     ),
                 ),
 
@@ -1524,6 +1779,28 @@ class StifliFlexMcpModel {
             'mcp_rollback_change' => 'manage_options',
             'mcp_redo_change' => 'manage_options',
             'mcp_rollback_session' => 'manage_options',
+            // Rank Math
+            'wp_rm_get_head' => 'edit_posts',
+            'wp_rm_get_post_seo' => 'edit_posts',
+            'wp_rm_update_post_seo' => 'edit_posts',
+            // Yoast SEO
+            'yoast_get_meta' => 'edit_posts',
+            'yoast_set_meta' => 'edit_posts',
+            'yoast_reindex' => 'manage_options',
+            // ACF
+            'acf_get_field_groups' => 'edit_posts',
+            'acf_get_fields' => 'edit_posts',
+            'acf_update_field' => 'edit_posts',
+            // WPForms
+            'wpforms_list_forms' => 'manage_options',
+            'wpforms_get_entries' => 'manage_options',
+            // Gravity Forms
+            'gf_list_forms' => 'manage_options',
+            'gf_get_entries' => 'manage_options',
+            'gf_update_entry' => 'manage_options',
+            // Forminator
+            'forminator_list_forms' => 'manage_options',
+            'forminator_get_entries' => 'manage_options',
         );
 
         // Merge WooCommerce capabilities if available
@@ -1583,6 +1860,18 @@ class StifliFlexMcpModel {
         $required_cap = $this->getToolCapability($tool);
         if (!empty($required_cap) && !current_user_can($required_cap)) {
             return array('jsonrpc' => '2.0', 'id' => $id, 'error' => array('code' => 'permission_denied', 'message' => 'Insufficient permissions to execute ' . $tool . '. Required capability: ' . $required_cap));
+        }
+
+        $allowed_by_integration = apply_filters('sflmcp_is_tool_enabled_for_integrations', true, $tool, 'call', null);
+        if (!$allowed_by_integration) {
+            return array(
+                'jsonrpc' => '2.0',
+                'id' => $id,
+                'error' => array(
+                    'code' => -42609,
+                    'message' => 'Tool is disabled by plugin integration settings',
+                ),
+            );
         }
 
         // Change Tracker: capture before-state for mutating tools
@@ -3610,6 +3899,493 @@ class StifliFlexMcpModel {
                 $body_short = (strlen($body) > $maxlen) ? substr($body, 0, $maxlen) . "... [truncated]" : $body;
                 $addResultText($r, "Fetch status: $code\n" . $body_short);
                 break;
+            case 'wp_rm_get_head':
+                if ( ! function_exists( 'rank_math' ) ) {
+                    $r['error'] = array('code' => -32603, 'message' => 'Rank Math SEO is not active on this site.');
+                    break;
+                }
+                $rm_url = esc_url_raw( $utils::getArrayValue( $args, 'url', '' ) );
+                if ( empty( $rm_url ) ) {
+                    $r['error'] = array('code' => -32602, 'message' => 'Missing required parameter: url');
+                    break;
+                }
+                if ( class_exists( 'RankMath\\Helper' ) && method_exists( 'RankMath\\Helper', 'get_settings' ) ) {
+                    $rm_headless = call_user_func( array( 'RankMath\\Helper', 'get_settings' ), 'general.headless_support' );
+                    if ( empty( $rm_headless ) ) {
+                        $r['error'] = array('code' => -32603, 'message' => 'Rank Math Headless CMS Support is disabled. Enable it in Rank Math > General Settings > Others.');
+                        break;
+                    }
+                }
+                $rm_head_req = new WP_REST_Request( 'GET', '/rankmath/v1/getHead' );
+                $rm_head_req->set_param( 'url', $rm_url );
+                $rm_head_res = rest_do_request( $rm_head_req );
+                if ( $rm_head_res->is_error() ) {
+                    $rm_error = $rm_head_res->as_error();
+                    $r['error'] = array('code' => -32603, 'message' => $rm_error->get_error_message());
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( $rm_head_res->get_data(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'wp_rm_get_post_seo':
+                if ( ! function_exists( 'rank_math' ) ) {
+                    $r['error'] = array('code' => -32603, 'message' => 'Rank Math SEO is not active on this site.');
+                    break;
+                }
+                $rm_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                if ( ! $rm_post_id ) {
+                    $r['error'] = array('code' => -32602, 'message' => 'Missing required parameter: post_id');
+                    break;
+                }
+                if ( ! get_post( $rm_post_id ) ) {
+                    $r['error'] = array('code' => -32602, 'message' => 'Post not found.');
+                    break;
+                }
+                $rm_meta_keys = array(
+                    'rank_math_title',
+                    'rank_math_description',
+                    'rank_math_focus_keyword',
+                    'rank_math_robots',
+                    'rank_math_canonical_url',
+                    'rank_math_facebook_title',
+                    'rank_math_facebook_description',
+                    'rank_math_facebook_image',
+                    'rank_math_twitter_title',
+                    'rank_math_twitter_description',
+                    'rank_math_twitter_image',
+                    'rank_math_pillar_content',
+                );
+                $rm_data = array( 'post_id' => $rm_post_id );
+                foreach ( $rm_meta_keys as $rm_meta_key ) {
+                    $rm_data[ $rm_meta_key ] = get_post_meta( $rm_post_id, $rm_meta_key, true );
+                }
+                $addResultText( $r, wp_json_encode( $rm_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'wp_rm_update_post_seo':
+                if ( ! function_exists( 'rank_math' ) ) {
+                    $r['error'] = array('code' => -32603, 'message' => 'Rank Math SEO is not active on this site.');
+                    break;
+                }
+                $rm_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                if ( ! $rm_post_id ) {
+                    $r['error'] = array('code' => -32602, 'message' => 'Missing required parameter: post_id');
+                    break;
+                }
+                $rm_post = get_post( $rm_post_id );
+                if ( ! $rm_post ) {
+                    $r['error'] = array('code' => -32602, 'message' => 'Post not found.');
+                    break;
+                }
+                if ( ! current_user_can( 'edit_post', $rm_post_id ) ) {
+                    $r['error'] = array('code' => -32603, 'message' => 'You do not have permission to edit this post.');
+                    break;
+                }
+                $rm_map = array(
+                    'title'                => 'rank_math_title',
+                    'description'          => 'rank_math_description',
+                    'focus_keyword'        => 'rank_math_focus_keyword',
+                    'canonical_url'        => 'rank_math_canonical_url',
+                    'facebook_title'       => 'rank_math_facebook_title',
+                    'facebook_description' => 'rank_math_facebook_description',
+                    'twitter_title'        => 'rank_math_twitter_title',
+                    'twitter_description'  => 'rank_math_twitter_description',
+                    'facebook_image'       => 'rank_math_facebook_image',
+                    'twitter_image'        => 'rank_math_twitter_image',
+                );
+                $rm_url_fields = array( 'canonical_url', 'facebook_image', 'twitter_image' );
+                $rm_updated = array();
+                foreach ( $rm_map as $rm_arg_key => $rm_meta_key ) {
+                    if ( isset( $args[ $rm_arg_key ] ) ) {
+                        $rm_value = in_array( $rm_arg_key, $rm_url_fields, true )
+                            ? esc_url_raw( $args[ $rm_arg_key ] )
+                            : sanitize_text_field( $args[ $rm_arg_key ] );
+                        if ( false !== update_post_meta( $rm_post_id, $rm_meta_key, $rm_value ) ) {
+                            $rm_updated[] = $rm_arg_key;
+                        }
+                    }
+                }
+                $addResultText( $r, wp_json_encode( array(
+                    'post_id' => $rm_post_id,
+                    'updated_fields' => $rm_updated,
+                ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            // ── Yoast SEO ─────────────────────────────────────────────────────
+            case 'yoast_get_meta':
+                if ( ! defined( 'WPSEO_VERSION' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Yoast SEO plugin is not active.' );
+                    break;
+                }
+                $ys_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                if ( ! $ys_post_id || ! get_post( $ys_post_id ) ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Invalid or missing post_id.' );
+                    break;
+                }
+                $ys_keys = array(
+                    '_yoast_wpseo_title'              => 'title',
+                    '_yoast_wpseo_metadesc'           => 'description',
+                    '_yoast_wpseo_focuskw'            => 'focus_keyword',
+                    '_yoast_wpseo_canonical'          => 'canonical',
+                    '_yoast_wpseo_meta-robots-noindex' => 'noindex',
+                    '_yoast_wpseo_meta-robots-nofollow' => 'nofollow',
+                    '_yoast_wpseo_opengraph-title'    => 'facebook_title',
+                    '_yoast_wpseo_opengraph-description' => 'facebook_description',
+                    '_yoast_wpseo_opengraph-image'    => 'facebook_image',
+                    '_yoast_wpseo_twitter-title'      => 'twitter_title',
+                    '_yoast_wpseo_twitter-description' => 'twitter_description',
+                    '_yoast_wpseo_twitter-image'      => 'twitter_image',
+                );
+                $ys_data = array( 'post_id' => $ys_post_id );
+                foreach ( $ys_keys as $ys_meta_key => $ys_field ) {
+                    $ys_data[ $ys_field ] = get_post_meta( $ys_post_id, $ys_meta_key, true );
+                }
+                $addResultText( $r, wp_json_encode( $ys_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'yoast_set_meta':
+                if ( ! defined( 'WPSEO_VERSION' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Yoast SEO plugin is not active.' );
+                    break;
+                }
+                $ys_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                if ( ! $ys_post_id || ! get_post( $ys_post_id ) ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Invalid or missing post_id.' );
+                    break;
+                }
+                $ys_map = array(
+                    'title'                => '_yoast_wpseo_title',
+                    'description'          => '_yoast_wpseo_metadesc',
+                    'focus_keyword'        => '_yoast_wpseo_focuskw',
+                    'canonical'            => '_yoast_wpseo_canonical',
+                    'facebook_title'       => '_yoast_wpseo_opengraph-title',
+                    'facebook_description' => '_yoast_wpseo_opengraph-description',
+                    'facebook_image'       => '_yoast_wpseo_opengraph-image',
+                    'twitter_title'        => '_yoast_wpseo_twitter-title',
+                    'twitter_description'  => '_yoast_wpseo_twitter-description',
+                    'twitter_image'        => '_yoast_wpseo_twitter-image',
+                );
+                $ys_bool_map = array(
+                    'noindex'   => '_yoast_wpseo_meta-robots-noindex',
+                    'nofollow'  => '_yoast_wpseo_meta-robots-nofollow',
+                );
+                $ys_updated = array();
+                foreach ( $ys_map as $ys_arg => $ys_meta ) {
+                    if ( isset( $args[ $ys_arg ] ) ) {
+                        $ys_val = in_array( $ys_arg, array( 'canonical', 'facebook_image', 'twitter_image' ), true )
+                            ? esc_url_raw( $args[ $ys_arg ] )
+                            : sanitize_text_field( $args[ $ys_arg ] );
+                        update_post_meta( $ys_post_id, $ys_meta, $ys_val );
+                        $ys_updated[] = $ys_arg;
+                    }
+                }
+                foreach ( $ys_bool_map as $ys_arg => $ys_meta ) {
+                    if ( isset( $args[ $ys_arg ] ) ) {
+                        update_post_meta( $ys_post_id, $ys_meta, $args[ $ys_arg ] ? '1' : '0' );
+                        $ys_updated[] = $ys_arg;
+                    }
+                }
+                $addResultText( $r, wp_json_encode( array( 'post_id' => $ys_post_id, 'updated_fields' => $ys_updated ), JSON_PRETTY_PRINT ) );
+                break;
+            case 'yoast_reindex':
+                if ( ! defined( 'WPSEO_VERSION' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Yoast SEO plugin is not active.' );
+                    break;
+                }
+                $ys_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $ys_scope = 'site-wide';
+                if ( $ys_post_id ) {
+                    // Delete indexable for the post so Yoast rebuilds it on next request.
+                    if ( class_exists( 'Yoast\\WP\\SEO\\Repositories\\Indexable_Repository' ) ) {
+                        $ys_repo = \YoastSEO()->classes->get( 'Yoast\\WP\\SEO\\Repositories\\Indexable_Repository' );
+                        if ( $ys_repo ) {
+                            $ys_indexable = $ys_repo->find_by_id_and_type( $ys_post_id, 'post', false );
+                            if ( $ys_indexable ) {
+                                $ys_indexable->delete();
+                            }
+                        }
+                    }
+                    delete_post_meta( $ys_post_id, '_yoast_wpseo_content_score' );
+                    $ys_scope = 'post:' . $ys_post_id;
+                } else {
+                    // Trigger full reindex by bumping the version option used by Yoast's background indexing.
+                    delete_option( 'wpseo_indexation_complete' );
+                    delete_transient( 'wpseo_total_unindexed' );
+                }
+                $addResultText( $r, 'Yoast SEO reindex triggered. Scope: ' . $ys_scope );
+                break;
+
+            // ── ACF ───────────────────────────────────────────────────────────
+            case 'acf_get_field_groups':
+                if ( ! function_exists( 'acf_get_field_groups' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Advanced Custom Fields plugin is not active.' );
+                    break;
+                }
+                $acf_groups = acf_get_field_groups();
+                $acf_out = array();
+                foreach ( $acf_groups as $acf_g ) {
+                    $acf_out[] = array(
+                        'key'       => $acf_g['key'],
+                        'title'     => $acf_g['title'],
+                        'active'    => $acf_g['active'],
+                        'location'  => $acf_g['location'],
+                        'menu_order' => $acf_g['menu_order'],
+                    );
+                }
+                $addResultText( $r, wp_json_encode( $acf_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'acf_get_fields':
+                if ( ! function_exists( 'get_fields' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Advanced Custom Fields plugin is not active.' );
+                    break;
+                }
+                $acf_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                if ( ! $acf_post_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: post_id' );
+                    break;
+                }
+                $acf_fields = get_fields( $acf_post_id );
+                if ( false === $acf_fields ) {
+                    $acf_fields = array();
+                }
+                $addResultText( $r, wp_json_encode( $acf_fields, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'acf_update_field':
+                if ( ! function_exists( 'update_field' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Advanced Custom Fields plugin is not active.' );
+                    break;
+                }
+                $acf_post_id    = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $acf_field_name = sanitize_text_field( $utils::getArrayValue( $args, 'field_name', '' ) );
+                if ( ! $acf_post_id || '' === $acf_field_name ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameters: post_id, field_name.' );
+                    break;
+                }
+                // Value can be any type (string, int, bool, array) — passed as-is.
+                $acf_value  = $utils::getArrayValue( $args, 'value', null );
+                $acf_result = update_field( $acf_field_name, $acf_value, $acf_post_id );
+                if ( false === $acf_result ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'ACF update_field returned false. Check field name and post ID.' );
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( array( 'post_id' => $acf_post_id, 'field_name' => $acf_field_name, 'updated' => true ), JSON_PRETTY_PRINT ) );
+                break;
+
+            // ── WPForms ───────────────────────────────────────────────────────
+            case 'wpforms_list_forms':
+                if ( ! function_exists( 'wpforms' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'WPForms plugin is not active.' );
+                    break;
+                }
+                $wpf_limit  = max( 1, intval( $utils::getArrayValue( $args, 'limit', 50 ) ) );
+                $wpf_offset = max( 0, intval( $utils::getArrayValue( $args, 'offset', 0 ) ) );
+                $wpf_forms  = wpforms()->form->get( '', array(
+                    'posts_per_page' => $wpf_limit,
+                    'offset'         => $wpf_offset,
+                    'fields'         => 'ids',
+                ) );
+                $wpf_out = array();
+                if ( $wpf_forms ) {
+                    foreach ( $wpf_forms as $wpf_form_id ) {
+                        $wpf_form = wpforms()->form->get( $wpf_form_id );
+                        if ( $wpf_form ) {
+                            $wpf_out[] = array(
+                                'id'      => $wpf_form->ID,
+                                'title'   => $wpf_form->post_title,
+                                'status'  => $wpf_form->post_status,
+                                'created' => $wpf_form->post_date,
+                            );
+                        }
+                    }
+                }
+                $addResultText( $r, wp_json_encode( $wpf_out, JSON_PRETTY_PRINT ) );
+                break;
+            case 'wpforms_get_entries':
+                if ( ! function_exists( 'wpforms' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'WPForms plugin is not active.' );
+                    break;
+                }
+                $wpf_form_id = intval( $utils::getArrayValue( $args, 'form_id', 0 ) );
+                if ( ! $wpf_form_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: form_id.' );
+                    break;
+                }
+                $wpf_limit   = max( 1, intval( $utils::getArrayValue( $args, 'limit', 20 ) ) );
+                $wpf_offset  = max( 0, intval( $utils::getArrayValue( $args, 'offset', 0 ) ) );
+                $wpf_status  = sanitize_text_field( $utils::getArrayValue( $args, 'status', '' ) );
+                $wpf_query   = array(
+                    'form_id'  => $wpf_form_id,
+                    'number'   => $wpf_limit,
+                    'offset'   => $wpf_offset,
+                );
+                if ( $wpf_status ) {
+                    $wpf_query['status'] = $wpf_status;
+                }
+                $wpf_entries = wpforms()->entry->get_entries( $wpf_query );
+                $wpf_out = array();
+                if ( $wpf_entries ) {
+                    foreach ( $wpf_entries as $wpf_entry ) {
+                        $wpf_out[] = array(
+                            'entry_id' => $wpf_entry->entry_id,
+                            'form_id'  => $wpf_entry->form_id,
+                            'date'     => $wpf_entry->date,
+                            'status'   => $wpf_entry->status,
+                            'fields'   => json_decode( $wpf_entry->fields, true ),
+                        );
+                    }
+                }
+                $addResultText( $r, wp_json_encode( $wpf_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+
+            // ── Gravity Forms ─────────────────────────────────────────────────
+            case 'gf_list_forms':
+                if ( ! class_exists( 'GFAPI' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Gravity Forms plugin is not active.' );
+                    break;
+                }
+                $gf_active_only = isset( $args['active'] ) ? (bool) $args['active'] : null;
+                $gf_forms = GFAPI::get_forms( $gf_active_only );
+                $gf_out = array();
+                foreach ( $gf_forms as $gf_form ) {
+                    $gf_out[] = array(
+                        'id'          => $gf_form['id'],
+                        'title'       => $gf_form['title'],
+                        'description' => isset( $gf_form['description'] ) ? $gf_form['description'] : '',
+                        'is_active'   => ! empty( $gf_form['is_active'] ),
+                        'entry_count' => GFAPI::count_entries( $gf_form['id'] ),
+                    );
+                }
+                $addResultText( $r, wp_json_encode( $gf_out, JSON_PRETTY_PRINT ) );
+                break;
+            case 'gf_get_entries':
+                if ( ! class_exists( 'GFAPI' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Gravity Forms plugin is not active.' );
+                    break;
+                }
+                $gf_form_id   = intval( $utils::getArrayValue( $args, 'form_id', 0 ) );
+                if ( ! $gf_form_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: form_id.' );
+                    break;
+                }
+                $gf_page_size = max( 1, intval( $utils::getArrayValue( $args, 'page_size', 20 ) ) );
+                $gf_offset    = max( 0, intval( $utils::getArrayValue( $args, 'offset', 0 ) ) );
+                $gf_status    = sanitize_text_field( $utils::getArrayValue( $args, 'status', 'active' ) );
+                $gf_search    = array();
+                $gf_sv        = sanitize_text_field( $utils::getArrayValue( $args, 'search_value', '' ) );
+                $gf_fid       = sanitize_text_field( $utils::getArrayValue( $args, 'field_id', '' ) );
+                if ( $gf_sv && $gf_fid ) {
+                    $gf_search = array( 'field_filters' => array( array( 'key' => $gf_fid, 'value' => $gf_sv ) ) );
+                } elseif ( $gf_sv ) {
+                    $gf_search = array( 'field_filters' => array( array( 'key' => 0, 'value' => $gf_sv ) ) );
+                }
+                $gf_criteria = array( 'status' => $gf_status );
+                $gf_sorting  = array( 'key' => 'date_created', 'direction' => 'DESC', 'is_numeric' => false );
+                $gf_paging   = array( 'offset' => $gf_offset, 'page_size' => $gf_page_size );
+                $gf_entries  = GFAPI::get_entries( $gf_form_id, array_merge( $gf_criteria, $gf_search ), $gf_sorting, $gf_paging );
+                if ( is_wp_error( $gf_entries ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => $gf_entries->get_error_message() );
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( $gf_entries, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'gf_update_entry':
+                if ( ! class_exists( 'GFAPI' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Gravity Forms plugin is not active.' );
+                    break;
+                }
+                $gf_entry_id = intval( $utils::getArrayValue( $args, 'entry_id', 0 ) );
+                if ( ! $gf_entry_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: entry_id.' );
+                    break;
+                }
+                $gf_entry = GFAPI::get_entry( $gf_entry_id );
+                if ( is_wp_error( $gf_entry ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => $gf_entry->get_error_message() );
+                    break;
+                }
+                if ( isset( $args['status'] ) ) {
+                    $gf_entry['status'] = sanitize_text_field( $args['status'] );
+                }
+                if ( isset( $args['is_read'] ) ) {
+                    $gf_entry['is_read'] = $args['is_read'] ? '1' : '0';
+                }
+                if ( isset( $args['is_starred'] ) ) {
+                    $gf_entry['is_starred'] = $args['is_starred'] ? '1' : '0';
+                }
+                if ( isset( $args['field_values'] ) && is_array( $args['field_values'] ) ) {
+                    foreach ( $args['field_values'] as $gf_fid => $gf_fval ) {
+                        $gf_entry[ $gf_fid ] = is_string( $gf_fval ) ? sanitize_text_field( $gf_fval ) : $gf_fval;
+                    }
+                }
+                $gf_result = GFAPI::update_entry( $gf_entry );
+                if ( is_wp_error( $gf_result ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => $gf_result->get_error_message() );
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( array( 'entry_id' => $gf_entry_id, 'updated' => true ), JSON_PRETTY_PRINT ) );
+                break;
+
+            // ── Forminator ────────────────────────────────────────────────────
+            case 'forminator_list_forms':
+                if ( ! class_exists( 'Forminator_API' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Forminator plugin is not active.' );
+                    break;
+                }
+                $fi_type  = sanitize_text_field( $utils::getArrayValue( $args, 'type', 'custom-forms' ) );
+                $fi_limit = max( 1, intval( $utils::getArrayValue( $args, 'limit', 50 ) ) );
+                switch ( $fi_type ) {
+                    case 'poll':
+                        $fi_forms = Forminator_API::get_polls( null, $fi_limit );
+                        break;
+                    case 'quiz':
+                        $fi_forms = Forminator_API::get_quizzes( null, $fi_limit );
+                        break;
+                    default:
+                        $fi_forms = Forminator_API::get_forms( null, $fi_limit );
+                }
+                if ( is_wp_error( $fi_forms ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => $fi_forms->get_error_message() );
+                    break;
+                }
+                $fi_out = array();
+                if ( is_array( $fi_forms ) ) {
+                    foreach ( $fi_forms as $fi_form ) {
+                        $fi_out[] = array(
+                            'id'     => $fi_form->id,
+                            'name'   => isset( $fi_form->settings['formName'] ) ? $fi_form->settings['formName'] : '',
+                            'status' => isset( $fi_form->settings['status'] ) ? $fi_form->settings['status'] : '',
+                        );
+                    }
+                }
+                $addResultText( $r, wp_json_encode( $fi_out, JSON_PRETTY_PRINT ) );
+                break;
+            case 'forminator_get_entries':
+                if ( ! class_exists( 'Forminator_API' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Forminator plugin is not active.' );
+                    break;
+                }
+                $fi_form_id  = intval( $utils::getArrayValue( $args, 'form_id', 0 ) );
+                if ( ! $fi_form_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: form_id.' );
+                    break;
+                }
+                $fi_per_page = max( 1, intval( $utils::getArrayValue( $args, 'per_page', 20 ) ) );
+                $fi_page     = max( 1, intval( $utils::getArrayValue( $args, 'page', 1 ) ) );
+                $fi_entries  = Forminator_API::get_entries( $fi_form_id, $fi_page, $fi_per_page );
+                if ( is_wp_error( $fi_entries ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => $fi_entries->get_error_message() );
+                    break;
+                }
+                $fi_out = array();
+                if ( is_array( $fi_entries ) ) {
+                    foreach ( $fi_entries as $fi_entry ) {
+                        $fi_out[] = array(
+                            'entry_id'   => $fi_entry->entry_id,
+                            'form_id'    => $fi_entry->form_id,
+                            'date_created' => $fi_entry->date_created,
+                            'fields'     => $fi_entry->meta_data,
+                        );
+                    }
+                }
+                $addResultText( $r, wp_json_encode( $fi_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+
             case 'wp_get_post_meta':
                 if (!current_user_can('manage_options')) {
                     $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');

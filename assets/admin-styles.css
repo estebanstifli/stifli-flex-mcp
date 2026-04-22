@@ -32,12 +32,180 @@
     margin-right: 3px;
 }
 
-.sflmcp-bulk-actions {
-    margin-bottom: 10px;
+.sflmcp-tools-category {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
 }
 
-.sflmcp-bulk-actions .button {
-    margin-right: 5px;
+.sflmcp-tools-category summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+}
+
+.sflmcp-tools-category summary::-webkit-details-marker {
+    display: none;
+}
+
+.sflmcp-tools-category .sflmcp-chevron {
+    color: #646970;
+    width: 14px;
+    text-align: center;
+}
+
+.sflmcp-tools-category[open] .sflmcp-chevron {
+    transform: rotate(90deg);
+}
+
+.sflmcp-tools-category-title {
+    font-weight: 600;
+}
+
+.sflmcp-tools-category-meta {
+    margin-left: auto;
+    color: #50575e;
+    font-size: 12px;
+}
+
+.sflmcp-tools-category-body {
+    border-top: 1px solid #dcdcde;
+    padding: 12px 14px;
+}
+
+.sflmcp-tool-mode-badge {
+    display: inline-block;
+    font-size: 11px;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.sflmcp-tool-mode-badge.sflmcp-mode-read {
+    background: #e8f4ff;
+    color: #125e9c;
+}
+
+.sflmcp-tool-mode-badge.sflmcp-mode-write {
+    background: #fff4e5;
+    color: #a35a00;
+}
+
+/* Summary layout with three columns */
+.sflmcp-tools-category summary {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.sflmcp-summary-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.sflmcp-summary-left input[type="checkbox"] {
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Indeterminate state: some tools enabled but not all */
+.sflmcp-summary-left input[type="checkbox"].sflmcp-partial {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background-color: #8a9baa;
+    border: 1px solid #5f7a8e;
+    border-radius: 2px;
+    cursor: pointer;
+    vertical-align: middle;
+    flex-shrink: 0;
+    /* White dash in the center to indicate partial selection */
+    background-image: linear-gradient(#fff, #fff);
+    background-size: 55% 2px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.sflmcp-chevron {
+    display: inline-block;
+    font-size: 12px;
+    transition: transform 0.2s ease;
+}
+
+.sflmcp-tools-category[open] .sflmcp-chevron {
+    transform: rotate(90deg);
+}
+
+.sflmcp-summary-right {
+    flex: 1;
+    text-align: right;
+    min-width: 120px;
+    padding-right: 4px;
+}
+
+.sflmcp-enabled-count {
+    font-size: 12px;
+    color: #50575e;
+    white-space: nowrap;
+    transition: color 0.2s ease, font-weight 0.2s ease;
+}
+
+/* Some tools enabled */
+.sflmcp-enabled-count.sflmcp-count-partial {
+    color: #1a5276;
+}
+
+/* All tools enabled */
+.sflmcp-enabled-count.sflmcp-count-full {
+    color: #001d3d;
+    font-weight: 700;
+}
+
+/* read/write labels in summary (only shown when there are enabled tools of that type) */
+.sflmcp-mode-label {
+    color: #001d3d;
+    font-weight: 600;
+}
+
+.sflmcp-summary-right {
+    flex-shrink: 0;
+    text-align: right;
+    min-width: 100px;
+}
+
+.sflmcp-tokens-label {
+    font-size: 12px;
+    color: #50575e;
+    white-space: nowrap;
+}
+
+/* Checkbox styling in table rows */
+.sflmcp-tools-col-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sflmcp-tools-col-checkbox input[type="checkbox"] {
+    cursor: pointer;
+    flex-shrink: 0;
+    margin: 0;
+}
+
+.sflmcp-tools-col-checkbox code {
+    word-break: break-all;
 }
 
 /* =============================================================================

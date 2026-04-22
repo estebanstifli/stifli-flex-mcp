@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -47,6 +47,8 @@ class StifliFlexMcp {
 			// AJAX handlers for WordPress/WooCommerce tools
 			add_action('wp_ajax_sflmcp_toggle_tool', array($this, 'ajax_toggle_tool'));
 			add_action('wp_ajax_sflmcp_bulk_toggle_tools', array($this, 'ajax_bulk_toggle_tools'));
+			add_action('wp_ajax_sflmcp_toggle_tool_by_checkbox', array($this, 'ajax_toggle_tool_by_checkbox'));
+			add_action('wp_ajax_sflmcp_bulk_toggle_tools_by_id', array($this, 'ajax_bulk_toggle_tools_by_id'));
 			// AJAX handlers for WordPress Abilities API (WordPress 6.9+)
 			add_action('wp_ajax_sflmcp_discover_abilities', array($this, 'ajax_discover_abilities'));
 			add_action('wp_ajax_sflmcp_import_ability', array($this, 'ajax_import_ability'));
@@ -1195,33 +1197,9 @@ class StifliFlexMcp {
 			'1.0.5'
 		);
 
-		// Enqueue Custom Tools Assets
+		// Enqueue Custom Tools assets for legacy tab.
 		if ($active_tab === 'custom') {
-			wp_enqueue_style(
-				'sflmcp-admin-custom-tools',
-				plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.css',
-				array(),
-				'1.0.5'
-			);
-			wp_enqueue_script(
-				'sflmcp-admin-custom-tools',
-				plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.js',
-				array('jquery'),
-				'1.0.5',
-				true
-			);
-			wp_localize_script('sflmcp-admin-custom-tools', 'sflmcpCustom', array(
-				'ajaxUrl' => admin_url('admin-ajax.php'),
-				'nonce' => wp_create_nonce('sflmcp_custom_tools'),
-				'i18n' => array(
-					'confirmDelete' => __('Are you sure you want to delete this tool?', 'stifli-flex-mcp'),
-					'errorSaving' => __('Error saving tool', 'stifli-flex-mcp'),
-					'saved' => __('Tool saved successfully', 'stifli-flex-mcp'),
-					'testing' => __('Testing...', 'stifli-flex-mcp'),
-					'success' => __('Success', 'stifli-flex-mcp'),
-					'failed' => __('Failed', 'stifli-flex-mcp'),
-				),
-			));
+			$this->enqueueCustomToolsAssets();
 		}
 
 		// Enqueue Abilities tab assets (WordPress 6.9+)
@@ -1303,6 +1281,40 @@ class StifliFlexMcp {
 				),
 			));
 		}
+
+		// Extension point for modular admin tabs.
+		do_action('sflmcp_admin_enqueue_tab_assets', $active_tab, $hook, $this);
+	}
+
+	/**
+	 * Enqueue assets used by the Custom Tools UI.
+	 */
+	public function enqueueCustomToolsAssets() {
+		wp_enqueue_style(
+			'sflmcp-admin-custom-tools',
+			plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.css',
+			array(),
+			'1.0.5'
+		);
+		wp_enqueue_script(
+			'sflmcp-admin-custom-tools',
+			plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.js',
+			array('jquery'),
+			'1.0.5',
+			true
+		);
+		wp_localize_script('sflmcp-admin-custom-tools', 'sflmcpCustom', array(
+			'ajaxUrl' => admin_url('admin-ajax.php'),
+			'nonce' => wp_create_nonce('sflmcp_custom_tools'),
+			'i18n' => array(
+				'confirmDelete' => __('Are you sure you want to delete this tool?', 'stifli-flex-mcp'),
+				'errorSaving' => __('Error saving tool', 'stifli-flex-mcp'),
+				'saved' => __('Tool saved successfully', 'stifli-flex-mcp'),
+				'testing' => __('Testing...', 'stifli-flex-mcp'),
+				'success' => __('Success', 'stifli-flex-mcp'),
+				'failed' => __('Failed', 'stifli-flex-mcp'),
+			),
+		));
 	}
 
 	/**
@@ -1316,51 +1328,65 @@ class StifliFlexMcp {
 		// Get active tab
 		$active_tab = isset($_GET['tab']) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'settings'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- tab selection is a read-only navigation parameter
 		
+		$tabs = array(
+			'settings' => __('Settings', 'stifli-flex-mcp'),
+			'profiles' => __('Profiles', 'stifli-flex-mcp'),
+			'tools' => __('WordPress Tools', 'stifli-flex-mcp'),
+			'wc_tools' => __('WooCommerce Tools', 'stifli-flex-mcp'),
+		);
+		if ( stifli_flex_mcp_abilities_available() ) {
+			$tabs['abilities'] = __('Abilities', 'stifli-flex-mcp');
+		}
+		$tabs['help'] = __('📚 Help', 'stifli-flex-mcp');
+		$tabs = apply_filters('sflmcp_admin_tabs', $tabs, $active_tab, $this);
+
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html__('MCP Server', 'stifli-flex-mcp'); ?></h1>
 			
 			<h2 class="nav-tab-wrapper">
-				<a href="?page=sflmcp-server&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('Settings', 'stifli-flex-mcp'); ?>
-				</a>
-				<a href="?page=sflmcp-server&tab=profiles" class="nav-tab <?php echo $active_tab === 'profiles' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('Profiles', 'stifli-flex-mcp'); ?>
-				</a>
-				<a href="?page=sflmcp-server&tab=tools" class="nav-tab <?php echo $active_tab === 'tools' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('WordPress Tools', 'stifli-flex-mcp'); ?>
-				</a>
-				<a href="?page=sflmcp-server&tab=wc_tools" class="nav-tab <?php echo $active_tab === 'wc_tools' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('WooCommerce Tools', 'stifli-flex-mcp'); ?>
-				</a>
-				<?php if ( stifli_flex_mcp_abilities_available() ) : ?>
-				<a href="?page=sflmcp-server&tab=abilities" class="nav-tab <?php echo $active_tab === 'abilities' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('Abilities', 'stifli-flex-mcp'); ?>
-				</a>
-				<?php endif; ?>
-				<a href="?page=sflmcp-server&tab=custom" class="nav-tab <?php echo $active_tab === 'custom' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('Custom Tools', 'stifli-flex-mcp'); ?>
-				</a>
-				<a href="?page=sflmcp-server&tab=help" class="nav-tab <?php echo $active_tab === 'help' ? 'nav-tab-active' : ''; ?>">
-					<?php echo esc_html__('📚 Help', 'stifli-flex-mcp'); ?>
-				</a>
+				<?php foreach ($tabs as $tab_slug => $tab_label) : ?>
+					<a href="<?php echo esc_url(add_query_arg(array('page' => 'sflmcp-server', 'tab' => $tab_slug), admin_url('admin.php'))); ?>" class="nav-tab <?php echo $active_tab === $tab_slug ? 'nav-tab-active' : ''; ?>">
+						<?php echo esc_html($tab_label); ?>
+					</a>
+				<?php endforeach; ?>
 			</h2>
 			
 			<?php
+			$handled = false;
 			if ($active_tab === 'settings') {
 				$this->renderSettingsTab();
+				$handled = true;
 			} elseif ($active_tab === 'profiles') {
 				$this->renderProfilesTab();
+				$handled = true;
 			} elseif ($active_tab === 'tools') {
 				$this->renderToolsTab();
+				$handled = true;
 			} elseif ($active_tab === 'wc_tools') {
 				$this->renderWCToolsTab();
+				$handled = true;
 			} elseif ($active_tab === 'abilities' && stifli_flex_mcp_abilities_available()) {
 				$this->renderAbilitiesTab();
-			} elseif ($active_tab === 'custom') {
+				$handled = true;
+			} elseif ($active_tab === 'custom' && (bool) apply_filters('sflmcp_enable_legacy_custom_tab', false, $this)) {
 				$this->renderCustomToolsTab();
+				$handled = true;
 			} elseif ($active_tab === 'help') {
 				$this->renderHelpTab();
+				$handled = true;
+			}
+
+			if (!$handled) {
+				$external_renderers = apply_filters('sflmcp_admin_tab_renderers', array(), $this);
+				if (isset($external_renderers[$active_tab]) && is_callable($external_renderers[$active_tab])) {
+					call_user_func($external_renderers[$active_tab], $active_tab, $this);
+					$handled = true;
+				}
+			}
+
+			if (!$handled) {
+				$this->renderSettingsTab();
 			}
 			?>
 		</div>
@@ -1613,6 +1639,8 @@ class StifliFlexMcp {
 	}
 	
 	private function renderToolsTab() {
+		$model = $this->getModel();
+		$integration_managed_tools = $this->getIntegrationManagedTools($model);
 		global $wpdb;
 		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools', false);
 		$profiles_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_profiles', false);
@@ -1634,13 +1662,24 @@ class StifliFlexMcp {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools reset and reseeded successfully.', 'stifli-flex-mcp') . '</p></div>';
 		}
 		
-		// Get all tools grouped by category (ONLY WordPress, excluding WooCommerce)
+		// Get all tools grouped by category (ONLY WordPress, excluding WooCommerce).
 		$tools_query = sprintf('SELECT * FROM %s WHERE category NOT LIKE %%s ORDER BY category, tool_name', $table_sql);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
 		$tools = $wpdb->get_results($wpdb->prepare($tools_query, 'WooCommerce%'), ARRAY_A);
-		$token_sum_query = sprintf('SELECT COALESCE(SUM(token_estimate),0) FROM %s WHERE category NOT LIKE %%s AND enabled = %%d', $table_sql);
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
-		$enabled_token_total = (int) $wpdb->get_var($wpdb->prepare($token_sum_query, 'WooCommerce%', 1));
+
+		if (!empty($integration_managed_tools)) {
+			$tools = array_values(array_filter($tools, function($tool) use ($integration_managed_tools) {
+				$name = isset($tool['tool_name']) ? (string) $tool['tool_name'] : '';
+				return '' === $name || !isset($integration_managed_tools[$name]);
+			}));
+		}
+
+		$enabled_token_total = 0;
+		foreach ($tools as $tool_row) {
+			if (intval($tool_row['enabled']) === 1) {
+				$enabled_token_total += intval($tool_row['token_estimate']);
+			}
+		}
 		
 		$grouped_tools = array();
 		foreach ($tools as $tool) {
@@ -1691,51 +1730,84 @@ class StifliFlexMcp {
 			</form>
 			
 			<?php foreach ($grouped_tools as $category => $category_tools): ?>
-				<?php $category_token_total = 0; foreach ($category_tools as $tool_meta) { $category_token_total += intval($tool_meta['token_estimate']); } ?>
-				<h2><?php echo esc_html($category); ?> <small class="sflmcp-category-count">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
-				<div class="sflmcp-bulk-actions">
-					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="enable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Enable All', 'stifli-flex-mcp'); ?></button>
-					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="disable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Disable All', 'stifli-flex-mcp'); ?></button>
-				</div>
-				<table class="wp-list-table widefat fixed striped">
-					<thead>
-						<tr>
-							<th class="sflmcp-tools-col-tool"><?php echo esc_html__('Tool', 'stifli-flex-mcp'); ?></th>
-							<th class="sflmcp-tools-col-desc"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
-							<th class="sflmcp-tools-col-tokens"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
-							<th class="sflmcp-tools-col-status"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
-						</tr>
-					</thead>
-					<tbody>
-						<?php foreach ($category_tools as $tool): 
-							$is_enabled = intval($tool['enabled']) === 1;
-							$status_class = $is_enabled ? 'status-enabled' : 'status-disabled';
-							$status_icon = $is_enabled ? 'dashicons-yes' : 'dashicons-no';
-							$status_text = $is_enabled ? __('Enabled', 'stifli-flex-mcp') : __('Disabled', 'stifli-flex-mcp');
-						?>
-							<tr>
-								<td><code><?php echo esc_html($tool['tool_name']); ?></code></td>
-								<td><?php echo esc_html($tool['tool_description']); ?></td>
-								<td><?php echo esc_html(number_format_i18n(intval($tool['token_estimate']))); ?></td>
-								<td>
-									<button type="button" class="button button-small sflmcp-tool-toggle <?php echo esc_attr($status_class); ?>" 
-										data-id="<?php echo intval($tool['id']); ?>" 
-										data-enabled="<?php echo $is_enabled ? '1' : '0'; ?>">
-										<span class="dashicons <?php echo esc_attr($status_icon); ?>"></span>
-										<span class="status-text"><?php echo esc_html($status_text); ?></span>
-									</button>
-								</td>
-							</tr>
-						<?php endforeach; ?>
-					</tbody>
-				</table>
-				<br/>
+				<?php
+				$category_token_total = 0;
+				$category_read = 0;
+				$category_write = 0;
+				$category_enabled = 0;
+				$category_enabled_tokens = 0;
+				$category_enabled_read = 0;
+				$category_enabled_write = 0;
+				foreach ($category_tools as $tool_meta) {
+					$category_token_total += intval($tool_meta['token_estimate']);
+					$tool_mode = $this->getToolModeLabel($model, $tool_meta['tool_name']);
+					if ('WRITE' === $tool_mode) {
+						$category_write++;
+					} else {
+						$category_read++;
+					}
+					if (intval($tool_meta['enabled']) === 1) {
+						$category_enabled++;
+						$category_enabled_tokens += intval($tool_meta['token_estimate']);
+						if ('WRITE' === $tool_mode) {
+							$category_enabled_write++;
+						} else {
+							$category_enabled_read++;
+						}
+					}
+				}
+				$count_class = ($category_enabled === count($category_tools) && count($category_tools) > 0) ? 'sflmcp-count-full' : ($category_enabled > 0 ? 'sflmcp-count-partial' : '');
+				$summary_html = esc_html($category_enabled . '/' . count($category_tools) . ' enabled');
+				if ($category_enabled_read > 0) {
+					$summary_html .= ' &middot; <span class="sflmcp-mode-label">' . esc_html($category_enabled_read . ' read') . '</span>';
+				}
+				if ($category_enabled_write > 0) {
+					$summary_html .= ' &middot; <span class="sflmcp-mode-label">' . esc_html($category_enabled_write . ' write') . '</span>';
+				}
+				if ($category_enabled > 0) {
+					$summary_html .= ' &middot; ' . esc_html(number_format_i18n($category_enabled_tokens)) . ' tokens';
+				}
+				?>
+				<details class="sflmcp-tools-category" data-category="<?php echo esc_attr($category); ?>">
+					<summary>
+						<div class="sflmcp-summary-left">
+							<input type="checkbox" class="sflmcp-category-checkbox" data-category="<?php echo esc_attr($category); ?>" <?php checked($category_enabled === count($category_tools)); ?> />
+							<span class="sflmcp-chevron" aria-hidden="true">&#9656;</span>
+							<span class="sflmcp-tools-category-title"><?php echo esc_html($category); ?></span>
+						</div>
+						<div class="sflmcp-summary-right">
+							<span class="sflmcp-enabled-count <?php echo esc_attr($count_class); ?>"><?php echo $summary_html; ?></span>
+						</div>
+					</summary>
+					<div class="sflmcp-tools-category-body">
+						<table class="wp-list-table widefat fixed striped">
+							<tbody>
+								<?php foreach ($category_tools as $tool):
+									$is_enabled = intval($tool['enabled']) === 1;
+									$tool_mode = $this->getToolModeLabel($model, $tool['tool_name']);
+									$mode_class = 'WRITE' === $tool_mode ? 'sflmcp-mode-write' : 'sflmcp-mode-read';
+								?>
+								<tr>
+									<td class="sflmcp-tools-col-checkbox">
+										<input type="checkbox" class="sflmcp-tool-checkbox" data-id="<?php echo intval($tool['id']); ?>" data-tokens="<?php echo intval($tool['token_estimate']); ?>" data-mode="<?php echo esc_attr($tool_mode); ?>" <?php checked($is_enabled); ?> />
+										<code><?php echo esc_html($tool['tool_name']); ?></code>
+									</td>
+									<td class="sflmcp-tools-col-desc"><?php echo esc_html($tool['tool_description']); ?></td>
+									<td class="sflmcp-tools-col-mode"><span class="sflmcp-tool-mode-badge <?php echo esc_attr($mode_class); ?>"><?php echo esc_html($tool_mode); ?></span></td>
+									<td class="sflmcp-tools-col-tokens"><?php echo esc_html(number_format_i18n(intval($tool['token_estimate']))); ?> tokens</td>
+								</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+				</details>
 			<?php endforeach; ?>
 		<?php endif; ?>
 		<?php
 	}
 	
 	private function renderWCToolsTab() {
+		$model = $this->getModel();
 		global $wpdb;
 		$table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools', false);
 		$profiles_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_profiles', false);
@@ -1805,48 +1877,111 @@ class StifliFlexMcp {
 			</div>
 		<?php else: ?>
 			<?php foreach ($grouped_tools as $category => $category_tools): ?>
-				<?php $category_token_total = 0; foreach ($category_tools as $tool_meta) { $category_token_total += intval($tool_meta['token_estimate']); } ?>
-				<h2><?php echo esc_html($category); ?> <small class="sflmcp-category-count">(<?php echo esc_html__('estimated tokens:', 'stifli-flex-mcp'); ?> <?php echo esc_html(number_format_i18n($category_token_total)); ?>)</small></h2>
-				<div class="sflmcp-bulk-actions">
-					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="enable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Enable All', 'stifli-flex-mcp'); ?></button>
-					<button type="button" class="button button-small sflmcp-bulk-toggle" data-action="disable" data-category="<?php echo esc_attr($category); ?>"><?php echo esc_html__('Disable All', 'stifli-flex-mcp'); ?></button>
-				</div>
-				<table class="wp-list-table widefat fixed striped">
-					<thead>
-						<tr>
-							<th class="sflmcp-tools-col-tool"><?php echo esc_html__('Tool', 'stifli-flex-mcp'); ?></th>
-							<th class="sflmcp-tools-col-desc"><?php echo esc_html__('Description', 'stifli-flex-mcp'); ?></th>
-							<th class="sflmcp-tools-col-tokens"><?php echo esc_html__('Tokens (~)', 'stifli-flex-mcp'); ?></th>
-							<th class="sflmcp-tools-col-status"><?php echo esc_html__('Status', 'stifli-flex-mcp'); ?></th>
-						</tr>
-					</thead>
-					<tbody>
-						<?php foreach ($category_tools as $tool): 
-							$is_enabled = intval($tool['enabled']) === 1;
-							$status_class = $is_enabled ? 'status-enabled' : 'status-disabled';
-							$status_icon = $is_enabled ? 'dashicons-yes' : 'dashicons-no';
-							$status_text = $is_enabled ? __('Enabled', 'stifli-flex-mcp') : __('Disabled', 'stifli-flex-mcp');
-						?>
-							<tr>
-								<td><code><?php echo esc_html($tool['tool_name']); ?></code></td>
-								<td><?php echo esc_html($tool['tool_description']); ?></td>
-								<td><?php echo esc_html(number_format_i18n(intval($tool['token_estimate']))); ?></td>
-								<td>
-									<button type="button" class="button button-small sflmcp-tool-toggle <?php echo esc_attr($status_class); ?>" 
-										data-id="<?php echo intval($tool['id']); ?>" 
-										data-enabled="<?php echo $is_enabled ? '1' : '0'; ?>">
-										<span class="dashicons <?php echo esc_attr($status_icon); ?>"></span>
-										<span class="status-text"><?php echo esc_html($status_text); ?></span>
-									</button>
-								</td>
-							</tr>
-						<?php endforeach; ?>
-					</tbody>
-				</table>
-				<br/>
+				<?php
+				$category_token_total = 0;
+				$category_read = 0;
+				$category_write = 0;
+				$category_enabled = 0;
+				$category_enabled_tokens = 0;
+				$category_enabled_read = 0;
+				$category_enabled_write = 0;
+				foreach ($category_tools as $tool_meta) {
+					$category_token_total += intval($tool_meta['token_estimate']);
+					$tool_mode = $this->getToolModeLabel($model, $tool_meta['tool_name']);
+					if ('WRITE' === $tool_mode) {
+						$category_write++;
+					} else {
+						$category_read++;
+					}
+					if (intval($tool_meta['enabled']) === 1) {
+						$category_enabled++;
+						$category_enabled_tokens += intval($tool_meta['token_estimate']);
+						if ('WRITE' === $tool_mode) {
+							$category_enabled_write++;
+						} else {
+							$category_enabled_read++;
+						}
+					}
+				}
+				$count_class = ($category_enabled === count($category_tools) && count($category_tools) > 0) ? 'sflmcp-count-full' : ($category_enabled > 0 ? 'sflmcp-count-partial' : '');
+				$summary_html = esc_html($category_enabled . '/' . count($category_tools) . ' enabled');
+				if ($category_enabled_read > 0) {
+					$summary_html .= ' &middot; <span class="sflmcp-mode-label">' . esc_html($category_enabled_read . ' read') . '</span>';
+				}
+				if ($category_enabled_write > 0) {
+					$summary_html .= ' &middot; <span class="sflmcp-mode-label">' . esc_html($category_enabled_write . ' write') . '</span>';
+				}
+				if ($category_enabled > 0) {
+					$summary_html .= ' &middot; ' . esc_html(number_format_i18n($category_enabled_tokens)) . ' tokens';
+				}
+				?>
+				<details class="sflmcp-tools-category" data-category="<?php echo esc_attr($category); ?>">
+					<summary>
+						<div class="sflmcp-summary-left">
+							<input type="checkbox" class="sflmcp-category-checkbox" data-category="<?php echo esc_attr($category); ?>" <?php checked($category_enabled === count($category_tools)); ?> />
+							<span class="sflmcp-chevron" aria-hidden="true">&#9656;</span>
+							<span class="sflmcp-tools-category-title"><?php echo esc_html($category); ?></span>
+						</div>
+						<div class="sflmcp-summary-right">
+							<span class="sflmcp-enabled-count <?php echo esc_attr($count_class); ?>"><?php echo $summary_html; ?></span>
+						</div>
+					</summary>
+					<div class="sflmcp-tools-category-body">
+						<table class="wp-list-table widefat fixed striped">
+							<tbody>
+								<?php foreach ($category_tools as $tool):
+									$is_enabled = intval($tool['enabled']) === 1;
+									$tool_mode = $this->getToolModeLabel($model, $tool['tool_name']);
+									$mode_class = 'WRITE' === $tool_mode ? 'sflmcp-mode-write' : 'sflmcp-mode-read';
+								?>
+								<tr>
+									<td class="sflmcp-tools-col-checkbox">
+										<input type="checkbox" class="sflmcp-tool-checkbox" data-id="<?php echo intval($tool['id']); ?>" data-tokens="<?php echo intval($tool['token_estimate']); ?>" data-mode="<?php echo esc_attr($tool_mode); ?>" <?php checked($is_enabled); ?> />
+										<code><?php echo esc_html($tool['tool_name']); ?></code>
+									</td>
+									<td class="sflmcp-tools-col-desc"><?php echo esc_html($tool['tool_description']); ?></td>
+									<td class="sflmcp-tools-col-mode"><span class="sflmcp-tool-mode-badge <?php echo esc_attr($mode_class); ?>"><?php echo esc_html($tool_mode); ?></span></td>
+									<td class="sflmcp-tools-col-tokens"><?php echo esc_html(number_format_i18n(intval($tool['token_estimate']))); ?> tokens</td>
+								</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+				</details>
 			<?php endforeach; ?>
 		<?php endif; ?>
 		<?php
+	}
+
+	private function getIntegrationManagedTools($model) {
+		$managed = array();
+		if (!class_exists('StifliFlexMcp_Plugin_Integrations_Registry') || !is_object($model) || !method_exists($model, 'getTools')) {
+			return $managed;
+		}
+
+		$all_tools = $model->getTools();
+		if (!is_array($all_tools)) {
+			return $managed;
+		}
+
+		foreach (array_keys($all_tools) as $tool_name) {
+			if (!empty(StifliFlexMcp_Plugin_Integrations_Registry::get_integrations_for_tool($tool_name))) {
+				$managed[$tool_name] = true;
+			}
+		}
+
+		return $managed;
+	}
+
+	private function getToolModeLabel($model, $tool_name) {
+		if (!is_object($model) || !method_exists($model, 'getIntentForTool')) {
+			return 'READ';
+		}
+		$meta = $model->getIntentForTool((string) $tool_name);
+		if (is_array($meta) && isset($meta['intent']) && 'write' === $meta['intent']) {
+			return 'WRITE';
+		}
+		return 'READ';
 	}
 	
 	private function renderProfilesTab() {
@@ -2070,15 +2205,17 @@ class StifliFlexMcp {
 	/**
 	 * Render Custom Tools Tab
 	 */
-	private function renderCustomToolsTab() {
+	public function renderCustomToolsTab($embedded = false) {
 		?>
-		<h2><?php echo esc_html__('🔌 Custom Tools (Webhooks & Actions)', 'stifli-flex-mcp'); ?></h2>
-		<p>
-			<?php echo esc_html__('Create custom tools that connect to external services, call any WordPress/plugin action hook, or integrate with APIs. The AI will invoke these tools just like native functions.', 'stifli-flex-mcp'); ?>
-			<a href="?page=sflmcp-server&tab=help" class="button button-link">
-				📚 <?php echo esc_html__('View Complete Guide', 'stifli-flex-mcp'); ?>
-			</a>
-		</p>
+		<?php if (!$embedded) : ?>
+			<h2><?php echo esc_html__('🔌 Custom Tools (Webhooks & Actions)', 'stifli-flex-mcp'); ?></h2>
+			<p>
+				<?php echo esc_html__('Create custom tools that connect to external services, call any WordPress/plugin action hook, or integrate with APIs. The AI will invoke these tools just like native functions.', 'stifli-flex-mcp'); ?>
+				<a href="?page=sflmcp-server&tab=help" class="button button-link">
+					📚 <?php echo esc_html__('View Complete Guide', 'stifli-flex-mcp'); ?>
+				</a>
+			</p>
+		<?php endif; ?>
 		
 		<div class="sflmcp-custom-tools-container">
 			<!-- Tools List -->
@@ -2520,6 +2657,151 @@ class StifliFlexMcp {
 				array('%d', '%s')
 			);
 		}
+	}
+
+	/**
+	 * AJAX handler: toggle single tool via checkbox
+	 */
+	public function ajax_toggle_tool_by_checkbox() {
+		check_ajax_referer('sflmcp_tools', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_tools';
+		$tool_id = isset($_POST['tool_id']) ? intval($_POST['tool_id']) : 0;
+		$enabled = isset($_POST['enabled']) ? intval($_POST['enabled']) : 0;
+		
+		if (!$tool_id) {
+			wp_send_json_error(array('message' => __('Invalid tool ID', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		// Get tool info
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$tool = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $tool_id), ARRAY_A);
+		
+		if (!$tool) {
+			wp_send_json_error(array('message' => __('Tool not found', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->update(
+			$table,
+			array('enabled' => $enabled, 'updated_at' => current_time('mysql', true)),
+			array('id' => $tool_id),
+			array('%d', '%s'),
+			array('%d')
+		);
+		
+		// Sync to active profile
+		$this->syncToolToActiveProfile($tool['tool_name'], $enabled);
+		
+		// Calculate new token totals
+		$is_wc = strpos($tool['category'], 'WooCommerce') === 0;
+		
+		if ($is_wc) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$total_tokens = $wpdb->get_var($wpdb->prepare(
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category LIKE %s AND enabled = %d",
+				'WooCommerce%', 1
+			));
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$total_tokens = $wpdb->get_var($wpdb->prepare(
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND enabled = %d",
+				'WooCommerce%', 1
+			));
+		}
+		
+		wp_send_json_success(array(
+			'enabled' => $enabled,
+			'total_tokens' => number_format_i18n(intval($total_tokens))
+		));
+	}
+
+	/**
+	 * AJAX handler: bulk toggle multiple tools by ID (from category checkbox)
+	 */
+	public function ajax_bulk_toggle_tools_by_id() {
+		check_ajax_referer('sflmcp_tools', 'nonce');
+		
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_tools';
+		$tool_ids = isset($_POST['tool_ids']) && is_array($_POST['tool_ids']) ? array_map('intval', wp_unslash($_POST['tool_ids'])) : array();
+		
+		if (empty($tool_ids)) {
+			wp_send_json_error(array('message' => __('No tools specified', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		// Get current enabled status of first tool to toggle
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$first_tool = $wpdb->get_row($wpdb->prepare(
+			"SELECT enabled FROM $table WHERE id = %d",
+			$tool_ids[0]
+		), ARRAY_A);
+		
+		if (!$first_tool) {
+			wp_send_json_error(array('message' => __('Tool not found', 'stifli-flex-mcp')));
+			return;
+		}
+		
+		// Toggle status
+		$new_status = ($first_tool['enabled'] == 1) ? 0 : 1;
+		
+		// Update all tools
+		foreach ($tool_ids as $tool_id) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->update(
+				$table,
+				array('enabled' => $new_status, 'updated_at' => current_time('mysql', true)),
+				array('id' => $tool_id),
+				array('%d', '%s'),
+				array('%d')
+			);
+			
+			// Get tool name for syncing
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$tool = $wpdb->get_row($wpdb->prepare("SELECT tool_name FROM $table WHERE id = %d", $tool_id), ARRAY_A);
+			if ($tool) {
+				$this->syncToolToActiveProfile($tool['tool_name'], $new_status);
+			}
+		}
+		
+		// Get WC vs WordPress status from first tool
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$first_tool_full = $wpdb->get_row($wpdb->prepare("SELECT category FROM $table WHERE id = %d", $tool_ids[0]), ARRAY_A);
+		$is_wc = strpos($first_tool_full['category'], 'WooCommerce') === 0;
+		
+		// Calculate new token totals
+		if ($is_wc) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$total_tokens = $wpdb->get_var($wpdb->prepare(
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category LIKE %s AND enabled = %d",
+				'WooCommerce%', 1
+			));
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$total_tokens = $wpdb->get_var($wpdb->prepare(
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND enabled = %d",
+				'WooCommerce%', 1
+			));
+		}
+		
+		wp_send_json_success(array(
+			'enabled' => $new_status,
+			'total_tokens' => number_format_i18n(intval($total_tokens))
+		));
 	}
 
 	/**

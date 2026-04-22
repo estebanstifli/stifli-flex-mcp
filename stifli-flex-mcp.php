@@ -153,6 +153,8 @@ require_once __DIR__ . '/models/model.php';
 require_once __DIR__ . '/models/class-change-tracker.php';
 require_once __DIR__ . '/controller.php';
 require_once __DIR__ . '/mod.php';
+require_once __DIR__ . '/add-on/plugins/class-plugin-integrations-registry.php';
+require_once __DIR__ . '/add-on/plugins/class-plugin-integrations-admin.php';
 
 // Load AI Chat Agent
 require_once __DIR__ . '/client/providers/class-provider-base.php';
@@ -522,6 +524,28 @@ function stifli_flex_mcp_seed_initial_tools() {
 		// Utilidades
 		array('search', 'Search posts by keyword.', 'WordPress - Utilities', 1),
 		array('fetch', 'Fetch content from a URL.', 'WordPress - Utilities', 1),
+		// SEO - Rank Math
+		array('wp_rm_get_head', 'Get rendered SEO head HTML for a URL using Rank Math endpoint. Requires Headless CMS Support enabled.', 'WordPress - SEO', 1),
+		array('wp_rm_get_post_seo', 'Get Rank Math SEO metadata fields for a post.', 'WordPress - SEO', 1),
+		array('wp_rm_update_post_seo', 'Update Rank Math SEO metadata fields for a post.', 'WordPress - SEO', 1),
+		// SEO - Yoast
+		array('yoast_get_meta', 'Get Yoast SEO meta fields for a post (title, description, OG, Twitter). Requires Yoast SEO.', 'WordPress - SEO', 1),
+		array('yoast_set_meta', 'Set Yoast SEO meta fields for a post. Requires Yoast SEO.', 'WordPress - SEO', 1),
+		array('yoast_reindex', 'Clear Yoast SEO indexables cache for a post or site-wide. Requires Yoast SEO.', 'WordPress - SEO', 1),
+		// ACF
+		array('acf_get_field_groups', 'List all ACF field groups with keys, titles and location rules. Requires ACF.', 'Plugins - ACF', 1),
+		array('acf_get_fields', 'Get ACF field values for a post. Requires ACF.', 'Plugins - ACF', 1),
+		array('acf_update_field', 'Update an ACF field value for a post. Requires ACF.', 'Plugins - ACF', 1),
+		// WPForms
+		array('wpforms_list_forms', 'List all WPForms forms. Requires WPForms.', 'Plugins - Forms', 1),
+		array('wpforms_get_entries', 'Get form entries for a WPForms form. Requires WPForms.', 'Plugins - Forms', 1),
+		// Gravity Forms
+		array('gf_list_forms', 'List all Gravity Forms. Requires Gravity Forms.', 'Plugins - Forms', 1),
+		array('gf_get_entries', 'Get entries for a Gravity Forms form. Requires Gravity Forms.', 'Plugins - Forms', 1),
+		array('gf_update_entry', 'Update a Gravity Forms entry (status, is_read, field values). Requires Gravity Forms.', 'Plugins - Forms', 1),
+		// Forminator
+		array('forminator_list_forms', 'List all Forminator forms (custom forms, polls, quizzes). Requires Forminator.', 'Plugins - Forms', 1),
+		array('forminator_get_entries', 'Get submission entries for a Forminator form. Requires Forminator.', 'Plugins - Forms', 1),
 		array('wp_generate_image', 'Generate an image using AI and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
 		array('wp_generate_video', 'Generate a video using AI (Google Veo or OpenAI Sora) and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
 		
@@ -641,6 +665,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 	$tools[] = array('wc_update_webhook', 'Update a webhook.', 'WooCommerce - Webhooks', 1);
 	$tools[] = array('wc_delete_webhook', 'Delete a webhook.', 'WooCommerce - Webhooks', 1);
 	
+	
 	foreach ($tools as $tool) {
 		$wpdb->insert(
 			$table,
@@ -721,10 +746,175 @@ function stifli_flex_mcp_upgrade_302() {
 	update_option( $flag, '1' );
 }
 
+/**
+ * Upgrade routine: remove legacy Elementor tools from core tables.
+ * Elementor tools now live only in the standalone Elementor plugin.
+ */
+function stifli_flex_mcp_upgrade_remove_core_elementor_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_remove_core_elementor_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+
+	$tools_like = $wpdb->esc_like( $tools_table );
+	$profile_tools_like = $wpdb->esc_like( $profile_tools_table );
+
+	$tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $tools_like ) ) === $tools_table;
+	$profile_tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profile_tools_like ) ) === $profile_tools_table;
+
+	if ( $tools_exists ) {
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$tools_table} WHERE tool_name LIKE %s", $wpdb->esc_like( 'elementor_' ) . '%' ) );
+	}
+
+	if ( $profile_tools_exists ) {
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$profile_tools_table} WHERE tool_name LIKE %s", $wpdb->esc_like( 'elementor_' ) . '%' ) );
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine: add Rank Math tools for existing installs.
+ */
+function stifli_flex_mcp_upgrade_rankmath_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_rankmath_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$now = current_time( 'mysql', true );
+
+	$rankmath_tools = array(
+		array( 'wp_rm_get_head', 'Get rendered SEO head HTML for a URL using Rank Math endpoint. Requires Headless CMS Support enabled.', 'WordPress - SEO', 1 ),
+		array( 'wp_rm_get_post_seo', 'Get Rank Math SEO metadata fields for a post.', 'WordPress - SEO', 1 ),
+		array( 'wp_rm_update_post_seo', 'Update Rank Math SEO metadata fields for a post.', 'WordPress - SEO', 1 ),
+	);
+
+	foreach ( $rankmath_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine: add Yoast, ACF, WPForms, Gravity Forms, Forminator tools for existing installs.
+ */
+function stifli_flex_mcp_upgrade_plugin_integration_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_plugin_integration_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	if ( ! $wpdb->get_var( "SHOW TABLES LIKE '{$tools_table}'" ) ) {
+		return;
+	}
+	$now = current_time( 'mysql' );
+
+	$new_tools = array(
+		array( 'yoast_get_meta', 'Get Yoast SEO meta fields for a post (title, description, OG, Twitter). Requires Yoast SEO.', 'WordPress - SEO', 1 ),
+		array( 'yoast_set_meta', 'Set Yoast SEO meta fields for a post. Requires Yoast SEO.', 'WordPress - SEO', 1 ),
+		array( 'yoast_reindex', 'Clear Yoast SEO indexables cache for a post or site-wide. Requires Yoast SEO.', 'WordPress - SEO', 1 ),
+		array( 'acf_get_field_groups', 'List all ACF field groups with keys, titles and location rules. Requires ACF.', 'Plugins - ACF', 1 ),
+		array( 'acf_get_fields', 'Get ACF field values for a post. Requires ACF.', 'Plugins - ACF', 1 ),
+		array( 'acf_update_field', 'Update an ACF field value for a post. Requires ACF.', 'Plugins - ACF', 1 ),
+		array( 'wpforms_list_forms', 'List all WPForms forms. Requires WPForms.', 'Plugins - Forms', 1 ),
+		array( 'wpforms_get_entries', 'Get form entries for a WPForms form. Requires WPForms.', 'Plugins - Forms', 1 ),
+		array( 'gf_list_forms', 'List all Gravity Forms. Requires Gravity Forms.', 'Plugins - Forms', 1 ),
+		array( 'gf_get_entries', 'Get entries for a Gravity Forms form. Requires Gravity Forms.', 'Plugins - Forms', 1 ),
+		array( 'gf_update_entry', 'Update a Gravity Forms entry (status, is_read, field values). Requires Gravity Forms.', 'Plugins - Forms', 1 ),
+		array( 'forminator_list_forms', 'List all Forminator forms (custom forms, polls, quizzes). Requires Forminator.', 'Plugins - Forms', 1 ),
+		array( 'forminator_get_entries', 'Get submission entries for a Forminator form. Requires Forminator.', 'Plugins - Forms', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( ! $exists ) {
+			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$tools_table,
+				array(
+					'tool_name'        => $tool[0],
+					'tool_description' => $tool[1],
+					'category'         => $tool[2],
+					'enabled'          => $tool[3],
+					'created_at'       => $now,
+					'updated_at'       => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine: remove Rank Math tools from system profiles.
+ * Rank Math tools are controlled from the Plugins tab, not the main profiles.
+ */
+function stifli_flex_mcp_upgrade_rankmath_profile_detach() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_rankmath_profile_detach_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	$rankmath_tool_names = array( 'wp_rm_get_head', 'wp_rm_get_post_seo', 'wp_rm_update_post_seo' );
+	$profile_names = array( 'WordPress Full Management', 'Development/Debug', 'Complete Site' );
+
+	foreach ( $profile_names as $profile_name ) {
+		$profile_id = $wpdb->get_var( $wpdb->prepare(
+			"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+			$profile_name
+		) );
+		if ( ! $profile_id ) {
+			continue;
+		}
+
+		foreach ( $rankmath_tool_names as $tool_name ) {
+			$wpdb->delete(
+				$profile_tools_table,
+				array(
+					'profile_id' => $profile_id,
+					'tool_name' => $tool_name,
+				),
+				array( '%d', '%s' )
+			);
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
 function stifli_flex_mcp_seed_system_profiles() {
 	global $wpdb;
 	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
 	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	$rankmath_tools = array( 'wp_rm_get_head', 'wp_rm_get_post_seo', 'wp_rm_update_post_seo' );
 	
 	// Check if system profiles already seeded
 	$count = $wpdb->get_var("SELECT COUNT(*) FROM {$profiles_table} WHERE is_system = 1");
@@ -962,6 +1152,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 		
 		// Get tools list
 		$tools = ($profile['tools'] === 'ALL') ? $all_tools : $profile['tools'];
+		$tools = array_values( array_diff( $tools, $rankmath_tools ) );
 		
 		// Insert profile tools
 		foreach ($tools as $tool_name) {
@@ -1032,6 +1223,84 @@ function stifli_flex_mcp_apply_active_profile() {
 		$wpdb->prepare(
 			"UPDATE {$tools_table} SET enabled = 1 WHERE tool_name IN ({$placeholders})",
 			...$profile_tools
+		)
+	);
+}
+
+/**
+ * Apply plugin integration enablement on top of the active profile tool set.
+ */
+function stifli_flex_mcp_apply_plugin_integration_overrides() {
+	global $wpdb;
+
+	if ( ! class_exists( 'StifliFlexMcp_Plugin_Integrations_Registry' ) || ! class_exists( 'StifliFlexMcpModel' ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$integration_ids = StifliFlexMcp_Plugin_Integrations_Registry::get_integration_ids();
+	if ( empty( $integration_ids ) ) {
+		return;
+	}
+
+	$state = get_option( 'sflmcp_plugin_integrations_state', array() );
+	$enabled_groups = isset( $state['enabled_groups'] ) && is_array( $state['enabled_groups'] )
+		? array_values( array_intersect( array_map( 'sanitize_key', $state['enabled_groups'] ), $integration_ids ) )
+		: $integration_ids;
+	$disabled_tools = isset( $state['disabled_tools'] ) && is_array( $state['disabled_tools'] )
+		? array_values( array_map( 'sanitize_key', $state['disabled_tools'] ) )
+		: array();
+
+	$model = new StifliFlexMcpModel();
+	$tools_map = $model->getTools();
+	if ( ! is_array( $tools_map ) || empty( $tools_map ) ) {
+		return;
+	}
+
+	$enabled_group_lookup = array_fill_keys( $enabled_groups, true );
+	$disabled_tool_lookup = array_fill_keys( $disabled_tools, true );
+	$managed_tool_names = array();
+	$enabled_tool_names = array();
+
+	foreach ( array_keys( $tools_map ) as $tool_name ) {
+		$groups = StifliFlexMcp_Plugin_Integrations_Registry::get_integrations_for_tool( $tool_name );
+		if ( empty( $groups ) ) {
+			continue;
+		}
+
+		$managed_tool_names[] = $tool_name;
+
+		foreach ( $groups as $group_id ) {
+			if ( isset( $enabled_group_lookup[ $group_id ] ) && ! isset( $disabled_tool_lookup[ $tool_name ] ) ) {
+				$enabled_tool_names[] = $tool_name;
+				break;
+			}
+		}
+	}
+
+	$managed_tool_names = array_values( array_unique( $managed_tool_names ) );
+	if ( empty( $managed_tool_names ) ) {
+		return;
+	}
+
+	$disable_placeholders = implode( ',', array_fill( 0, count( $managed_tool_names ), '%s' ) );
+	$wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$tools_table} SET enabled = 0 WHERE tool_name IN ({$disable_placeholders})",
+			...$managed_tool_names
+		)
+	);
+
+	$enabled_tool_names = array_values( array_unique( $enabled_tool_names ) );
+	if ( empty( $enabled_tool_names ) ) {
+		return;
+	}
+
+	$enable_placeholders = implode( ',', array_fill( 0, count( $enabled_tool_names ), '%s' ) );
+	$wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$tools_table} SET enabled = 1 WHERE tool_name IN ({$enable_placeholders})",
+			...$enabled_tool_names
 		)
 	);
 }
@@ -2538,11 +2807,21 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_upgrade_302();
+	stifli_flex_mcp_upgrade_remove_core_elementor_tools();
+	stifli_flex_mcp_upgrade_rankmath_tools();
+	stifli_flex_mcp_upgrade_plugin_integration_tools();
+	stifli_flex_mcp_upgrade_rankmath_profile_detach();
+	stifli_flex_mcp_apply_plugin_integration_overrides();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
 	if (class_exists('StifliFlexMcp')) {
 		$stifli_flex_mcp_instance = new StifliFlexMcp();
 		$stifli_flex_mcp_instance->init();
+
+		if ( class_exists( 'StifliFlexMcp_Plugin_Integrations_Admin' ) ) {
+			$plugin_integrations_admin = new StifliFlexMcp_Plugin_Integrations_Admin( $stifli_flex_mcp_instance );
+			$plugin_integrations_admin->init();
+		}
 		
 		// Create global reference with model for client
 		$stifliFlexMcp = new stdClass();

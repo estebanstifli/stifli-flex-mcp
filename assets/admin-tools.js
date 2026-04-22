@@ -73,4 +73,151 @@ jQuery(document).ready(function($) {
             }
         });
     });
+    
+    // Category checkbox: toggle all tools in category
+    $(document).on('change', '.sflmcp-category-checkbox', function() {
+        var checkbox = $(this);
+        var category = checkbox.data('category');
+        var isChecked = checkbox.is(':checked');
+        var detailsElement = checkbox.closest('details[data-category="' + category + '"]');
+        
+        // Get all tool checkboxes in this category
+        var toolCheckboxes = detailsElement.find('.sflmcp-tool-checkbox');
+        
+        // Determine action based on checkbox state
+        var action = isChecked ? 'enable' : 'disable';
+        var toolsToToggle = [];
+        
+        toolCheckboxes.each(function() {
+            var toolCheckbox = $(this);
+            var toolId = toolCheckbox.data('id');
+            var currentlyEnabled = toolCheckbox.is(':checked');
+            
+            // Only toggle if state needs to change
+            if ((isChecked && !currentlyEnabled) || (!isChecked && currentlyEnabled)) {
+                toolsToToggle.push(toolId);
+                // Visual update immediately
+                toolCheckbox.prop('checked', isChecked);
+            }
+        });
+        
+        // Make AJAX calls to toggle all tools
+        if (toolsToToggle.length > 0) {
+            $.post(sflmcpTools.ajaxUrl, {
+                action: 'sflmcp_bulk_toggle_tools_by_id',
+                nonce: sflmcpTools.nonce,
+                tool_ids: toolsToToggle
+            }, function(response) {
+                if (response.success) {
+                    // Update category checkbox status and progress bar
+                    updateCategoryProgress(detailsElement);
+                    // Update token counts
+                    if (response.data.total_tokens !== undefined) {
+                        $('.sflmcp-total-tokens').text(response.data.total_tokens);
+                    }
+                } else {
+                    alert(response.data.message || sflmcpTools.i18n.error);
+                    // Revert checkbox if failed
+                    checkbox.prop('checked', !isChecked);
+                }
+            }).fail(function() {
+                alert(sflmcpTools.i18n.error);
+                // Revert checkbox if failed
+                checkbox.prop('checked', !isChecked);
+            });
+        }
+    });
+    
+    // Individual tool checkbox: toggle single tool and sync category checkbox
+    $(document).on('change', '.sflmcp-tool-checkbox', function() {
+        var checkbox = $(this);
+        var toolId = checkbox.data('id');
+        var isChecked = checkbox.is(':checked');
+        var detailsElement = checkbox.closest('details');
+        
+        // Make AJAX call to toggle tool
+        $.post(sflmcpTools.ajaxUrl, {
+            action: 'sflmcp_toggle_tool_by_checkbox',
+            nonce: sflmcpTools.nonce,
+            tool_id: toolId,
+            enabled: isChecked ? 1 : 0
+        }, function(response) {
+            if (response.success) {
+                // Update category checkbox and progress bar
+                updateCategoryProgress(detailsElement);
+                // Update token counts
+                if (response.data.total_tokens !== undefined) {
+                    $('.sflmcp-total-tokens').text(response.data.total_tokens);
+                }
+            } else {
+                alert(response.data.message || sflmcpTools.i18n.error);
+                // Revert checkbox if failed
+                checkbox.prop('checked', !isChecked);
+            }
+        }).fail(function() {
+            alert(sflmcpTools.i18n.error);
+            // Revert checkbox if failed
+            checkbox.prop('checked', !isChecked);
+        });
+    });
+    
+    // Helper function to update category checkbox and enabled count
+    function updateCategoryProgress(detailsElement) {
+        var category = detailsElement.data('category');
+        var categoryCheckbox = detailsElement.find('.sflmcp-category-checkbox');
+        var toolCheckboxes = detailsElement.find('.sflmcp-tool-checkbox');
+        var enabledCount = toolCheckboxes.filter(':checked').length;
+        var totalCount = toolCheckboxes.length;
+        
+        // Update category checkbox state (with indeterminate for partial selection)
+        var isAll = enabledCount === totalCount && totalCount > 0;
+        var isSome = enabledCount > 0 && enabledCount < totalCount;
+        categoryCheckbox.prop('checked', isAll);
+        if (categoryCheckbox[0]) {
+            categoryCheckbox[0].indeterminate = isSome;
+            console.log('[SFLMCP] category=' + category + ' enabled=' + enabledCount + '/' + totalCount + ' isAll=' + isAll + ' isSome=' + isSome + ' indeterminate=' + categoryCheckbox[0].indeterminate + ' classList=' + categoryCheckbox[0].className);
+        }
+        categoryCheckbox.toggleClass('sflmcp-partial', isSome);
+        
+        // Compute enabled read/write counts and token total from data attributes
+        var enabledRead = 0, enabledWrite = 0, enabledTokens = 0;
+        toolCheckboxes.filter(':checked').each(function() {
+            var mode = $(this).data('mode');
+            var tokens = parseInt($(this).data('tokens'), 10) || 0;
+            enabledTokens += tokens;
+            if (mode === 'WRITE') {
+                enabledWrite++;
+            } else {
+                enabledRead++;
+            }
+        });
+        
+        // Update color class
+        var enabledCountElement = detailsElement.find('.sflmcp-enabled-count');
+        enabledCountElement.removeClass('sflmcp-count-partial sflmcp-count-full');
+        if (enabledCount === totalCount && totalCount > 0) {
+            enabledCountElement.addClass('sflmcp-count-full');
+        } else if (enabledCount > 0) {
+            enabledCountElement.addClass('sflmcp-count-partial');
+        }
+        
+        // Build summary HTML with conditional read/write labels
+        var html = enabledCount + '/' + totalCount + ' enabled';
+        if (enabledRead > 0) {
+            html += ' &middot; <span class="sflmcp-mode-label">' + enabledRead + ' read</span>';
+        }
+        if (enabledWrite > 0) {
+            html += ' &middot; <span class="sflmcp-mode-label">' + enabledWrite + ' write</span>';
+        }
+        if (enabledCount > 0) {
+            html += ' &middot; ' + enabledTokens.toLocaleString() + ' tokens';
+        }
+        enabledCountElement.html(html);
+    }
+
+    // Initialize indeterminate state on page load
+    $('.sflmcp-tools-category').each(function() {
+        updateCategoryProgress($(this));
+    });
 });
+

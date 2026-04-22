@@ -12,6 +12,7 @@
 
 # WordPress
 .htaccess
+/easy-mcp-ai/
 
 # Node modules (if using build tools)
 /node_modules/

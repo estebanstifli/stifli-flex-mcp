@@ -314,18 +314,66 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 					}
 				}
 			} elseif ( $item['type'] === 'function_call' ) {
+				$decoded_args = $this->decode_function_arguments( $item['arguments'] ?? array() );
 				// Tool call detected
 				$result['tool_calls'][] = array(
 					'id'        => $item['id'] ?? '',
 					'call_id'   => $item['call_id'] ?? '',
 					'name'      => $item['name'] ?? '',
-					'arguments' => json_decode( $item['arguments'] ?? '{}', true ),
+					'arguments' => $decoded_args,
 				);
 				$result['finished'] = false;
 			}
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Decode OpenAI function-call arguments safely.
+	 *
+	 * Responses API normally returns a JSON string in `arguments`, but some
+	 * model outputs can include wrappers or malformed JSON. This helper keeps
+	 * execution resilient and logs parse failures for debugging.
+	 *
+	 * @param mixed $arguments Raw arguments payload.
+	 * @return array
+	 */
+	private function decode_function_arguments( $arguments ) {
+		if ( is_array( $arguments ) ) {
+			return $arguments;
+		}
+
+		if ( $arguments instanceof stdClass ) {
+			return (array) $arguments;
+		}
+
+		if ( ! is_string( $arguments ) ) {
+			return array();
+		}
+
+		$raw = trim( $arguments );
+		if ( '' === $raw ) {
+			return array();
+		}
+
+		$decoded = json_decode( $raw, true );
+		if ( json_last_error() === JSON_ERROR_NONE && is_array( $decoded ) ) {
+			return $decoded;
+		}
+
+		// Retry if the model wrapped JSON in markdown code fences.
+		$without_fences = preg_replace( '/^```(?:json)?\s*|\s*```$/i', '', $raw );
+		if ( is_string( $without_fences ) ) {
+			$without_fences = trim( $without_fences );
+			$decoded_retry = json_decode( $without_fences, true );
+			if ( json_last_error() === JSON_ERROR_NONE && is_array( $decoded_retry ) ) {
+				return $decoded_retry;
+			}
+		}
+
+		stifli_flex_mcp_log( '[OpenAI] Failed to decode function arguments: ' . json_last_error_msg() . ' raw=' . substr( $raw, 0, 500 ) );
+		return array();
 	}
 
 	/**
