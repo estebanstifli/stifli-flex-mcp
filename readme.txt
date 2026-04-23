@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.1.5
+Stable tag: 3.2.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -409,6 +409,23 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.0 =
+* **🗂️ Tools UI overhaul** — Tools are now organized into collapsible category groups with expand/collapse controls, read/write mode badges, and token count per category for easier management
+* **🧩 New "Plugins" tab** — Dedicated integrations hub with 12 pre-loaded plugin integrations ready to connect:
+  * **All Sources Images** — Find stock images and generate AI images; set featured or inline images in posts *(Recommended)*
+  * **AiPatch Security Scanner** — AI-powered security auditing and vulnerability scanning *(Recommended)*
+  * **Notification for Telegram** — Send Telegram notifications from MCP tools
+  * **WPCode** — Manage code snippets (insert headers/footers) via AI
+  * **Code Snippets** — Create, activate, and manage PHP/CSS/JS snippets via AI
+  * **Woody Snippets** — Alternative snippet provider with full snippet_* tool support
+  * **Advanced Custom Fields (ACF)** — Read and update ACF fields and field groups
+  * **Yoast SEO** — Read and update Yoast metadata; trigger reindexing
+  * **Rank Math** — Manage Rank Math SEO metadata and head output
+  * **WPForms** — List forms and read form entries
+  * **Gravity Forms** — List forms, read entries, and update submissions
+  * **Forminator** — List forms and read form entries
+
+
 = 3.1.5 =
 * Fixed: OAuth re-authorization crash when reconnecting previously authorized clients (ChatGPT, Claude Desktop) 
 

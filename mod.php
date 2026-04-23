@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -1776,7 +1776,7 @@ class StifliFlexMcp {
 							<span class="sflmcp-tools-category-title"><?php echo esc_html($category); ?></span>
 						</div>
 						<div class="sflmcp-summary-right">
-							<span class="sflmcp-enabled-count <?php echo esc_attr($count_class); ?>"><?php echo $summary_html; ?></span>
+							<span class="sflmcp-enabled-count <?php echo esc_attr($count_class); ?>"><?php echo $summary_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Pre-escaped with esc_html() above. ?></span>
 						</div>
 					</summary>
 					<div class="sflmcp-tools-category-body">
@@ -1923,7 +1923,7 @@ class StifliFlexMcp {
 							<span class="sflmcp-tools-category-title"><?php echo esc_html($category); ?></span>
 						</div>
 						<div class="sflmcp-summary-right">
-							<span class="sflmcp-enabled-count <?php echo esc_attr($count_class); ?>"><?php echo $summary_html; ?></span>
+							<span class="sflmcp-enabled-count <?php echo esc_attr($count_class); ?>"><?php echo $summary_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Pre-escaped with esc_html() above. ?></span>
 						</div>
 					</summary>
 					<div class="sflmcp-tools-category-body">

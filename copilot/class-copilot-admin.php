@@ -1069,18 +1069,21 @@ class StifliFlexMcp_Copilot_Admin {
 					<li><?php esc_html_e( 'Chrome version 146.0.7672.0 or higher (Chrome Canary or Beta recommended).', 'stifli-flex-mcp' ); ?></li>
 					<li><?php
 						printf(
+							/* translators: %s is a Chrome flags URL (chrome://flags/#enable-webmcp-testing). */
 							esc_html__( 'Enable the WebMCP flag: navigate to %s and set it to "Enabled". Relaunch Chrome.', 'stifli-flex-mcp' ),
 							'<code>chrome://flags/#enable-webmcp-testing</code>'
 						);
 					?></li>
 					<li><?php
 						printf(
+							/* translators: %s is a Chrome flags URL (chrome://flags/#prompt-api-for-gemini-nano). */
 							esc_html__( 'Enable the Prompt API: navigate to %s and set it to "Enabled". Relaunch Chrome.', 'stifli-flex-mcp' ),
 							'<code>chrome://flags/#prompt-api-for-gemini-nano</code>'
 						);
 					?></li>
 					<li><?php
 						printf(
+							/* translators: %s is a Chrome internal URL (chrome://on-device-internals). */
 							esc_html__( 'Verify Gemini Nano is downloaded: open %s and check model availability.', 'stifli-flex-mcp' ),
 							'<code>chrome://on-device-internals</code>'
 						);

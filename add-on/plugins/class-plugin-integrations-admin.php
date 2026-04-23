@@ -97,6 +97,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         if ( $imported_count === 0 && $already_existing > 0 ) {
             wp_send_json_success(
                 array(
+                    /* translators: %d: number of abilities already imported. */
                     'message' => sprintf( __( '%d abilities were already imported.', 'stifli-flex-mcp' ), $already_existing ),
                     'imported_count' => 0,
                     'already_existing' => $already_existing,
@@ -110,6 +111,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
         wp_send_json_success(
             array(
+                /* translators: %d: number of abilities imported. */
                 'message' => sprintf( __( 'Imported %d ability/abilities.', 'stifli-flex-mcp' ), $imported_count ),
                 'imported_count' => $imported_count,
             )

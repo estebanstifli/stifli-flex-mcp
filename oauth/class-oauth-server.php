@@ -363,7 +363,9 @@ class StifliFlexMcp_OAuth_Server {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?php echo esc_html( sprintf( 'Authorize — %s', $site_name ) ); ?></title>
+<?php // phpcs:disable WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- Standalone OAuth authorization page; wp_enqueue_style() is not applicable here. ?>
 <link rel="stylesheet" href="<?php echo esc_url( plugins_url( 'assets/oauth-authorize.css', __FILE__ ) ); ?>">
+<?php // phpcs:enable WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet ?>
 </head>
 <body>
 <div class="oauth-card">
@@ -429,7 +431,9 @@ class StifliFlexMcp_OAuth_Server {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?php echo esc_html( sprintf( 'Authorization Error — %s', $site_name ) ); ?></title>
+<?php // phpcs:disable WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- Standalone OAuth error page; wp_enqueue_style() is not applicable here. ?>
 <link rel="stylesheet" href="<?php echo esc_url( plugins_url( 'assets/oauth-authorize.css', __FILE__ ) ); ?>">
+<?php // phpcs:enable WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet ?>
 </head>
 <body class="oauth-error">
 <div class="oauth-card">
