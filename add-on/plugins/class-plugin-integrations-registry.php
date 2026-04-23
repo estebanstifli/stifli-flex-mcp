@@ -8,6 +8,49 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
     public static function get_integrations() {
         return array(
             array(
+                'id' => 'all_sources_images',
+                'name' => 'All Sources Images',
+                'description' => 'Find stock images, generate AI images, and set featured/inline images in posts.',
+                'plugin_files' => array( 'all-sources-images/all-sources-images.php' ),
+                'install_slug' => 'all-sources-images',
+                'featured' => true,
+                'featured_label' => 'Recommended!',
+                'match' => array(
+                    // Discover abilities dynamically (allsi/* -> ability_allsi_*).
+                    'prefixes' => array( 'ability_allsi_' ),
+                ),
+                'catalog_tools' => array(),
+            ),
+            array(
+                'id' => 'aipatch_security_scanner',
+                'name' => 'AiPatch Security Scanner',
+                'description' => 'Security auditing and vulnerability scanning with AI-powered recommendations.',
+                'plugin_files' => array( 'aipatch-security-scanner/aipatch-security-scanner.php' ),
+                'install_slug' => 'aipatch-security-scanner',
+                'featured' => true,
+                'featured_label' => 'Recommended!',
+                'match' => array(
+                    // Auto-discover abilities with aipatch/ prefix
+                    'prefixes' => array( 'ability_aipatch_' ),
+                ),
+                'catalog_tools' => array(),
+            ),
+            array(
+                'id' => 'notification_for_telegram',
+                'name' => 'Notification for Telegram',
+                'description' => 'Send Telegram notifications from MCP tools via discovered plugin abilities.',
+                'plugin_files' => array(
+                    'notification-for-telegram/index.php',
+                    'notification-for-telegram/notification-for-telegram.php',
+                ),
+                'install_slug' => 'notification-for-telegram',
+                'match' => array(
+                    // notification-for-telegram/send-message -> ability_notification_for_telegram_send_message
+                    'prefixes' => array( 'ability_notification_for_telegram_' ),
+                ),
+                'catalog_tools' => array(),
+            ),
+            array(
                 'id' => 'wpcode',
                 'name' => 'WPCode',
                 'description' => 'Snippet automation pack shared across snippets plugins.',

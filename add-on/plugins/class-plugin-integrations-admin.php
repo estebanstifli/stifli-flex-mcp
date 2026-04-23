@@ -22,6 +22,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         add_action( 'sflmcp_admin_enqueue_tab_assets', array( $this, 'enqueue_tab_assets' ), 10, 3 );
         add_action( 'admin_init', array( $this, 'handle_settings_post' ) );
         add_action( 'wp_ajax_sflmcp_save_plugin_integrations', array( $this, 'ajax_save_plugin_integrations' ) );
+        add_action( 'wp_ajax_sflmcp_discover_plugin_abilities', array( $this, 'ajax_discover_plugin_abilities' ) );
         add_filter( 'sflmcp_is_tool_enabled_for_integrations', array( $this, 'filter_tool_enabled' ), 10, 4 );
     }
 
@@ -40,13 +41,77 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             ? wp_unslash( $_POST['enabled_tools'] )
             : array();
 
-        $state = $this->build_integrations_state( $enabled_groups, $enabled_tools_by_integration );
-        update_option( self::OPTION_KEY, $state, false );
+        $state_build = $this->build_integrations_state( $enabled_groups, $enabled_tools_by_integration );
+        $state = $state_build['state'];
+        $this->save_state( $state );
 
         wp_send_json_success(
             array(
                 'message' => __( 'Plugin integrations saved.', 'stifli-flex-mcp' ),
                 'state' => $state,
+                'reload' => ! empty( $state_build['imported_count'] ),
+            )
+        );
+    }
+
+    public function ajax_discover_plugin_abilities() {
+        check_ajax_referer( 'sflmcp_plugins_integrations_save', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'stifli-flex-mcp' ) ), 403 );
+        }
+
+        $integration_id = isset( $_POST['integration_id'] ) ? sanitize_key( wp_unslash( $_POST['integration_id'] ) ) : '';
+
+        if ( '' === $integration_id ) {
+            wp_send_json_error( array( 'message' => __( 'Integration ID required.', 'stifli-flex-mcp' ) ) );
+        }
+
+        $integration = null;
+        $integrations = StifliFlexMcp_Plugin_Integrations_Registry::get_integrations();
+        foreach ( $integrations as $candidate ) {
+            $candidate_id = isset( $candidate['id'] ) ? sanitize_key( $candidate['id'] ) : '';
+            if ( $integration_id === $candidate_id ) {
+                $integration = $candidate;
+                break;
+            }
+        }
+
+        if ( ! is_array( $integration ) ) {
+            wp_send_json_error( array( 'message' => __( 'Unknown integration.', 'stifli-flex-mcp' ) ) );
+        }
+
+        $status = $this->get_plugin_status( $integration );
+        if ( empty( $status['is_active'] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Activate the plugin first, then discover abilities.', 'stifli-flex-mcp' ) ) );
+        }
+
+        // Execute import for this single integration (without enabling it).
+        $stats = array();
+        $imported_count = $this->auto_import_abilities_for_enabled_integrations( array( $integration_id ), $stats );
+
+        // Re-save current state so imported/reactivated tools are reflected in active profile memberships.
+        $this->save_state( $this->get_state() );
+
+        $already_existing = isset( $stats['already_existing'] ) ? intval( $stats['already_existing'] ) : 0;
+        if ( $imported_count === 0 && $already_existing > 0 ) {
+            wp_send_json_success(
+                array(
+                    'message' => sprintf( __( '%d abilities were already imported.', 'stifli-flex-mcp' ), $already_existing ),
+                    'imported_count' => 0,
+                    'already_existing' => $already_existing,
+                )
+            );
+        }
+
+        if ( $imported_count === 0 ) {
+            wp_send_json_error( array( 'message' => __( 'No abilities found for this plugin.', 'stifli-flex-mcp' ) ) );
+        }
+
+        wp_send_json_success(
+            array(
+                'message' => sprintf( __( 'Imported %d ability/abilities.', 'stifli-flex-mcp' ), $imported_count ),
+                'imported_count' => $imported_count,
             )
         );
     }
@@ -98,7 +163,8 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         $enabled_tools_by_integration = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] ) ? wp_unslash( $_POST['enabled_tools'] ) : array();
         $bulk_action = isset( $_POST['bulk_action'] ) ? sanitize_key( wp_unslash( $_POST['bulk_action'] ) ) : '';
 
-        $state = $this->build_integrations_state( $enabled_groups, $enabled_tools_by_integration );
+        $state_build = $this->build_integrations_state( $enabled_groups, $enabled_tools_by_integration );
+        $state = $state_build['state'];
         $valid_ids = StifliFlexMcp_Plugin_Integrations_Registry::get_integration_ids();
 
         if ( 'enable_all' === $bulk_action ) {
@@ -109,7 +175,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             $state['disabled_tools'] = array();
         }
 
-        update_option( self::OPTION_KEY, $state, false );
+        $this->save_state( $state );
 
         $redirect = add_query_arg(
             array(
@@ -128,6 +194,8 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         $valid_ids = StifliFlexMcp_Plugin_Integrations_Registry::get_integration_ids();
         $enabled_groups = is_array( $enabled_groups ) ? array_map( 'sanitize_key', $enabled_groups ) : array();
         $enabled_groups = array_values( array_intersect( $enabled_groups, $valid_ids ) );
+
+        $imported_count = $this->auto_import_abilities_for_enabled_integrations( $enabled_groups );
 
         $implemented_tools = array();
         if ( class_exists( 'StifliFlexMcpModel' ) ) {
@@ -195,9 +263,151 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         }
 
         return array(
-            'enabled_groups' => $enabled_groups,
-            'disabled_tools' => array_values( array_unique( $disabled_tools ) ),
+            'state' => array(
+                'enabled_groups' => $enabled_groups,
+                'disabled_tools' => array_values( array_unique( $disabled_tools ) ),
+            ),
+            'imported_count' => $imported_count,
         );
+    }
+
+    private function auto_import_abilities_for_enabled_integrations( $enabled_groups, &$stats = null ) {
+        if ( empty( $enabled_groups ) || ! function_exists( 'stifli_flex_mcp_abilities_available' ) || ! stifli_flex_mcp_abilities_available() || ! function_exists( 'wp_get_ability' ) ) {
+            return 0;
+        }
+
+        $stats = array(
+            'imported' => 0,
+            'reactivated' => 0,
+            'already_existing' => 0,
+            'discovered_total' => 0,
+        );
+
+        global $wpdb;
+        $table = $wpdb->prefix . 'sflmcp_abilities';
+        $like = $wpdb->esc_like( $table );
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
+        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) !== $table ) {
+            return 0;
+        }
+
+        $integrations = StifliFlexMcp_Plugin_Integrations_Registry::get_integrations();
+        $integrations_by_id = array();
+        foreach ( $integrations as $integration ) {
+            if ( ! empty( $integration['id'] ) ) {
+                $integrations_by_id[ sanitize_key( $integration['id'] ) ] = $integration;
+            }
+        }
+
+        $imported_count = 0;
+        foreach ( $enabled_groups as $group_id ) {
+            if ( empty( $integrations_by_id[ $group_id ] ) ) {
+                continue;
+            }
+
+            $integration = $integrations_by_id[ $group_id ];
+
+            // Gather ability names: explicit list OR discovered by prefix pattern
+            $ability_names = array();
+
+            // 1. Use explicit ability_names if provided
+            if ( isset( $integration['ability_names'] ) && is_array( $integration['ability_names'] ) ) {
+                $ability_names = array_filter(
+                    $integration['ability_names'],
+                    static function( $name ) {
+                        return is_string( $name ) && '' !== trim( $name );
+                    }
+                );
+            }
+
+            // 2. If no explicit list, discover by prefix pattern from match.prefixes
+            if ( empty( $ability_names ) && isset( $integration['match']['prefixes'] ) && is_array( $integration['match']['prefixes'] ) ) {
+                $prefixes = array_filter(
+                    $integration['match']['prefixes'],
+                    static function( $prefix ) {
+                        return is_string( $prefix ) && '' !== trim( $prefix );
+                    }
+                );
+
+                if ( ! empty( $prefixes ) && function_exists( 'stifli_flex_mcp_discover_abilities_by_prefixes' ) ) {
+                    $discovered = stifli_flex_mcp_discover_abilities_by_prefixes( $prefixes );
+                    if ( is_array( $discovered ) ) {
+                        $ability_names = array_unique( array_merge( $ability_names, $discovered ) );
+                    }
+                }
+            }
+
+            // Import each discovered/explicit ability
+            foreach ( $ability_names as $ability_name ) {
+                $ability_name = is_string( $ability_name ) ? trim( $ability_name ) : '';
+                if ( '' === $ability_name ) {
+                    continue;
+                }
+
+                $stats['discovered_total']++;
+
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- point lookup.
+                $existing_row = $wpdb->get_row( $wpdb->prepare( "SELECT id, enabled FROM {$table} WHERE ability_name = %s", $ability_name ), ARRAY_A );
+                if ( ! empty( $existing_row ) ) {
+                    if ( isset( $existing_row['enabled'] ) && intval( $existing_row['enabled'] ) !== 1 ) {
+                        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
+                        $wpdb->update(
+                            $table,
+                            array(
+                                'enabled' => 1,
+                                'updated_at' => current_time( 'mysql', true ),
+                            ),
+                            array( 'id' => intval( $existing_row['id'] ) ),
+                            array( '%d', '%s' ),
+                            array( '%d' )
+                        );
+                        $imported_count++;
+                        $stats['reactivated']++;
+                    } else {
+                        $stats['already_existing']++;
+                    }
+                    continue;
+                }
+
+                $get_ability = 'wp_get_ability';
+                $ability = call_user_func( $get_ability, $ability_name );
+                if ( ! $ability ) {
+                    continue;
+                }
+
+                $input_schema = $ability->get_input_schema();
+                $output_schema = method_exists( $ability, 'get_output_schema' ) ? $ability->get_output_schema() : null;
+
+                $category = method_exists( $ability, 'get_category' ) ? $ability->get_category() : '';
+                if ( is_object( $category ) && method_exists( $category, 'get_label' ) ) {
+                    $category = $category->get_label();
+                }
+
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
+                $inserted = $wpdb->insert(
+                    $table,
+                    array(
+                        'ability_name' => $ability_name,
+                        'ability_label' => $ability->get_label(),
+                        'ability_description' => $ability->get_description(),
+                        'ability_category' => is_string( $category ) ? $category : '',
+                        'input_schema' => is_array( $input_schema ) ? wp_json_encode( $input_schema ) : null,
+                        'output_schema' => is_array( $output_schema ) ? wp_json_encode( $output_schema ) : null,
+                        'enabled' => 1,
+                        'created_at' => current_time( 'mysql', true ),
+                        'updated_at' => current_time( 'mysql', true ),
+                    ),
+                    array( '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
+                );
+
+                if ( false !== $inserted ) {
+                    $imported_count++;
+                    $stats['imported']++;
+                }
+            }
+        }
+
+        return $imported_count;
     }
 
     public function filter_tool_enabled( $allowed, $tool_name, $context, $tool_definition ) {
@@ -254,6 +464,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         echo '.sflmcp-plugin-card .sflmcp-badge-installed{background:#e8f4ff;color:#125e9c;}';
         echo '.sflmcp-plugin-card .sflmcp-badge-active{background:#e7f7eb;color:#1b5e20;}';
         echo '.sflmcp-plugin-card .sflmcp-badge-muted{background:#f6f7f7;color:#646970;}';
+        echo '.sflmcp-plugin-card .sflmcp-badge-featured{background:#fff5d6;color:#8a5a00;border:1px solid #e6c16a;}';
         echo '.sflmcp-plugin-body{border-top:1px solid #dcdcde;padding:14px;}';
         echo '.sflmcp-plugin-tools-table{border:1px solid #dcdcde;border-radius:6px;overflow:hidden;}';
         echo '.sflmcp-plugin-tool-row .sflmcp-tools-col-mode,.sflmcp-plugin-tool-row .sflmcp-tools-col-tokens{text-align:right;white-space:nowrap;}';
@@ -261,6 +472,20 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         echo '</style>';
 
         $plugins_nonce = wp_create_nonce( 'sflmcp_plugins_integrations_save' );
+
+        usort(
+            $integrations,
+            static function( $a, $b ) {
+                $a_featured = ! empty( $a['featured'] ) ? 1 : 0;
+                $b_featured = ! empty( $b['featured'] ) ? 1 : 0;
+                if ( $a_featured !== $b_featured ) {
+                    return $b_featured - $a_featured;
+                }
+                $a_name = isset( $a['name'] ) ? (string) $a['name'] : '';
+                $b_name = isset( $b['name'] ) ? (string) $b['name'] : '';
+                return strcasecmp( $a_name, $b_name );
+            }
+        );
 
         foreach ( $integrations as $integration ) {
             $integration_id = $integration['id'];
@@ -329,6 +554,10 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             echo '<span class="sflmcp-chevron" aria-hidden="true">&#9656;</span>';
             echo '<span class="sflmcp-plugin-title">' . esc_html( $integration_name ) . '</span>';
             echo '<span class="sflmcp-badges">';
+            if ( ! empty( $integration['featured'] ) ) {
+                $featured_label = ! empty( $integration['featured_label'] ) ? $integration['featured_label'] : __( 'Recommended!', 'stifli-flex-mcp' );
+                echo '<span class="sflmcp-badge sflmcp-badge-featured">' . esc_html( '★ ' . $featured_label ) . '</span>';
+            }
             if ( ! empty( $status['is_active'] ) ) {
                 echo '<span class="sflmcp-badge sflmcp-badge-active">' . esc_html__( 'ACTIVE', 'stifli-flex-mcp' ) . '</span>';
             } elseif ( ! empty( $status['is_installed'] ) ) {
@@ -349,6 +578,14 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             echo '<div class="sflmcp-plugin-body">';
             if ( ! empty( $integration['description'] ) ) {
                 echo '<p class="description" style="margin-top:0;">' . esc_html( $integration['description'] ) . '</p>';
+            }
+
+            // Show "Discover abilities" button if plugin is installed/active but has no tools yet
+            if ( 0 === $managed_count && ( ! empty( $status['is_installed'] ) || ! empty( $status['is_active'] ) ) && ! empty( $integration['match']['prefixes'] ) ) {
+                echo '<div style="margin-bottom:16px;">';
+                echo '<button class="button button-secondary sflmcp-discover-btn" data-integration-id="' . esc_attr( $integration_id ) . '" style="margin-bottom:0;">' . esc_html__( 'Discover abilities for this plugin', 'stifli-flex-mcp' ) . '</button>';
+                echo '<span id="sflmcp-discover-status-' . esc_attr( $integration_id ) . '"></span>';
+                echo '</div>';
             }
 
             echo '<div class="sflmcp-plugin-tools-table">';
@@ -393,8 +630,8 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         echo 'var saveStatus=document.getElementById("sflmcp-plugins-save-status");';
         echo 'var saveTimer=null;';
         echo 'function setSaveStatus(text,isError){if(!saveStatus){return;}saveStatus.textContent=text;saveStatus.style.color=isError?"#b32d2e":"";}';
-        echo 'function collectState(){var state={enabled_groups:[],enabled_tools:{}};document.querySelectorAll(".sflmcp-plugin-card").forEach(function(card){var integrationId=card.getAttribute("data-integration")||"";if(!integrationId){return;}var checkedTools=[];card.querySelectorAll(".sflmcp-plugin-tool-checkbox").forEach(function(cb){if(cb.checked){checkedTools.push(cb.value);}});state.enabled_tools[integrationId]=checkedTools;if(checkedTools.length>0){state.enabled_groups.push(integrationId);}});return state;}';
-        echo 'function saveState(){if(!(window.jQuery&&window.ajaxurl)){return;}var state=collectState();setSaveStatus("Saving...",false);window.jQuery.post(window.ajaxurl,{action:"sflmcp_save_plugin_integrations",nonce:"' . esc_js( $plugins_nonce ) . '",enabled_groups:state.enabled_groups,enabled_tools:state.enabled_tools},function(res){if(res&&res.success){setSaveStatus("Changes saved automatically.",false);}else{setSaveStatus("Error saving changes.",true);}}).fail(function(){setSaveStatus("Error saving changes.",true);});}';
+        echo 'function collectState(){var state={enabled_groups:[],enabled_tools:{}};document.querySelectorAll(".sflmcp-plugin-card").forEach(function(card){var integrationId=card.getAttribute("data-integration")||"";if(!integrationId){return;}var checkedTools=[];card.querySelectorAll(".sflmcp-plugin-tool-checkbox").forEach(function(cb){if(cb.checked){checkedTools.push(cb.value);}});state.enabled_tools[integrationId]=checkedTools;var groupCb=card.querySelector(".sflmcp-plugin-group-checkbox");if((groupCb&&groupCb.checked)||checkedTools.length>0){state.enabled_groups.push(integrationId);}});return state;}';
+        echo 'function saveState(){if(!(window.jQuery&&window.ajaxurl)){return;}var state=collectState();setSaveStatus("Saving...",false);window.jQuery.post(window.ajaxurl,{action:"sflmcp_save_plugin_integrations",nonce:"' . esc_js( $plugins_nonce ) . '",enabled_groups:state.enabled_groups,enabled_tools:state.enabled_tools},function(res){if(res&&res.success){setSaveStatus("Changes saved automatically.",false);if(res.data&&res.data.reload){window.location.reload();}}else{setSaveStatus("Error saving changes.",true);}}).fail(function(){setSaveStatus("Error saving changes.",true);});}';
         echo 'function scheduleSave(){if(saveTimer){clearTimeout(saveTimer);}saveTimer=setTimeout(saveState,220);}';
         echo 'function updateCardSummary(card){';
         echo 'var groupCheckbox=card.querySelector(".sflmcp-plugin-group-checkbox");';
@@ -423,6 +660,20 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         echo 'if(groupCheckbox){groupCheckbox.addEventListener("change", function(){toolCheckboxes.forEach(function(cb){cb.checked=groupCheckbox.checked;});updateCardSummary(card);scheduleSave();});}';
         echo 'toolCheckboxes.forEach(function(cb){cb.addEventListener("change", function(){updateCardSummary(card);scheduleSave();});});';
         echo 'updateCardSummary(card);';
+        echo 'var discoverBtn=card.querySelector(".sflmcp-discover-btn");';
+        echo 'if(discoverBtn){discoverBtn.addEventListener("click", function(e){e.preventDefault();var integrationId=discoverBtn.getAttribute("data-integration-id")||"";if(!integrationId||!window.jQuery||!window.ajaxurl){return;}';
+        echo 'discoverBtn.disabled=true;discoverBtn.textContent="Discovering...";var statusEl=document.getElementById("sflmcp-discover-status-"+integrationId);';
+        echo 'window.jQuery.post(window.ajaxurl,{action:"sflmcp_discover_plugin_abilities",nonce:"' . esc_js( $plugins_nonce ) . '",integration_id:integrationId},function(res){discoverBtn.disabled=false;';
+        echo 'if(res&&res.success){discoverBtn.textContent="Abilities discovered!";';
+        echo 'if(statusEl){statusEl.textContent="✓ "+res.data.message;statusEl.style.color="#1b5e20";statusEl.style.marginLeft="10px";}';
+        echo 'setTimeout(function(){window.location.reload();},1000);}else{';
+        echo 'discoverBtn.textContent="Discover abilities for this plugin";';
+        echo 'var message=(res&&res.data&&res.data.message)?res.data.message:"Error discovering abilities";';
+        echo 'if(statusEl){statusEl.textContent=message;statusEl.style.color="#b32d2e";statusEl.style.marginLeft="10px";}';
+        echo '}} ).fail(function(xhr,status,error){';
+        echo 'discoverBtn.disabled=false;discoverBtn.textContent="Discover abilities for this plugin";';
+        echo 'if(statusEl){statusEl.textContent="Error discovering abilities";statusEl.style.color="#b32d2e";statusEl.style.marginLeft="10px";}';
+        echo '});});}';
         echo '});';
         echo '});';
         echo '</script>';
@@ -466,8 +717,123 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         return 'PLUGIN TOOL';
     }
 
+    private function save_state( $state ) {
+        if ( ! is_array( $state ) ) {
+            return;
+        }
+
+        // Keep global state for compatibility and no-profile scenarios.
+        update_option( self::OPTION_KEY, $state, false );
+
+        $active_profile_id = $this->get_active_profile_id();
+        if ( $active_profile_id <= 0 ) {
+            return;
+        }
+
+        update_option( self::OPTION_KEY . '_profile_' . $active_profile_id, $state, false );
+        $this->sync_managed_tools_to_active_profile( $state, $active_profile_id );
+    }
+
+    private function get_active_profile_id() {
+        global $wpdb;
+
+        $profiles_table = StifliFlexMcpUtils::getPrefixedTable( 'sflmcp_profiles', false );
+        $like = $wpdb->esc_like( $profiles_table );
+
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
+        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) !== $profiles_table ) {
+            return 0;
+        }
+
+        $profiles_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery( $profiles_table );
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from helper.
+        $active_profile_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profiles_table_sql} WHERE is_active = %d LIMIT 1", 1 ) );
+
+        return $active_profile_id ? intval( $active_profile_id ) : 0;
+    }
+
+    private function sync_managed_tools_to_active_profile( $state, $active_profile_id ) {
+        if ( ! is_array( $state ) || $active_profile_id <= 0 || ! class_exists( 'StifliFlexMcpModel' ) ) {
+            return;
+        }
+
+        global $wpdb;
+        $profile_tools_table = StifliFlexMcpUtils::getPrefixedTable( 'sflmcp_profile_tools', false );
+        $profile_tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery( $profile_tools_table );
+
+        $model = new StifliFlexMcpModel();
+        $tools_map = $model->getTools();
+        if ( ! is_array( $tools_map ) || empty( $tools_map ) ) {
+            return;
+        }
+
+        $enabled_groups = isset( $state['enabled_groups'] ) && is_array( $state['enabled_groups'] )
+            ? array_fill_keys( array_map( 'sanitize_key', $state['enabled_groups'] ), true )
+            : array();
+
+        $disabled_tools = isset( $state['disabled_tools'] ) && is_array( $state['disabled_tools'] )
+            ? array_fill_keys( array_map( 'sanitize_key', $state['disabled_tools'] ), true )
+            : array();
+
+        foreach ( array_keys( $tools_map ) as $tool_name ) {
+            $groups = StifliFlexMcp_Plugin_Integrations_Registry::get_integrations_for_tool( $tool_name );
+            if ( empty( $groups ) ) {
+                continue;
+            }
+
+            $enabled_by_group = false;
+            foreach ( $groups as $group_id ) {
+                if ( isset( $enabled_groups[ $group_id ] ) ) {
+                    $enabled_by_group = true;
+                    break;
+                }
+            }
+
+            $is_enabled = $enabled_by_group && ! isset( $disabled_tools[ $tool_name ] );
+
+            if ( $is_enabled ) {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from helper.
+                $exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profile_tools_table_sql} WHERE profile_id = %d AND tool_name = %s LIMIT 1", $active_profile_id, $tool_name ) );
+                if ( ! $exists ) {
+                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
+                    $wpdb->insert(
+                        $profile_tools_table,
+                        array(
+                            'profile_id' => $active_profile_id,
+                            'tool_name'  => $tool_name,
+                            'created_at' => current_time( 'mysql', true ),
+                        ),
+                        array( '%d', '%s', '%s' )
+                    );
+                }
+            } else {
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
+                $wpdb->delete(
+                    $profile_tools_table,
+                    array(
+                        'profile_id' => $active_profile_id,
+                        'tool_name'  => $tool_name,
+                    ),
+                    array( '%d', '%s' )
+                );
+            }
+        }
+    }
+
     private function get_state() {
-        $raw = get_option( self::OPTION_KEY, array() );
+        $raw = array();
+        $active_profile_id = $this->get_active_profile_id();
+        if ( $active_profile_id > 0 ) {
+            $profile_raw = get_option( self::OPTION_KEY . '_profile_' . $active_profile_id, null );
+            if ( is_array( $profile_raw ) ) {
+                $raw = $profile_raw;
+            }
+        }
+
+        if ( empty( $raw ) ) {
+            $raw = get_option( self::OPTION_KEY, array() );
+        }
+
         $default_enabled = array();
 
         $enabled_groups = isset( $raw['enabled_groups'] ) && is_array( $raw['enabled_groups'] ) ? array_values( array_map( 'sanitize_key', $raw['enabled_groups'] ) ) : $default_enabled;

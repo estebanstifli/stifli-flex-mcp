@@ -1243,7 +1243,33 @@ function stifli_flex_mcp_apply_plugin_integration_overrides() {
 		return;
 	}
 
-	$state = get_option( 'sflmcp_plugin_integrations_state', array() );
+	$state = array();
+
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profiles_like = $wpdb->esc_like( $profiles_table );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
+	$profiles_exists = ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_like ) ) === $profiles_table );
+
+	if ( $profiles_exists ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- active profile lookup.
+		$active_profile_id = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$profiles_table} WHERE is_active = %d LIMIT 1",
+				1
+			)
+		);
+
+		if ( $active_profile_id ) {
+			$profile_state = get_option( 'sflmcp_plugin_integrations_state_profile_' . intval( $active_profile_id ), null );
+			if ( is_array( $profile_state ) ) {
+				$state = $profile_state;
+			}
+		}
+	}
+
+	if ( empty( $state ) ) {
+		$state = get_option( 'sflmcp_plugin_integrations_state', array() );
+	}
 	$enabled_groups = isset( $state['enabled_groups'] ) && is_array( $state['enabled_groups'] )
 		? array_values( array_intersect( array_map( 'sanitize_key', $state['enabled_groups'] ), $integration_ids ) )
 		: $integration_ids;
@@ -2671,6 +2697,113 @@ function stifli_flex_mcp_clean_queue() {
 	if ( class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
 		StifliFlexMcp_OAuth_Storage::get_instance()->cleanup_expired();
 	}
+}
+
+/**
+ * Discover abilities matching given prefix patterns.
+ * Plugins implementing WordPress Abilities API can hook here to register their abilities.
+ *
+ * @param array $prefixes Array of ability name prefixes to search (e.g., ['ability_aipatch_'])
+ * @return array Ability names matching the prefixes
+ */
+function stifli_flex_mcp_discover_abilities_by_prefixes( $prefixes = array() ) {
+	if ( empty( $prefixes ) ) {
+		return array();
+	}
+
+	$discovered = array();
+	$tool_prefixes = array();
+	$raw_prefixes = array();
+
+	foreach ( $prefixes as $prefix ) {
+		if ( ! is_string( $prefix ) ) {
+			continue;
+		}
+
+		$prefix = trim( $prefix );
+		if ( '' === $prefix ) {
+			continue;
+		}
+
+		$tool_prefixes[] = $prefix;
+
+		// Convert tool prefix like ability_aipatch_ to raw ability prefix aipatch/
+		if ( 0 === strpos( $prefix, 'ability_' ) ) {
+			$namespace = rtrim( substr( $prefix, 8 ), '_' );
+			if ( '' !== $namespace ) {
+				$raw_prefixes[] = $namespace . '/';
+			}
+		} else {
+			$raw_prefixes[] = $prefix;
+		}
+	}
+
+	if ( empty( $tool_prefixes ) && empty( $raw_prefixes ) ) {
+		return array();
+	}
+
+	$matches_prefix = static function( $ability_name ) use ( $tool_prefixes, $raw_prefixes ) {
+		if ( ! is_string( $ability_name ) || '' === $ability_name ) {
+			return false;
+		}
+
+		// Some providers may expose names already in tool-like form.
+		foreach ( $tool_prefixes as $prefix ) {
+			if ( 0 === strpos( $ability_name, $prefix ) ) {
+				return true;
+			}
+		}
+
+		$tool_name = 'ability_' . str_replace( array( '/', '-' ), '_', $ability_name );
+
+		foreach ( $tool_prefixes as $prefix ) {
+			if ( 0 === strpos( $tool_name, $prefix ) ) {
+				return true;
+			}
+		}
+
+		foreach ( $raw_prefixes as $prefix ) {
+			if ( 0 === strpos( $ability_name, $prefix ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	// Primary source: WordPress Abilities API registry.
+	if ( function_exists( 'wp_get_abilities' ) ) {
+		$all_abilities = wp_get_abilities();
+		if ( is_array( $all_abilities ) ) {
+			foreach ( $all_abilities as $ability_key => $ability ) {
+				$ability_name = '';
+				if ( is_object( $ability ) && method_exists( $ability, 'get_name' ) ) {
+					$ability_name = (string) $ability->get_name();
+				} elseif ( is_string( $ability ) ) {
+					$ability_name = $ability;
+				} elseif ( is_string( $ability_key ) ) {
+					$ability_name = $ability_key;
+				}
+
+				if ( $matches_prefix( $ability_name ) ) {
+					$discovered[] = $ability_name;
+				}
+			}
+		}
+	}
+
+	// Compatibility source: optional plugin-provided ability registries.
+	$registered = apply_filters( 'sflmcp_available_abilities_registry', array() );
+	$registered = apply_filters( 'stifli_flex_mcp_available_abilities_registry', $registered );
+	if ( is_array( $registered ) ) {
+		foreach ( $registered as $ability_name ) {
+			if ( $matches_prefix( $ability_name ) ) {
+				$discovered[] = $ability_name;
+			}
+		}
+	}
+
+	return array_values( array_unique( $discovered ) );
 }
 
 function stifli_flex_mcp_clean_changelog() {
