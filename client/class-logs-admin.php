@@ -307,7 +307,7 @@ class StifliFlexMcp_Logs_Admin {
 
 			<div class="sflmcp-changelog-actions">
 				<button class="button" id="sflmcp-export-btn"><?php esc_html_e( 'Export CSV', 'stifli-flex-mcp' ); ?></button>
-				<input type="number" id="sflmcp-purge-days" value="30" min="1" max="365" style="width:60px;">
+				<input type="number" id="sflmcp-purge-days" class="sflmcp-purge-days" value="30" min="1" max="365">
 				<button class="button" id="sflmcp-purge-btn"><?php esc_html_e( 'Purge older than (days)', 'stifli-flex-mcp' ); ?></button>
 			</div>
 
@@ -326,7 +326,7 @@ class StifliFlexMcp_Logs_Admin {
 					</tr>
 				</thead>
 				<tbody id="sflmcp-changelog-body">
-					<tr><td colspan="9" style="text-align:center;padding:20px;"><?php esc_html_e( 'Loading...', 'stifli-flex-mcp' ); ?></td></tr>
+					<tr><td colspan="9" class="sflmcp-loading-cell"><?php esc_html_e( 'Loading...', 'stifli-flex-mcp' ); ?></td></tr>
 				</tbody>
 			</table>
 
@@ -353,11 +353,11 @@ class StifliFlexMcp_Logs_Admin {
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'IP Address', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-ip"></span></div>
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Source', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-source"></span></div>
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Date', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-date"></span></div>
-						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Session', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-session"></span> <button id="sflmcp-rollback-session-btn" class="button button-small sflmcp-btn-rollback" style="display:none;margin-left:8px;" title="<?php esc_attr_e( 'Rollback Entire Session', 'stifli-flex-mcp' ); ?>">⏪ <?php esc_html_e( 'Rollback Entire Session', 'stifli-flex-mcp' ); ?></button></div>
+						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Session', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-session"></span> <button id="sflmcp-rollback-session-btn" class="button button-small sflmcp-btn-rollback sflmcp-hidden sflmcp-ml-8" title="<?php esc_attr_e( 'Rollback Entire Session', 'stifli-flex-mcp' ); ?>">⏪ <?php esc_html_e( 'Rollback Entire Session', 'stifli-flex-mcp' ); ?></button></div>
 						<div class="detail-item"><span class="detail-label"><?php esc_html_e( 'Status', 'stifli-flex-mcp' ); ?></span><span class="detail-value" id="detail-status"></span></div>
 					</div>
 					<h4><?php esc_html_e( 'Arguments', 'stifli-flex-mcp' ); ?></h4>
-					<pre id="detail-args" style="background:#f9f9f9;padding:10px;max-height:150px;overflow:auto;font-size:12px;border:1px solid #ddd;border-radius:4px;"></pre>
+					<pre id="detail-args" class="sflmcp-detail-args"></pre>
 					<div class="sflmcp-state-compare">
 						<div class="state-panel before">
 							<h4><?php esc_html_e( 'Before State', 'stifli-flex-mcp' ); ?></h4>
@@ -557,7 +557,13 @@ class StifliFlexMcp_Logs_Admin {
 
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_changelog';
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$table}` WHERE id = %d", $id ), ARRAY_A );
+		$table_sql = StifliFlexMcpUtils::wrapTableNameForQuery( $table );
+		if ( '' === $table_sql ) {
+			wp_send_json_error( 'Invalid changelog table' );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name sanitized via helper before interpolation.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_sql} WHERE id = %d", $id ), ARRAY_A );
 		if ( ! $row ) {
 			wp_send_json_error( 'Entry not found' );
 		}

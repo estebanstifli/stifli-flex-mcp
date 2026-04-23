@@ -1310,6 +1310,7 @@ function stifli_flex_mcp_apply_plugin_integration_overrides() {
 	}
 
 	$disable_placeholders = implode( ',', array_fill( 0, count( $managed_tool_names ), '%s' ) );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name is trusted plugin table; dynamic placeholders are generated from sanitized tool array count.
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$tools_table} SET enabled = 0 WHERE tool_name IN ({$disable_placeholders})",
@@ -1323,6 +1324,7 @@ function stifli_flex_mcp_apply_plugin_integration_overrides() {
 	}
 
 	$enable_placeholders = implode( ',', array_fill( 0, count( $enabled_tool_names ), '%s' ) );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name is trusted plugin table; dynamic placeholders are generated from sanitized tool array count.
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$tools_table} SET enabled = 1 WHERE tool_name IN ({$enable_placeholders})",

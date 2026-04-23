@@ -425,15 +425,7 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 		$formatted = array();
 
 		foreach ( $mcp_tools as $tool ) {
-			$schema = $tool['inputSchema'] ?? array( 'type' => 'object', 'properties' => new stdClass() );
-			
-			// Ensure proper structure
-			if ( ! isset( $schema['type'] ) ) {
-				$schema['type'] = 'object';
-			}
-			if ( ! isset( $schema['properties'] ) ) {
-				$schema['properties'] = new stdClass();
-			}
+			$schema = StifliFlexMcpUtils::normalizeToolInputSchema( $tool['inputSchema'] ?? array() );
 
 			$formatted[] = array(
 				'name'         => $tool['name'],

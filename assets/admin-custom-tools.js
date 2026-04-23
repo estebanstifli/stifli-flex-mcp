@@ -322,3 +322,204 @@ jQuery(document).ready(function($) {
     // Init
     loadTools();
 });
+
+jQuery(document).ready(function($) {
+    const pluginConfig = $('#sflmcp-plugin-integrations-config');
+    if (!pluginConfig.length) {
+        return;
+    }
+
+    const nonce = pluginConfig.data('nonce') || '';
+    const saveStatus = $('#sflmcp-plugins-save-status');
+    let saveTimer = null;
+
+    function setSaveStatus(text, isError) {
+        if (!saveStatus.length) {
+            return;
+        }
+        saveStatus.text(text);
+        saveStatus.toggleClass('sflmcp-error', !!isError);
+    }
+
+    function collectState() {
+        const state = {
+            enabled_groups: [],
+            enabled_tools: {}
+        };
+
+        $('.sflmcp-plugin-card').each(function() {
+            const $card = $(this);
+            const integrationId = $card.data('integration') || '';
+            if (!integrationId) {
+                return;
+            }
+
+            const checkedTools = [];
+            $card.find('.sflmcp-plugin-tool-checkbox:checked').each(function() {
+                checkedTools.push($(this).val());
+            });
+
+            state.enabled_tools[integrationId] = checkedTools;
+
+            const groupChecked = $card.find('.sflmcp-plugin-group-checkbox').is(':checked');
+            if (groupChecked || checkedTools.length > 0) {
+                state.enabled_groups.push(integrationId);
+            }
+        });
+
+        return state;
+    }
+
+    function saveState() {
+        if (!window.ajaxurl || !nonce) {
+            return;
+        }
+
+        const state = collectState();
+        setSaveStatus('Saving...', false);
+
+        $.post(window.ajaxurl, {
+            action: 'sflmcp_save_plugin_integrations',
+            nonce: nonce,
+            enabled_groups: state.enabled_groups,
+            enabled_tools: state.enabled_tools
+        }, function(res) {
+            if (res && res.success) {
+                setSaveStatus('Changes saved automatically.', false);
+                if (res.data && res.data.reload) {
+                    window.location.reload();
+                }
+            } else {
+                setSaveStatus('Error saving changes.', true);
+            }
+        }).fail(function() {
+            setSaveStatus('Error saving changes.', true);
+        });
+    }
+
+    function scheduleSave() {
+        if (saveTimer) {
+            clearTimeout(saveTimer);
+        }
+        saveTimer = setTimeout(saveState, 220);
+    }
+
+    function updateCardSummary(card) {
+        const $card = $(card);
+        const $groupCheckbox = $card.find('.sflmcp-plugin-group-checkbox').first();
+        const $toolCheckboxes = $card.find('.sflmcp-plugin-tool-checkbox');
+        const $summary = $card.find('.sflmcp-enabled-count').first();
+
+        if (!$groupCheckbox.length || !$summary.length) {
+            return;
+        }
+
+        const total = $toolCheckboxes.length;
+        let enabled = 0;
+        let enabledRead = 0;
+        let enabledWrite = 0;
+        let enabledTokens = 0;
+
+        $toolCheckboxes.each(function() {
+            const $cb = $(this);
+            if (!$cb.is(':checked')) {
+                return;
+            }
+            enabled++;
+            enabledTokens += parseInt($cb.attr('data-tokens'), 10) || 0;
+            if (($cb.attr('data-mode') || '') === 'WRITE') {
+                enabledWrite++;
+            } else {
+                enabledRead++;
+            }
+        });
+
+        const isAll = total > 0 && enabled === total;
+        const isSome = enabled > 0 && enabled < total;
+
+        $groupCheckbox.prop('checked', isAll);
+        $groupCheckbox.prop('indeterminate', isSome);
+        $groupCheckbox.toggleClass('sflmcp-partial', isSome);
+
+        $summary.removeClass('sflmcp-count-partial sflmcp-count-full');
+        if (isAll) {
+            $summary.addClass('sflmcp-count-full');
+        } else if (enabled > 0) {
+            $summary.addClass('sflmcp-count-partial');
+        }
+
+        let html = enabled + '/' + total + ' enabled';
+        if (enabledRead > 0) {
+            html += ' &middot; <span class="sflmcp-mode-label">' + enabledRead + ' read</span>';
+        }
+        if (enabledWrite > 0) {
+            html += ' &middot; <span class="sflmcp-mode-label">' + enabledWrite + ' write</span>';
+        }
+        if (enabled > 0) {
+            html += ' &middot; ' + enabledTokens.toLocaleString() + ' tokens';
+        }
+        $summary.html(html);
+    }
+
+    function handleDiscoverClick(e) {
+        e.preventDefault();
+
+        const $button = $(this);
+        const integrationId = $button.data('integration-id') || '';
+        if (!integrationId || !window.ajaxurl || !nonce) {
+            return;
+        }
+
+        const $status = $('#sflmcp-discover-status-' + integrationId);
+        $button.prop('disabled', true).text('Discovering...');
+        $status.removeClass('sflmcp-success sflmcp-error').text('');
+
+        $.post(window.ajaxurl, {
+            action: 'sflmcp_discover_plugin_abilities',
+            nonce: nonce,
+            integration_id: integrationId
+        }, function(res) {
+            $button.prop('disabled', false);
+
+            if (res && res.success) {
+                $button.text('Abilities discovered!');
+                $status.addClass('sflmcp-success').text('✓ ' + (res.data && res.data.message ? res.data.message : 'Done'));
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1000);
+                return;
+            }
+
+            const message = (res && res.data && res.data.message) ? res.data.message : 'Error discovering abilities';
+            $button.text('Discover abilities for this plugin');
+            $status.addClass('sflmcp-error').text(message);
+        }).fail(function() {
+            $button.prop('disabled', false).text('Discover abilities for this plugin');
+            $status.addClass('sflmcp-error').text('Error discovering abilities');
+        });
+    }
+
+    $('.sflmcp-plugin-card').each(function() {
+        const $card = $(this);
+        const $groupCheckbox = $card.find('.sflmcp-plugin-group-checkbox').first();
+        const $toolCheckboxes = $card.find('.sflmcp-plugin-tool-checkbox');
+
+        $groupCheckbox.on('click', function(ev) {
+            ev.stopPropagation();
+        });
+
+        $groupCheckbox.on('change', function() {
+            $toolCheckboxes.prop('checked', $groupCheckbox.is(':checked'));
+            updateCardSummary($card);
+            scheduleSave();
+        });
+
+        $toolCheckboxes.on('change', function() {
+            updateCardSummary($card);
+            scheduleSave();
+        });
+
+        $card.find('.sflmcp-discover-btn').on('click', handleDiscoverClick);
+        updateCardSummary($card);
+    });
+});

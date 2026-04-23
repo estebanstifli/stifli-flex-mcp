@@ -324,7 +324,7 @@ class StifliFlexMcp_Client_Admin {
 			<?php endif; ?>
 			
 			<!-- Tool Execution Modal -->
-			<div id="sflmcp-tool-modal" class="sflmcp-modal" style="display:none;">
+			<div id="sflmcp-tool-modal" class="sflmcp-modal sflmcp-is-hidden">
 				<div class="sflmcp-modal-content">
 					<div class="sflmcp-modal-header">
 						<span class="dashicons dashicons-admin-tools"></span>
@@ -358,13 +358,22 @@ class StifliFlexMcp_Client_Admin {
 	 * @param array $models   Available models.
 	 */
 	private function render_chat_tab( $settings, $models ) {
-		// Get enabled tools count
-		global $wpdb;
-		$tools_table = $wpdb->prefix . 'sflmcp_tools';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
-		$enabled_tools = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tools_table} WHERE enabled = 1" );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from $wpdb->prefix is safe.
-		$total_tools = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$tools_table}" );
+		$enabled_tool_names = array();
+		global $stifliFlexMcp;
+		if ( isset( $stifliFlexMcp ) && isset( $stifliFlexMcp->model ) ) {
+			$enabled_tools_list = $stifliFlexMcp->model->getToolsList();
+			if ( is_array( $enabled_tools_list ) ) {
+				foreach ( $enabled_tools_list as $tool ) {
+					$tool_name = isset( $tool['name'] ) ? (string) $tool['name'] : '';
+					if ( '' !== $tool_name ) {
+						$enabled_tool_names[] = $tool_name;
+					}
+				}
+			}
+		}
+		$enabled_tool_names = array_values( array_unique( $enabled_tool_names ) );
+		natcasesort( $enabled_tool_names );
+		$enabled_tools = count( $enabled_tool_names );
 		$configure_url = admin_url( 'admin.php?page=sflmcp-server&tab=profiles' );
 		?>
 		<!-- Settings Panel -->
@@ -414,7 +423,7 @@ class StifliFlexMcp_Client_Admin {
 				</div>
 				
 				<div class="sflmcp-setting-group sflmcp-setting-actions">
-					<span id="sflmcp-settings-autosave" class="sflmcp-autosave-indicator" style="display:none;">
+					<span id="sflmcp-settings-autosave" class="sflmcp-autosave-indicator sflmcp-is-hidden">
 						<span class="dashicons dashicons-saved"></span>
 						<?php esc_html_e( 'Saved', 'stifli-flex-mcp' ); ?>
 					</span>
@@ -427,23 +436,32 @@ class StifliFlexMcp_Client_Admin {
 			<div class="sflmcp-chat-header">
 				<div class="sflmcp-chat-header-left">
 					<span class="sflmcp-chat-title"><?php esc_html_e( 'Chat with AI', 'stifli-flex-mcp' ); ?></span>
-					<span class="sflmcp-tools-count">
+					<span class="sflmcp-tools-count sflmcp-tools-count-with-tooltip">
 						<span class="dashicons dashicons-admin-tools"></span>
 						<?php
 						printf(
-							/* translators: 1: enabled tools count, 2: total tools count */
-							esc_html__( '%1$d / %2$d tools enabled', 'stifli-flex-mcp' ),
-							intval( $enabled_tools ),
-							intval( $total_tools )
+							/* translators: %d: enabled tools count */
+							esc_html__( '%d tools enabled', 'stifli-flex-mcp' ),
+							intval( $enabled_tools )
 						);
 						?>
 						<a href="<?php echo esc_url( $configure_url ); ?>" class="sflmcp-configure-link">
 							<?php esc_html_e( 'Configure', 'stifli-flex-mcp' ); ?>
 						</a>
+						<?php if ( ! empty( $enabled_tool_names ) ) : ?>
+							<span class="sflmcp-tools-tooltip" role="tooltip" aria-label="<?php esc_attr_e( 'Enabled tools list', 'stifli-flex-mcp' ); ?>">
+								<strong><?php esc_html_e( 'Enabled tools', 'stifli-flex-mcp' ); ?></strong>
+								<ul>
+									<?php foreach ( $enabled_tool_names as $tool_name ) : ?>
+										<li><code><?php echo esc_html( $tool_name ); ?></code></li>
+									<?php endforeach; ?>
+								</ul>
+							</span>
+						<?php endif; ?>
 					</span>
 				</div>
 				<div class="sflmcp-chat-actions">
-					<span id="sflmcp-autosave-indicator" class="sflmcp-autosave-indicator" style="display:none;">
+					<span id="sflmcp-autosave-indicator" class="sflmcp-autosave-indicator sflmcp-is-hidden">
 						<span class="dashicons dashicons-saved"></span>
 						<?php esc_html_e( 'Saved', 'stifli-flex-mcp' ); ?>
 					</span>
@@ -453,7 +471,7 @@ class StifliFlexMcp_Client_Admin {
 				</div>
 			</div>
 			
-			<div class="sflmcp-token-bars" id="sflmcp-token-bars" style="display:none;">
+			<div class="sflmcp-token-bars sflmcp-is-hidden" id="sflmcp-token-bars">
 				<div class="sflmcp-token-row">
 					<span class="sflmcp-token-label"><?php esc_html_e( 'Tokens', 'stifli-flex-mcp' ); ?></span>
 					<div class="sflmcp-token-track">
@@ -504,7 +522,7 @@ class StifliFlexMcp_Client_Admin {
 		<div class="sflmcp-advanced-settings">
 			<p class="description">
 				<?php esc_html_e( 'These settings are auto-saved when you change them.', 'stifli-flex-mcp' ); ?>
-				<span id="sflmcp-advanced-save-indicator" class="sflmcp-save-indicator" style="display:none;">
+				<span id="sflmcp-advanced-save-indicator" class="sflmcp-save-indicator sflmcp-is-hidden">
 					<span class="dashicons dashicons-saved"></span>
 					<?php esc_html_e( 'Saved', 'stifli-flex-mcp' ); ?>
 				</span>
@@ -517,12 +535,12 @@ class StifliFlexMcp_Client_Admin {
 						<label for="sflmcp-adv-provider"><?php esc_html_e( 'AI Provider & Model', 'stifli-flex-mcp' ); ?></label>
 					</th>
 					<td>
-						<select id="sflmcp-adv-provider" name="adv_provider" style="width:200px;">
+						<select id="sflmcp-adv-provider" name="adv_provider" class="sflmcp-adv-provider-select">
 							<option value="openai" <?php selected( $settings['provider'], 'openai' ); ?>>OpenAI</option>
 							<option value="claude" <?php selected( $settings['provider'], 'claude' ); ?>>Claude (Anthropic)</option>
 							<option value="gemini" <?php selected( $settings['provider'], 'gemini' ); ?>>Gemini (Google)</option>
 						</select>
-						<select id="sflmcp-adv-model" name="adv_model" style="width:350px;">
+						<select id="sflmcp-adv-model" name="adv_model" class="sflmcp-adv-model-select">
 							<?php foreach ( $models as $provider => $provider_models ) : ?>
 								<?php foreach ( $provider_models as $model_id => $model_name ) : ?>
 									<option value="<?php echo esc_attr( $model_id ); ?>" 

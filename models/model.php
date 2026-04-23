@@ -921,7 +921,7 @@ class StifliFlexMcpModel {
                     'description' => 'List all ACF field groups with their keys, titles and location rules. Requires Advanced Custom Fields plugin active.',
                     'inputSchema' => array(
                         'type' => 'object',
-                        'properties' => array(),
+                        'properties' => (object) array(),
                         'required' => array(),
                     ),
                 ),
@@ -1616,6 +1616,7 @@ class StifliFlexMcpModel {
             if (json_last_error() !== JSON_ERROR_NONE || !is_array($input_schema)) {
                 $input_schema = array('type' => 'object', 'properties' => (object) array(), 'required' => array());
             }
+            $input_schema = StifliFlexMcpUtils::normalizeToolInputSchema( $input_schema );
             
             // Convert ability name to tool name: "allsi/search-image" -> "ability_allsi_search_image"
             $tool_name = 'ability_' . str_replace(array('/', '-'), '_', $row->ability_name);

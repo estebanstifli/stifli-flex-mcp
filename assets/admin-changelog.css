@@ -42,6 +42,23 @@
 	margin-bottom: 12px;
 }
 
+.sflmcp-purge-days {
+	width: 60px;
+}
+
+.sflmcp-loading-cell {
+	text-align: center;
+	padding: 20px;
+}
+
+.sflmcp-hidden {
+	display: none;
+}
+
+.sflmcp-ml-8 {
+	margin-left: 8px;
+}
+
 .sflmcp-changelog-stats {
 	display: flex;
 	gap: 16px;
@@ -317,6 +334,16 @@
 	overflow-x: auto;
 	max-height: 300px;
 	background: #f9f9f9;
+}
+
+.sflmcp-detail-args {
+	background: #f9f9f9;
+	padding: 10px;
+	max-height: 150px;
+	overflow: auto;
+	font-size: 12px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
 }
 
 .sflmcp-changelog-empty {

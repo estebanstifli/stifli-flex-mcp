@@ -157,3 +157,183 @@
     margin: 10px 0;
     font-size: 12px;
 }
+
+.sflmcp-hidden {
+    display: none;
+}
+
+/* Plugin Integrations tab */
+.sflmcp-plugins-save-status {
+    margin: 6px 0 12px;
+}
+
+.sflmcp-plugins-save-status.sflmcp-error {
+    color: #b32d2e;
+}
+
+.sflmcp-plugin-card {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
+}
+
+.sflmcp-plugin-card summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+}
+
+.sflmcp-plugin-card summary::-webkit-details-marker {
+    display: none;
+}
+
+.sflmcp-plugin-card .sflmcp-chevron {
+    font-size: 14px;
+    color: #646970;
+    width: 14px;
+    text-align: center;
+}
+
+.sflmcp-plugin-card .sflmcp-plugin-title {
+    font-weight: 600;
+}
+
+.sflmcp-plugin-card .sflmcp-plugin-summary-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sflmcp-plugin-card .sflmcp-plugin-summary-right {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.sflmcp-plugin-card .sflmcp-plugin-group-checkbox {
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.sflmcp-plugin-card .sflmcp-plugin-group-checkbox.sflmcp-partial {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background-color: #8a9baa;
+    border: 1px solid #5f7a8e;
+    border-radius: 2px;
+    vertical-align: middle;
+    background-image: linear-gradient(#fff, #fff);
+    background-size: 55% 2px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.sflmcp-plugin-card .sflmcp-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.sflmcp-plugin-card .sflmcp-badge {
+    font-size: 11px;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: #eff1f2;
+    color: #3c434a;
+    font-weight: 600;
+}
+
+.sflmcp-plugin-card .sflmcp-badge-installed {
+    background: #e8f4ff;
+    color: #125e9c;
+}
+
+.sflmcp-plugin-card .sflmcp-badge-active {
+    background: #e7f7eb;
+    color: #1b5e20;
+}
+
+.sflmcp-plugin-card .sflmcp-badge-muted {
+    background: #f6f7f7;
+    color: #646970;
+}
+
+.sflmcp-plugin-card .sflmcp-badge-featured {
+    background: #fff5d6;
+    color: #8a5a00;
+    border: 1px solid #e6c16a;
+}
+
+.sflmcp-plugin-action-btn {
+    margin-left: 8px;
+}
+
+.sflmcp-plugin-body {
+    border-top: 1px solid #dcdcde;
+    padding: 14px;
+}
+
+.sflmcp-plugin-description {
+    margin-top: 0;
+}
+
+.sflmcp-discover-wrap {
+    margin-bottom: 16px;
+}
+
+.sflmcp-discover-btn {
+    margin-bottom: 0;
+}
+
+.sflmcp-discover-status {
+    margin-left: 10px;
+}
+
+.sflmcp-discover-status.sflmcp-success {
+    color: #1b5e20;
+}
+
+.sflmcp-discover-status.sflmcp-error {
+    color: #b32d2e;
+}
+
+.sflmcp-plugin-tools-table {
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.sflmcp-plugin-tool-row .sflmcp-tools-col-mode,
+.sflmcp-plugin-tool-row .sflmcp-tools-col-tokens {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.sflmcp-empty {
+    padding: 10px 12px;
+    color: #646970;
+}
+
+.sflmcp-plugins-advanced {
+    margin-top: 22px;
+    border: 1px solid #dcdcde;
+    background: #fff;
+    padding: 10px;
+}
+
+.sflmcp-plugins-advanced-summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.sflmcp-plugins-advanced-body {
+    margin-top: 12px;
+}

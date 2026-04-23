@@ -1238,8 +1238,9 @@ class StifliFlexMcp_Copilot_Admin {
 
 		$disabled_tools = array();
 		if ( ! empty( $_POST['webmcp_disabled_tools'] ) && is_array( $_POST['webmcp_disabled_tools'] ) ) {
-			foreach ( $_POST['webmcp_disabled_tools'] as $tool ) {
-				$disabled_tools[] = sanitize_text_field( wp_unslash( $tool ) );
+			$raw_disabled_tools = wp_unslash( $_POST['webmcp_disabled_tools'] );
+			foreach ( $raw_disabled_tools as $tool ) {
+				$disabled_tools[] = sanitize_text_field( $tool );
 			}
 		}
 

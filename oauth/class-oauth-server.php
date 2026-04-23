@@ -109,8 +109,8 @@ class StifliFlexMcp_OAuth_Server {
 		}
 
 		// Authorization page: /?sflmcp_oauth=authorize
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( isset( $_GET['sflmcp_oauth'] ) && 'authorize' === $_GET['sflmcp_oauth'] ) {
+		$oauth_route = isset( $_GET['sflmcp_oauth'] ) ? sanitize_key( wp_unslash( $_GET['sflmcp_oauth'] ) ) : '';
+		if ( 'authorize' === $oauth_route ) {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
 				stifli_flex_mcp_log( sprintf( 'OAuth: Authorize page %s, params: %s', $method, wp_json_encode( array_keys( $_GET ) ) ) );
 			}
@@ -363,29 +363,7 @@ class StifliFlexMcp_OAuth_Server {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?php echo esc_html( sprintf( 'Authorize — %s', $site_name ) ); ?></title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:#f0f0f1;color:#1d2327;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.oauth-card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.13);max-width:440px;width:100%;padding:32px}
-.oauth-header{text-align:center;margin-bottom:24px}
-.oauth-header h1{font-size:20px;font-weight:600;margin-bottom:4px}
-.oauth-header .site-name{color:#646970;font-size:14px}
-.oauth-client{background:#f6f7f7;border:1px solid #dcdcde;border-radius:6px;padding:16px;margin-bottom:20px}
-.oauth-client h2{font-size:16px;font-weight:600;margin-bottom:8px}
-.oauth-client .client-detail{font-size:13px;color:#646970;margin-bottom:4px}
-.oauth-perms{margin-bottom:20px}
-.oauth-perms h3{font-size:14px;font-weight:600;margin-bottom:8px}
-.oauth-perms ul{list-style:none;padding:0}
-.oauth-perms li{padding:6px 0;font-size:13px;border-bottom:1px solid #f0f0f1}
-.oauth-perms li::before{content:"✓";color:#00a32a;margin-right:8px;font-weight:700}
-.oauth-user{font-size:13px;color:#646970;margin-bottom:20px}
-.oauth-actions{display:flex;gap:12px}
-.oauth-actions button{flex:1;padding:10px 16px;font-size:14px;font-weight:600;border-radius:4px;border:1px solid;cursor:pointer;transition:background .15s}
-.btn-approve{background:#2271b1;color:#fff;border-color:#2271b1}
-.btn-approve:hover{background:#135e96}
-.btn-deny{background:#fff;color:#cc1818;border-color:#cc1818}
-.btn-deny:hover{background:#fcecec}
-</style>
+<link rel="stylesheet" href="<?php echo esc_url( plugins_url( 'assets/oauth-authorize.css', __FILE__ ) ); ?>">
 </head>
 <body>
 <div class="oauth-card">
@@ -451,15 +429,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubunt
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?php echo esc_html( sprintf( 'Authorization Error — %s', $site_name ) ); ?></title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:#f0f0f1;color:#1d2327;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.oauth-card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.13);max-width:440px;width:100%;padding:32px;text-align:center}
-.oauth-card h1{font-size:20px;font-weight:600;color:#cc1818;margin-bottom:16px}
-.oauth-card p{font-size:14px;color:#646970;line-height:1.6}
-</style>
+<link rel="stylesheet" href="<?php echo esc_url( plugins_url( 'assets/oauth-authorize.css', __FILE__ ) ); ?>">
 </head>
-<body>
+<body class="oauth-error">
 <div class="oauth-card">
 	<h1>Authorization Error</h1>
 	<p><?php echo esc_html( $message ); ?></p>

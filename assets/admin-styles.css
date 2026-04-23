@@ -320,6 +320,26 @@
     color: #fff;
 }
 
+.sflmcp-hidden {
+    display: none;
+}
+
+.sflmcp-mb-4 {
+    margin-bottom: 4px;
+}
+
+.sflmcp-color-success {
+    color: #00a32a;
+}
+
+.sflmcp-align-middle {
+    vertical-align: middle;
+}
+
+.sflmcp-code-xs {
+    font-size: 11px;
+}
+
 /* =============================================================================
    SETTINGS PAGE
    ============================================================================= */

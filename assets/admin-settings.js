@@ -33,14 +33,14 @@
 				var details = document.getElementById('sflmcp-settings-details');
 				var icon = toggleBtn.querySelector('.dashicons');
 				if (!details) return;
-				if (details.style.display === 'none') {
-					details.style.display = '';
+				if (details.classList.contains('sflmcp-hidden')) {
+					details.classList.remove('sflmcp-hidden');
 					if (icon) {
 						icon.classList.remove('dashicons-arrow-down-alt2');
 						icon.classList.add('dashicons-arrow-up-alt2');
 					}
 				} else {
-					details.style.display = 'none';
+					details.classList.add('sflmcp-hidden');
 					if (icon) {
 						icon.classList.remove('dashicons-arrow-up-alt2');
 						icon.classList.add('dashicons-arrow-down-alt2');

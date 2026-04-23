@@ -38,7 +38,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             : array();
 
         $enabled_tools_by_integration = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] )
-            ? wp_unslash( $_POST['enabled_tools'] )
+            ? $this->sanitize_enabled_tools_input( wp_unslash( $_POST['enabled_tools'] ) )
             : array();
 
         $state_build = $this->build_integrations_state( $enabled_groups, $enabled_tools_by_integration );
@@ -160,7 +160,9 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         $enabled_groups = isset( $_POST['enabled_groups'] ) && is_array( $_POST['enabled_groups'] )
             ? array_map( 'sanitize_key', wp_unslash( $_POST['enabled_groups'] ) )
             : array();
-        $enabled_tools_by_integration = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] ) ? wp_unslash( $_POST['enabled_tools'] ) : array();
+        $enabled_tools_by_integration = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] )
+            ? $this->sanitize_enabled_tools_input( wp_unslash( $_POST['enabled_tools'] ) )
+            : array();
         $bulk_action = isset( $_POST['bulk_action'] ) ? sanitize_key( wp_unslash( $_POST['bulk_action'] ) ) : '';
 
         $state_build = $this->build_integrations_state( $enabled_groups, $enabled_tools_by_integration );
@@ -285,6 +287,10 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
         global $wpdb;
         $table = $wpdb->prefix . 'sflmcp_abilities';
+        $table_sql = $this->get_safe_table_sql( $table );
+        if ( '' === $table_sql ) {
+            return 0;
+        }
         $like = $wpdb->esc_like( $table );
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- schema check.
         if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) !== $table ) {
@@ -347,7 +353,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                 $stats['discovered_total']++;
 
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- point lookup.
-                $existing_row = $wpdb->get_row( $wpdb->prepare( "SELECT id, enabled FROM {$table} WHERE ability_name = %s", $ability_name ), ARRAY_A );
+                $existing_row = $wpdb->get_row( $wpdb->prepare( "SELECT id, enabled FROM {$table_sql} WHERE ability_name = %s", $ability_name ), ARRAY_A );
                 if ( ! empty( $existing_row ) ) {
                     if ( isset( $existing_row['enabled'] ) && intval( $existing_row['enabled'] ) !== 1 ) {
                         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
@@ -375,7 +381,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                     continue;
                 }
 
-                $input_schema = $ability->get_input_schema();
+                $input_schema = StifliFlexMcpUtils::normalizeToolInputSchema( $ability->get_input_schema() );
                 $output_schema = method_exists( $ability, 'get_output_schema' ) ? $ability->get_output_schema() : null;
 
                 $category = method_exists( $ability, 'get_category' ) ? $ability->get_category() : '';
@@ -447,31 +453,10 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
         echo '<h2>' . esc_html__( 'Plugin Integrations', 'stifli-flex-mcp' ) . '</h2>';
         echo '<p>' . esc_html__( 'Enable MCP tool groups for third-party plugins. Only plugins that are installed and active can be enabled. Disabled tools return an error when called.', 'stifli-flex-mcp' ) . '</p>';
-        echo '<p class="description" id="sflmcp-plugins-save-status" style="margin:6px 0 12px;">' . esc_html__( 'Changes are saved automatically.', 'stifli-flex-mcp' ) . '</p>';
-
-        echo '<style>';
-        echo '.sflmcp-plugin-card{background:#fff;border:1px solid #dcdcde;border-radius:8px;margin:12px 0;overflow:hidden;}';
-        echo '.sflmcp-plugin-card summary{list-style:none;display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;}';
-        echo '.sflmcp-plugin-card summary::-webkit-details-marker{display:none;}';
-        echo '.sflmcp-plugin-card .sflmcp-chevron{font-size:14px;color:#646970;width:14px;text-align:center;}';
-        echo '.sflmcp-plugin-card .sflmcp-plugin-title{font-weight:600;}';
-        echo '.sflmcp-plugin-card .sflmcp-plugin-summary-left{display:flex;align-items:center;gap:8px;min-width:0;}';
-        echo '.sflmcp-plugin-card .sflmcp-plugin-summary-right{margin-left:auto;white-space:nowrap;}';
-        echo '.sflmcp-plugin-card .sflmcp-plugin-group-checkbox{cursor:pointer;flex-shrink:0;}';
-        echo '.sflmcp-plugin-card .sflmcp-plugin-group-checkbox.sflmcp-partial{-webkit-appearance:none;appearance:none;width:16px;height:16px;background-color:#8a9baa;border:1px solid #5f7a8e;border-radius:2px;vertical-align:middle;background-image:linear-gradient(#fff,#fff);background-size:55% 2px;background-position:center;background-repeat:no-repeat;}';
-        echo '.sflmcp-plugin-card .sflmcp-badges{display:flex;gap:6px;flex-wrap:wrap;}';
-        echo '.sflmcp-plugin-card .sflmcp-badge{font-size:11px;line-height:1;padding:4px 7px;border-radius:999px;background:#eff1f2;color:#3c434a;font-weight:600;}';
-        echo '.sflmcp-plugin-card .sflmcp-badge-installed{background:#e8f4ff;color:#125e9c;}';
-        echo '.sflmcp-plugin-card .sflmcp-badge-active{background:#e7f7eb;color:#1b5e20;}';
-        echo '.sflmcp-plugin-card .sflmcp-badge-muted{background:#f6f7f7;color:#646970;}';
-        echo '.sflmcp-plugin-card .sflmcp-badge-featured{background:#fff5d6;color:#8a5a00;border:1px solid #e6c16a;}';
-        echo '.sflmcp-plugin-body{border-top:1px solid #dcdcde;padding:14px;}';
-        echo '.sflmcp-plugin-tools-table{border:1px solid #dcdcde;border-radius:6px;overflow:hidden;}';
-        echo '.sflmcp-plugin-tool-row .sflmcp-tools-col-mode,.sflmcp-plugin-tool-row .sflmcp-tools-col-tokens{text-align:right;white-space:nowrap;}';
-        echo '.sflmcp-empty{padding:10px 12px;color:#646970;}';
-        echo '</style>';
+        echo '<p class="description sflmcp-plugins-save-status" id="sflmcp-plugins-save-status">' . esc_html__( 'Changes are saved automatically.', 'stifli-flex-mcp' ) . '</p>';
 
         $plugins_nonce = wp_create_nonce( 'sflmcp_plugins_integrations_save' );
+        echo '<div id="sflmcp-plugin-integrations-config" class="sflmcp-hidden" data-nonce="' . esc_attr( $plugins_nonce ) . '"></div>';
 
         usort(
             $integrations,
@@ -550,7 +535,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             echo '<details class="sflmcp-plugin-card" data-integration="' . esc_attr( $integration_id ) . '">';
             echo '<summary>';
             echo '<div class="sflmcp-plugin-summary-left">';
-            echo '<input type="checkbox" class="sflmcp-plugin-group-checkbox" name="enabled_groups[]" value="' . esc_attr( $integration_id ) . '" ' . esc_attr( $checked ) . ' onclick="event.stopPropagation();" />';
+            echo '<input type="checkbox" class="sflmcp-plugin-group-checkbox" name="enabled_groups[]" value="' . esc_attr( $integration_id ) . '" ' . esc_attr( $checked ) . ' />';
             echo '<span class="sflmcp-chevron" aria-hidden="true">&#9656;</span>';
             echo '<span class="sflmcp-plugin-title">' . esc_html( $integration_name ) . '</span>';
             echo '<span class="sflmcp-badges">';
@@ -567,7 +552,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             }
             echo '</span>';
             if ( ! empty( $status['action_url'] ) ) {
-                echo '<a class="button button-small" style="margin-left:8px;" href="' . esc_url( $status['action_url'] ) . '">' . esc_html( $status['action_label'] ) . '</a>';
+                echo '<a class="button button-small sflmcp-plugin-action-btn" href="' . esc_url( $status['action_url'] ) . '">' . esc_html( $status['action_label'] ) . '</a>';
             }
             echo '</div>';
             echo '<div class="sflmcp-plugin-summary-right">';
@@ -577,14 +562,14 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
             echo '<div class="sflmcp-plugin-body">';
             if ( ! empty( $integration['description'] ) ) {
-                echo '<p class="description" style="margin-top:0;">' . esc_html( $integration['description'] ) . '</p>';
+                echo '<p class="description sflmcp-plugin-description">' . esc_html( $integration['description'] ) . '</p>';
             }
 
             // Show "Discover abilities" button if plugin is installed/active but has no tools yet
             if ( 0 === $managed_count && ( ! empty( $status['is_installed'] ) || ! empty( $status['is_active'] ) ) && ! empty( $integration['match']['prefixes'] ) ) {
-                echo '<div style="margin-bottom:16px;">';
-                echo '<button class="button button-secondary sflmcp-discover-btn" data-integration-id="' . esc_attr( $integration_id ) . '" style="margin-bottom:0;">' . esc_html__( 'Discover abilities for this plugin', 'stifli-flex-mcp' ) . '</button>';
-                echo '<span id="sflmcp-discover-status-' . esc_attr( $integration_id ) . '"></span>';
+                echo '<div class="sflmcp-discover-wrap">';
+                echo '<button class="button button-secondary sflmcp-discover-btn" data-integration-id="' . esc_attr( $integration_id ) . '">' . esc_html__( 'Discover abilities for this plugin', 'stifli-flex-mcp' ) . '</button>';
+                echo '<span id="sflmcp-discover-status-' . esc_attr( $integration_id ) . '" class="sflmcp-discover-status"></span>';
                 echo '</div>';
             }
 
@@ -625,62 +610,9 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             echo '</details>';
         }
 
-        echo '<script>';
-        echo 'document.addEventListener("DOMContentLoaded", function(){';
-        echo 'var saveStatus=document.getElementById("sflmcp-plugins-save-status");';
-        echo 'var saveTimer=null;';
-        echo 'function setSaveStatus(text,isError){if(!saveStatus){return;}saveStatus.textContent=text;saveStatus.style.color=isError?"#b32d2e":"";}';
-        echo 'function collectState(){var state={enabled_groups:[],enabled_tools:{}};document.querySelectorAll(".sflmcp-plugin-card").forEach(function(card){var integrationId=card.getAttribute("data-integration")||"";if(!integrationId){return;}var checkedTools=[];card.querySelectorAll(".sflmcp-plugin-tool-checkbox").forEach(function(cb){if(cb.checked){checkedTools.push(cb.value);}});state.enabled_tools[integrationId]=checkedTools;var groupCb=card.querySelector(".sflmcp-plugin-group-checkbox");if((groupCb&&groupCb.checked)||checkedTools.length>0){state.enabled_groups.push(integrationId);}});return state;}';
-        echo 'function saveState(){if(!(window.jQuery&&window.ajaxurl)){return;}var state=collectState();setSaveStatus("Saving...",false);window.jQuery.post(window.ajaxurl,{action:"sflmcp_save_plugin_integrations",nonce:"' . esc_js( $plugins_nonce ) . '",enabled_groups:state.enabled_groups,enabled_tools:state.enabled_tools},function(res){if(res&&res.success){setSaveStatus("Changes saved automatically.",false);if(res.data&&res.data.reload){window.location.reload();}}else{setSaveStatus("Error saving changes.",true);}}).fail(function(){setSaveStatus("Error saving changes.",true);});}';
-        echo 'function scheduleSave(){if(saveTimer){clearTimeout(saveTimer);}saveTimer=setTimeout(saveState,220);}';
-        echo 'function updateCardSummary(card){';
-        echo 'var groupCheckbox=card.querySelector(".sflmcp-plugin-group-checkbox");';
-        echo 'var toolCheckboxes=card.querySelectorAll(".sflmcp-plugin-tool-checkbox");';
-        echo 'var summary=card.querySelector(".sflmcp-enabled-count");';
-        echo 'if(!groupCheckbox||!summary){return;}';
-        echo 'var total=toolCheckboxes.length;';
-        echo 'var enabled=0, enabledRead=0, enabledWrite=0, enabledTokens=0;';
-        echo 'toolCheckboxes.forEach(function(cb){if(cb.checked){enabled++;enabledTokens+=(parseInt(cb.getAttribute("data-tokens"),10)||0);if((cb.getAttribute("data-mode")||"")==="WRITE"){enabledWrite++;}else{enabledRead++;}}});';
-        echo 'var isAll=total>0&&enabled===total;';
-        echo 'var isSome=enabled>0&&enabled<total;';
-        echo 'groupCheckbox.checked=isAll;';
-        echo 'groupCheckbox.indeterminate=isSome;';
-        echo 'if(isSome){groupCheckbox.classList.add("sflmcp-partial");}else{groupCheckbox.classList.remove("sflmcp-partial");}';
-        echo 'summary.classList.remove("sflmcp-count-partial","sflmcp-count-full");';
-        echo 'if(isAll){summary.classList.add("sflmcp-count-full");}else if(enabled>0){summary.classList.add("sflmcp-count-partial");}';
-        echo 'var html=enabled+"/"+total+" enabled";';
-        echo 'if(enabledRead>0){html+=" &middot; <span class=\"sflmcp-mode-label\">"+enabledRead+" read</span>";}';
-        echo 'if(enabledWrite>0){html+=" &middot; <span class=\"sflmcp-mode-label\">"+enabledWrite+" write</span>";}';
-        echo 'if(enabled>0){html+=" &middot; "+enabledTokens.toLocaleString()+" tokens";}';
-        echo 'summary.innerHTML=html;';
-        echo '}';
-        echo 'document.querySelectorAll(".sflmcp-plugin-card").forEach(function(card){';
-        echo 'var groupCheckbox=card.querySelector(".sflmcp-plugin-group-checkbox");';
-        echo 'var toolCheckboxes=card.querySelectorAll(".sflmcp-plugin-tool-checkbox");';
-        echo 'if(groupCheckbox){groupCheckbox.addEventListener("change", function(){toolCheckboxes.forEach(function(cb){cb.checked=groupCheckbox.checked;});updateCardSummary(card);scheduleSave();});}';
-        echo 'toolCheckboxes.forEach(function(cb){cb.addEventListener("change", function(){updateCardSummary(card);scheduleSave();});});';
-        echo 'updateCardSummary(card);';
-        echo 'var discoverBtn=card.querySelector(".sflmcp-discover-btn");';
-        echo 'if(discoverBtn){discoverBtn.addEventListener("click", function(e){e.preventDefault();var integrationId=discoverBtn.getAttribute("data-integration-id")||"";if(!integrationId||!window.jQuery||!window.ajaxurl){return;}';
-        echo 'discoverBtn.disabled=true;discoverBtn.textContent="Discovering...";var statusEl=document.getElementById("sflmcp-discover-status-"+integrationId);';
-        echo 'window.jQuery.post(window.ajaxurl,{action:"sflmcp_discover_plugin_abilities",nonce:"' . esc_js( $plugins_nonce ) . '",integration_id:integrationId},function(res){discoverBtn.disabled=false;';
-        echo 'if(res&&res.success){discoverBtn.textContent="Abilities discovered!";';
-        echo 'if(statusEl){statusEl.textContent="✓ "+res.data.message;statusEl.style.color="#1b5e20";statusEl.style.marginLeft="10px";}';
-        echo 'setTimeout(function(){window.location.reload();},1000);}else{';
-        echo 'discoverBtn.textContent="Discover abilities for this plugin";';
-        echo 'var message=(res&&res.data&&res.data.message)?res.data.message:"Error discovering abilities";';
-        echo 'if(statusEl){statusEl.textContent=message;statusEl.style.color="#b32d2e";statusEl.style.marginLeft="10px";}';
-        echo '}} ).fail(function(xhr,status,error){';
-        echo 'discoverBtn.disabled=false;discoverBtn.textContent="Discover abilities for this plugin";';
-        echo 'if(statusEl){statusEl.textContent="Error discovering abilities";statusEl.style.color="#b32d2e";statusEl.style.marginLeft="10px";}';
-        echo '});});}';
-        echo '});';
-        echo '});';
-        echo '</script>';
-
-        echo '<details style="margin-top:22px; border:1px solid #dcdcde; background:#fff; padding:10px;">';
-        echo '<summary style="cursor:pointer; font-weight:600;">' . esc_html__( 'Advanced: Custom Tools (legacy)', 'stifli-flex-mcp' ) . '</summary>';
-        echo '<div style="margin-top:12px;">';
+        echo '<details class="sflmcp-plugins-advanced">';
+        echo '<summary class="sflmcp-plugins-advanced-summary">' . esc_html__( 'Advanced: Custom Tools (legacy)', 'stifli-flex-mcp' ) . '</summary>';
+        echo '<div class="sflmcp-plugins-advanced-body">';
 
         if ( is_object( $host ) && method_exists( $host, 'renderCustomToolsTab' ) ) {
             $host->renderCustomToolsTab( true );
@@ -745,7 +677,10 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             return 0;
         }
 
-        $profiles_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery( $profiles_table );
+        $profiles_table_sql = $this->get_safe_table_sql( $profiles_table );
+        if ( '' === $profiles_table_sql ) {
+            return 0;
+        }
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from helper.
         $active_profile_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profiles_table_sql} WHERE is_active = %d LIMIT 1", 1 ) );
 
@@ -759,7 +694,10 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
         global $wpdb;
         $profile_tools_table = StifliFlexMcpUtils::getPrefixedTable( 'sflmcp_profile_tools', false );
-        $profile_tools_table_sql = StifliFlexMcpUtils::wrapTableNameForQuery( $profile_tools_table );
+        $profile_tools_table_sql = $this->get_safe_table_sql( $profile_tools_table );
+        if ( '' === $profile_tools_table_sql ) {
+            return;
+        }
 
         $model = new StifliFlexMcpModel();
         $tools_map = $model->getTools();
@@ -1004,5 +942,36 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             'action_url'   => $install_url,
             'action_label' => __( 'Install', 'stifli-flex-mcp' ),
         );
+    }
+
+    private function sanitize_enabled_tools_input( $raw_enabled_tools ) {
+        if ( ! is_array( $raw_enabled_tools ) ) {
+            return array();
+        }
+
+        $sanitized = array();
+        foreach ( $raw_enabled_tools as $integration_id => $tool_names ) {
+            $integration_id = sanitize_key( $integration_id );
+            if ( '' === $integration_id || ! is_array( $tool_names ) ) {
+                continue;
+            }
+
+            $sanitized[ $integration_id ] = array_values(
+                array_filter(
+                    array_map( 'sanitize_key', $tool_names )
+                )
+            );
+        }
+
+        return $sanitized;
+    }
+
+    private function get_safe_table_sql( $table_name ) {
+        $table_name = is_string( $table_name ) ? trim( $table_name ) : '';
+        if ( '' === $table_name || ! preg_match( '/^[A-Za-z0-9_]+$/', $table_name ) ) {
+            return '';
+        }
+
+        return '`' . $table_name . '`';
     }
 }

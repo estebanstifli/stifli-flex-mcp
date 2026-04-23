@@ -192,13 +192,13 @@ class StifliFlexMcp_Automation_Admin {
 			</div>
 
 			<!-- WP-Cron Notice -->
-			<div class="sflmcp-cron-notice" style="margin-top: 24px; padding: 12px 16px; background: #fff8e5; border: 1px solid #dba617; border-left-width: 4px; border-radius: 4px;">
-				<p style="margin: 0; color: #996800;">
-					<span class="dashicons dashicons-info" style="color: #dba617; margin-right: 6px;"></span>
+			<div class="sflmcp-cron-notice sflmcp-cron-notice-box">
+				<p class="sflmcp-cron-notice-text">
+					<span class="dashicons dashicons-info sflmcp-cron-notice-icon"></span>
 					<strong><?php esc_html_e( 'Important:', 'stifli-flex-mcp' ); ?></strong>
 					<?php esc_html_e( 'WordPress WP-Cron only runs when there are visits. For low-traffic sites, we recommend setting up a real server cron:', 'stifli-flex-mcp' ); ?>
 				</p>
-				<code style="display: block; margin-top: 8px; padding: 8px 12px; background: #f6f7f7; border-radius: 3px; font-size: 12px; color: #50575e; word-break: break-all;">* * * * * wget -q -O - <?php echo esc_url( site_url( '/wp-cron.php?doing_wp_cron' ) ); ?> > /dev/null 2>&1</code>
+				<code class="sflmcp-cron-notice-command">* * * * * wget -q -O - <?php echo esc_url( site_url( '/wp-cron.php?doing_wp_cron' ) ); ?> > /dev/null 2>&1</code>
 			</div>
 		</div>
 		<?php
@@ -237,7 +237,7 @@ class StifliFlexMcp_Automation_Admin {
 		</div>
 
 		<!-- Task Actions Modal -->
-		<div id="sflmcp-task-modal" class="sflmcp-modal" style="display:none;">
+		<div id="sflmcp-task-modal" class="sflmcp-modal sflmcp-is-hidden">
 			<div class="sflmcp-modal-content">
 				<div class="sflmcp-modal-header">
 					<h3 id="sflmcp-modal-title"></h3>
@@ -318,7 +318,7 @@ class StifliFlexMcp_Automation_Admin {
 					<div class="sflmcp-test-chat-header">
 						<span class="dashicons dashicons-format-chat"></span>
 						<?php esc_html_e( 'Test Chat', 'stifli-flex-mcp' ); ?>
-						<button type="button" id="sflmcp-clear-test-chat" class="button-link" style="margin-left:auto;">
+						<button type="button" id="sflmcp-clear-test-chat" class="button-link sflmcp-push-right">
 							<?php esc_html_e( 'Clear', 'stifli-flex-mcp' ); ?>
 						</button>
 					</div>
@@ -343,14 +343,14 @@ class StifliFlexMcp_Automation_Admin {
 					</div>
 				</div>
 
-				<div class="sflmcp-form-row" style="margin-top:16px;">
+				<div class="sflmcp-form-row sflmcp-form-row-spaced">
 					<label for="sflmcp-task-system-prompt"><?php esc_html_e( 'System Prompt (optional)', 'stifli-flex-mcp' ); ?></label>
 					<textarea id="sflmcp-task-system-prompt" name="system_prompt" rows="3"
 							  placeholder="<?php esc_attr_e( 'Custom instructions for the AI...', 'stifli-flex-mcp' ); ?>"><?php echo esc_textarea( $task ? $task->system_prompt : '' ); ?></textarea>
 				</div>
 
 				<!-- Tools detection summary (shown after test) -->
-				<div id="sflmcp-test-summary" class="sflmcp-test-summary" style="display:none;">
+				<div id="sflmcp-test-summary" class="sflmcp-test-summary sflmcp-is-hidden">
 					<div class="sflmcp-test-summary-header">
 						<span class="dashicons dashicons-admin-tools"></span>
 						<strong><?php esc_html_e( 'Tools Detected', 'stifli-flex-mcp' ); ?></strong>
@@ -421,7 +421,7 @@ class StifliFlexMcp_Automation_Admin {
 					</div>
 				</div>
 
-				<div id="sflmcp-custom-tools-section" class="sflmcp-form-row" style="display:<?php echo 'custom' === $saved_tools_mode ? 'block' : 'none'; ?>;">
+				<div id="sflmcp-custom-tools-section" class="sflmcp-form-row<?php echo 'custom' === $saved_tools_mode ? '' : ' sflmcp-is-hidden'; ?>">
 					<label><?php esc_html_e( 'Select Tools', 'stifli-flex-mcp' ); ?></label>
 					<div class="sflmcp-tools-selector">
 						<div class="sflmcp-tools-header">
@@ -458,7 +458,7 @@ class StifliFlexMcp_Automation_Admin {
 					<input type="hidden" id="sflmcp-schedule-timezone" name="schedule_timezone" value="<?php echo esc_attr( wp_timezone_string() ); ?>">
 				</div>
 
-				<div id="sflmcp-schedule-time-row" class="sflmcp-form-row" style="display:none;">
+				<div id="sflmcp-schedule-time-row" class="sflmcp-form-row sflmcp-is-hidden">
 					<label for="sflmcp-schedule-time"><?php esc_html_e( 'Custom Time', 'stifli-flex-mcp' ); ?></label>
 					<input type="time" id="sflmcp-schedule-time" name="schedule_time" value="<?php echo esc_attr( $task ? $task->schedule_time : '08:00' ); ?>">
 				</div>
@@ -478,13 +478,13 @@ class StifliFlexMcp_Automation_Admin {
 
 				<div class="sflmcp-form-row">
 					<label for="sflmcp-token-budget"><?php esc_html_e( 'Monthly Token Budget', 'stifli-flex-mcp' ); ?></label>
-					<div style="display: flex; align-items: center; gap: 10px;">
+					<div class="sflmcp-inline-field-group">
 						<input type="number" id="sflmcp-token-budget" name="token_budget_monthly" min="0" step="1000"
 							   value="<?php echo esc_attr( $task ? intval( $task->token_budget_monthly ?? 0 ) : '0' ); ?>"
-							   placeholder="0" style="max-width: 180px;">
+							   placeholder="0" class="sflmcp-token-budget-input">
 						<span class="description"><?php esc_html_e( 'tokens/month (0 = unlimited)', 'stifli-flex-mcp' ); ?></span>
 					</div>
-					<p class="description" style="margin-top: 6px;">
+					<p class="description sflmcp-budget-description">
 						<?php esc_html_e( 'If the task exceeds this budget in a calendar month, it will be skipped until next month. Tip: a typical daily blog post task uses ~10,000-30,000 tokens per execution.', 'stifli-flex-mcp' ); ?>
 					</p>
 				</div>
@@ -520,7 +520,7 @@ class StifliFlexMcp_Automation_Admin {
 				</div>
 
 				<!-- Email Config -->
-				<div id="sflmcp-email-config" class="sflmcp-output-config" style="display:none;">
+				<div id="sflmcp-email-config" class="sflmcp-output-config sflmcp-is-hidden">
 					<div class="sflmcp-form-row">
 						<label for="sflmcp-email-recipients"><?php esc_html_e( 'Recipients', 'stifli-flex-mcp' ); ?></label>
 						<input type="text" id="sflmcp-email-recipients" name="email_recipients" 
@@ -535,7 +535,7 @@ class StifliFlexMcp_Automation_Admin {
 				</div>
 
 				<!-- Webhook Config -->
-				<div id="sflmcp-webhook-config" class="sflmcp-output-config" style="display:none;">
+				<div id="sflmcp-webhook-config" class="sflmcp-output-config sflmcp-is-hidden">
 					<div class="sflmcp-form-row">
 						<label><?php esc_html_e( 'Webhook Preset', 'stifli-flex-mcp' ); ?></label>
 						<select id="sflmcp-webhook-preset">
@@ -552,7 +552,7 @@ class StifliFlexMcp_Automation_Admin {
 				</div>
 
 				<!-- Draft Config -->
-				<div id="sflmcp-draft-config" class="sflmcp-output-config" style="display:none;">
+				<div id="sflmcp-draft-config" class="sflmcp-output-config sflmcp-is-hidden">
 					<div class="sflmcp-form-row">
 						<label for="sflmcp-draft-post-type"><?php esc_html_e( 'Post Type', 'stifli-flex-mcp' ); ?></label>
 						<select id="sflmcp-draft-post-type" name="draft_post_type">
@@ -639,7 +639,7 @@ class StifliFlexMcp_Automation_Admin {
 		</table>
 
 		<!-- Log Detail Modal -->
-		<div id="sflmcp-log-modal" class="sflmcp-modal" style="display:none;">
+		<div id="sflmcp-log-modal" class="sflmcp-modal sflmcp-is-hidden">
 			<div class="sflmcp-modal-content sflmcp-modal-large">
 				<div class="sflmcp-modal-header">
 					<h3><?php esc_html_e( 'Execution Details', 'stifli-flex-mcp' ); ?></h3>

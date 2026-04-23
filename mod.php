@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -1461,7 +1461,7 @@ class StifliFlexMcp {
 					<span class="sflmcp-step-number">2</span>
 					<div>
 						<strong><?php esc_html_e( 'Paste it in your AI client', 'stifli-flex-mcp' ); ?></strong>
-						<p class="description" style="margin-bottom:4px;"><strong>Claude Desktop:</strong> <?php esc_html_e( 'Customize → Connectors → Add custom connector.', 'stifli-flex-mcp' ); ?></p>
+						<p class="description sflmcp-mb-4"><strong>Claude Desktop:</strong> <?php esc_html_e( 'Customize → Connectors → Add custom connector.', 'stifli-flex-mcp' ); ?></p>
 						<p class="description"><strong>ChatGPT:</strong> <?php esc_html_e( 'Settings → Apps & Connectors → Advanced settings → Enable Developer mode → Create app → Paste the URL → Choose OAuth.', 'stifli-flex-mcp' ); ?></p>
 					</div>
 				</div>
@@ -1476,7 +1476,7 @@ class StifliFlexMcp {
 
 			<?php if ( ! empty( $clients ) ) : ?>
 			<div class="sflmcp-settings-status">
-				<span class="dashicons dashicons-yes-alt" style="color:#00a32a;"></span>
+				<span class="dashicons dashicons-yes-alt sflmcp-color-success"></span>
 				<?php
 				$client_count = count( $clients );
 				$total_tokens = array_sum( $token_counts );
@@ -1499,12 +1499,12 @@ class StifliFlexMcp {
 		<!-- View More Details -->
 		<div class="sflmcp-settings-details-toggle">
 			<button type="button" class="button" id="sflmcp-toggle-details">
-				<span class="dashicons dashicons-arrow-down-alt2" style="vertical-align:middle;"></span>
+				<span class="dashicons dashicons-arrow-down-alt2 sflmcp-align-middle"></span>
 				<?php esc_html_e( 'View More Details', 'stifli-flex-mcp' ); ?>
 			</button>
 		</div>
 
-		<div id="sflmcp-settings-details" style="display:none;">
+		<div id="sflmcp-settings-details" class="sflmcp-hidden">
 
 			<!-- Connected Clients -->
 			<div class="sflmcp-settings-section">
@@ -1530,7 +1530,7 @@ class StifliFlexMcp {
 							?>
 								<tr>
 									<td><strong><?php echo esc_html( $client->client_name ); ?></strong></td>
-									<td><code style="font-size:11px;"><?php echo esc_html( $client->client_id ); ?></code></td>
+									<td><code class="sflmcp-code-xs"><?php echo esc_html( $client->client_id ); ?></code></td>
 									<td>
 										<?php if ( $count > 0 ) : ?>
 											<a href="#" class="sflmcp-oauth-toggle-tokens" data-client-id="<?php echo esc_attr( $cid ); ?>">
@@ -3019,7 +3019,7 @@ class StifliFlexMcp {
 			wp_send_json_error(array('message' => __('Ability already imported', 'stifli-flex-mcp')));
 		}
 
-		$input_schema = $ability->get_input_schema();
+		$input_schema = StifliFlexMcpUtils::normalizeToolInputSchema( $ability->get_input_schema() );
 		$output_schema = $ability->get_output_schema();
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
@@ -4131,16 +4131,16 @@ class StifliFlexMcp {
 			<?php endif; ?>
 
 			<!-- Setup Guides -->
-			<div class="sflmcp-oauth-guides" style="margin-top:24px;">
+			<div class="sflmcp-oauth-guides sflmcp-oauth-guides-spaced">
 				<h2><?php esc_html_e( 'Quick Setup Guides', 'stifli-flex-mcp' ); ?></h2>
 
 				<!-- Claude Desktop -->
-				<div class="sflmcp-oauth-guide-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:16px;">
-					<h3 style="margin-top:0;">🟣 <?php esc_html_e( 'Claude Desktop', 'stifli-flex-mcp' ); ?></h3>
-					<p style="color:#646970;font-size:13px;margin-bottom:12px;">
+				<div class="sflmcp-oauth-guide-card sflmcp-oauth-guide-card-spaced">
+					<h3 class="sflmcp-oauth-guide-title">🟣 <?php esc_html_e( 'Claude Desktop', 'stifli-flex-mcp' ); ?></h3>
+					<p class="sflmcp-oauth-guide-description">
 						<?php esc_html_e( 'Claude Desktop supports MCP OAuth 2.1 natively. It discovers all endpoints automatically from a single URL.', 'stifli-flex-mcp' ); ?>
 					</p>
-					<ol style="font-size:13px;line-height:1.8;padding-left:20px;">
+					<ol class="sflmcp-oauth-guide-steps">
 						<li><?php esc_html_e( 'Enable "Auto-approve new client registrations" above', 'stifli-flex-mcp' ); ?></li>
 						<li><?php echo wp_kses(
 							sprintf(
@@ -4153,7 +4153,7 @@ class StifliFlexMcp {
 							array( 'code' => array() )
 						); ?></li>
 						<li><?php esc_html_e( 'Add this MCP server configuration:', 'stifli-flex-mcp' ); ?>
-							<pre style="background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:12px;font-size:12px;overflow-x:auto;margin-top:6px;">{
+							<pre class="sflmcp-oauth-pre">{
   "mcpServers": {
     "<?php echo esc_html( sanitize_title( get_bloginfo( 'name' ) ) ); ?>": {
       "type": "sse",
@@ -4166,7 +4166,7 @@ class StifliFlexMcp {
 						<li><?php esc_html_e( 'Log in to WordPress and click "Authorize"', 'stifli-flex-mcp' ); ?></li>
 						<li><?php esc_html_e( 'Done! Claude will auto-discover all OAuth endpoints via .well-known metadata', 'stifli-flex-mcp' ); ?></li>
 					</ol>
-					<p style="font-size:12px;color:#646970;margin-bottom:0;">
+					<p class="sflmcp-oauth-guide-note">
 						<?php echo wp_kses(
 							sprintf(
 								/* translators: %s: the SSE URL */
@@ -4179,25 +4179,25 @@ class StifliFlexMcp {
 				</div>
 
 				<!-- ChatGPT Custom GPT -->
-				<div class="sflmcp-oauth-guide-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:16px;">
-					<h3 style="margin-top:0;">🟢 <?php esc_html_e( 'ChatGPT (Custom GPT Actions)', 'stifli-flex-mcp' ); ?></h3>
-					<p style="color:#646970;font-size:13px;margin-bottom:12px;">
+				<div class="sflmcp-oauth-guide-card sflmcp-oauth-guide-card-spaced">
+					<h3 class="sflmcp-oauth-guide-title">🟢 <?php esc_html_e( 'ChatGPT (Custom GPT Actions)', 'stifli-flex-mcp' ); ?></h3>
+					<p class="sflmcp-oauth-guide-description">
 						<?php esc_html_e( 'For ChatGPT GPT Actions, register a confidential client and configure OAuth in the GPT editor.', 'stifli-flex-mcp' ); ?>
 					</p>
-					<ol style="font-size:13px;line-height:1.8;padding-left:20px;">
+					<ol class="sflmcp-oauth-guide-steps">
 						<li><?php esc_html_e( 'Register a confidential client (via API or ask an admin) with:', 'stifli-flex-mcp' ); ?>
-							<ul style="list-style:disc;padding-left:16px;margin-top:4px;">
+							<ul class="sflmcp-oauth-guide-bullets">
 								<li><code>token_endpoint_auth_method: "client_secret_post"</code></li>
 								<li><code>redirect_uris: ["https://chatgpt.com/aip/<em>YOUR_PLUGIN_ID</em>/oauth/callback"]</code></li>
 							</ul>
 						</li>
 						<li><?php esc_html_e( 'In the GPT editor → Actions → Authentication, select "OAuth" and fill:', 'stifli-flex-mcp' ); ?>
-							<table style="font-size:12px;margin-top:6px;border-collapse:collapse;">
-								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Client ID', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><em><?php esc_html_e( '(from step 1)', 'stifli-flex-mcp' ); ?></em></td></tr>
-								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Client Secret', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><em><?php esc_html_e( '(from step 1)', 'stifli-flex-mcp' ); ?></em></td></tr>
-								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Authorization URL', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><code><?php echo esc_html( home_url( '?sflmcp_oauth=authorize' ) ); ?></code></td></tr>
-								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Token URL', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><code><?php echo esc_html( rest_url( $this->namespace . '/oauth/token' ) ); ?></code></td></tr>
-								<tr><td style="padding:3px 8px;font-weight:600;"><?php esc_html_e( 'Scope', 'stifli-flex-mcp' ); ?></td><td style="padding:3px 8px;"><code>mcp</code></td></tr>
+							<table class="sflmcp-oauth-config-table">
+								<tr><td class="sflmcp-oauth-config-label"><?php esc_html_e( 'Client ID', 'stifli-flex-mcp' ); ?></td><td class="sflmcp-oauth-config-value"><em><?php esc_html_e( '(from step 1)', 'stifli-flex-mcp' ); ?></em></td></tr>
+								<tr><td class="sflmcp-oauth-config-label"><?php esc_html_e( 'Client Secret', 'stifli-flex-mcp' ); ?></td><td class="sflmcp-oauth-config-value"><em><?php esc_html_e( '(from step 1)', 'stifli-flex-mcp' ); ?></em></td></tr>
+								<tr><td class="sflmcp-oauth-config-label"><?php esc_html_e( 'Authorization URL', 'stifli-flex-mcp' ); ?></td><td class="sflmcp-oauth-config-value"><code><?php echo esc_html( home_url( '?sflmcp_oauth=authorize' ) ); ?></code></td></tr>
+								<tr><td class="sflmcp-oauth-config-label"><?php esc_html_e( 'Token URL', 'stifli-flex-mcp' ); ?></td><td class="sflmcp-oauth-config-value"><code><?php echo esc_html( rest_url( $this->namespace . '/oauth/token' ) ); ?></code></td></tr>
+								<tr><td class="sflmcp-oauth-config-label"><?php esc_html_e( 'Scope', 'stifli-flex-mcp' ); ?></td><td class="sflmcp-oauth-config-value"><code>mcp</code></td></tr>
 							</table>
 						</li>
 						<li><?php esc_html_e( 'Save and test the GPT — users will be prompted to authorize via your WordPress site', 'stifli-flex-mcp' ); ?></li>
@@ -4205,9 +4205,9 @@ class StifliFlexMcp {
 				</div>
 
 				<!-- Application Passwords -->
-				<div class="sflmcp-oauth-guide-card" style="background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:20px;margin-bottom:0;">
-					<h3 style="margin-top:0;">🔑 <?php esc_html_e( 'Application Passwords (alternative)', 'stifli-flex-mcp' ); ?></h3>
-					<p style="color:#646970;font-size:13px;margin-bottom:8px;">
+				<div class="sflmcp-oauth-guide-card sflmcp-oauth-guide-card-last">
+					<h3 class="sflmcp-oauth-guide-title">🔑 <?php esc_html_e( 'Application Passwords (alternative)', 'stifli-flex-mcp' ); ?></h3>
+					<p class="sflmcp-oauth-guide-description sflmcp-oauth-guide-description-tight">
 						<?php echo wp_kses(
 							sprintf(
 								/* translators: %s: link to profile page */
@@ -4218,7 +4218,7 @@ class StifliFlexMcp {
 							array( 'a' => array( 'href' => array() ) )
 						); ?>
 					</p>
-					<p style="font-size:12px;color:#646970;margin-bottom:0;">
+					<p class="sflmcp-oauth-guide-note">
 						<?php esc_html_e( 'Use HTTP Basic Auth with your WordPress username and the generated application password. This method does not require OAuth setup.', 'stifli-flex-mcp' ); ?>
 					</p>
 				</div>

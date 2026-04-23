@@ -2,6 +2,100 @@
 // Utilidades mínimas para StifliFlexMcp (stub)
 class StifliFlexMcpUtils {
 	/**
+	 * Check whether an array is sequential (list-like) and not an associative map.
+	 *
+	 * @param mixed $value Value to inspect.
+	 * @return bool
+	 */
+	public static function isSequentialArray( $value ) {
+		if ( ! is_array( $value ) ) {
+			return false;
+		}
+		return array_values( $value ) === $value;
+	}
+
+	/**
+	 * Normalize a tool input schema so providers receive valid JSON Schema objects.
+	 *
+	 * In particular, ensures object properties are encoded as a JSON object (map)
+	 * instead of a JSON array (list), which Gemini rejects.
+	 *
+	 * @param mixed $schema Raw schema.
+	 * @return array Normalized schema array.
+	 */
+	public static function normalizeToolInputSchema( $schema ) {
+		if ( ! is_array( $schema ) ) {
+			$schema = array();
+		}
+
+		if ( empty( $schema['type'] ) || ! is_string( $schema['type'] ) ) {
+			$schema['type'] = 'object';
+		}
+
+		if ( ! isset( $schema['required'] ) || ! is_array( $schema['required'] ) ) {
+			$schema['required'] = array();
+		}
+
+		if ( 'object' === $schema['type'] || ! isset( $schema['type'] ) ) {
+			$properties = isset( $schema['properties'] ) ? $schema['properties'] : array();
+			if ( is_object( $properties ) ) {
+				$properties = (array) $properties;
+			}
+
+			if ( ! is_array( $properties ) ) {
+				$properties = array();
+			}
+
+			if ( self::isSequentialArray( $properties ) ) {
+				$mapped = array();
+				foreach ( $properties as $item ) {
+					if ( ! is_array( $item ) ) {
+						continue;
+					}
+					$prop_name = isset( $item['name'] ) ? sanitize_key( (string) $item['name'] ) : '';
+					if ( '' === $prop_name ) {
+						continue;
+					}
+
+					if ( isset( $item['schema'] ) && is_array( $item['schema'] ) ) {
+						$prop_schema = $item['schema'];
+					} else {
+						$prop_schema = $item;
+						unset( $prop_schema['name'] );
+					}
+
+					$mapped[ $prop_name ] = self::normalizeToolInputSchema( $prop_schema );
+				}
+				$properties = $mapped;
+			} else {
+				foreach ( $properties as $prop_key => $prop_schema ) {
+					if ( is_array( $prop_schema ) ) {
+						$properties[ $prop_key ] = self::normalizeToolInputSchema( $prop_schema );
+					}
+				}
+			}
+
+			$schema['properties'] = empty( $properties ) ? new stdClass() : $properties;
+		}
+
+		if ( isset( $schema['items'] ) && is_array( $schema['items'] ) ) {
+			$schema['items'] = self::normalizeToolInputSchema( $schema['items'] );
+		}
+
+		foreach ( array( 'oneOf', 'anyOf', 'allOf' ) as $compound_key ) {
+			if ( isset( $schema[ $compound_key ] ) && is_array( $schema[ $compound_key ] ) ) {
+				foreach ( $schema[ $compound_key ] as $idx => $sub_schema ) {
+					if ( is_array( $sub_schema ) ) {
+						$schema[ $compound_key ][ $idx ] = self::normalizeToolInputSchema( $sub_schema );
+					}
+				}
+			}
+		}
+
+		return $schema;
+	}
+
+	/**
 	 * Rough token estimation from a string.
 	 *
 	 * NOTE: This is an approximation (about 4 chars/token for English-ish text).
@@ -102,7 +196,7 @@ class StifliFlexMcpUtils {
 	public static function estimateToolTokenUsage(array $toolDef): int {
 		$name = isset($toolDef['name']) ? (string) $toolDef['name'] : '';
 		$description = isset($toolDef['description']) ? (string) $toolDef['description'] : '';
-		$inputSchema = isset($toolDef['inputSchema']) ? $toolDef['inputSchema'] : null;
+		$inputSchema = isset($toolDef['inputSchema']) ? self::normalizeToolInputSchema( $toolDef['inputSchema'] ) : null;
 		$additional = array();
 		foreach (array('confirmPrompt', 'outputSchema', 'examples') as $extraKey) {
 			if (isset($toolDef[$extraKey])) {

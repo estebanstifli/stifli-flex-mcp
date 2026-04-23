@@ -245,6 +245,57 @@
     border-radius: 4px;
 }
 
+.sflmcp-tools-count-with-tooltip {
+    position: relative;
+}
+
+.sflmcp-tools-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    display: none;
+    width: 360px;
+    max-height: 260px;
+    overflow: auto;
+    background: #1f2328;
+    color: #f0f6fc;
+    border: 1px solid #3d444d;
+    border-radius: 6px;
+    padding: 10px 12px;
+    z-index: 20;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.sflmcp-tools-tooltip strong {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #c9d1d9;
+}
+
+.sflmcp-tools-tooltip ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sflmcp-tools-tooltip li {
+    margin: 0;
+    padding: 2px 0;
+}
+
+.sflmcp-tools-tooltip code {
+    background: #2d333b;
+    color: #adbac7;
+    border-radius: 4px;
+    padding: 1px 4px;
+}
+
+.sflmcp-tools-count-with-tooltip:hover .sflmcp-tools-tooltip,
+.sflmcp-tools-count-with-tooltip:focus-within .sflmcp-tools-tooltip {
+    display: block;
+}
+
 .sflmcp-tools-count .dashicons {
     font-size: 16px;
     width: 16px;
@@ -629,6 +680,9 @@
     justify-content: center;
     z-index: 100000;
 }
+.sflmcp-is-hidden {
+    display: none;
+}
 
 .sflmcp-modal-content {
     background: #fff;
@@ -784,6 +838,12 @@
 
 .sflmcp-advanced-form th {
     padding-left: 0;
+}
+.sflmcp-adv-provider-select {
+    width: 200px;
+}
+.sflmcp-adv-model-select {
+    width: 350px;
 }
 
 .sflmcp-section-title {

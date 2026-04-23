@@ -281,7 +281,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 							<span class="sflmcp-family-name">WooCommerce</span>
 						</div>
 					</div>
-					<p id="sflmcp-wc-warning" class="sflmcp-platform-warning" style="display:none;">
+					<p id="sflmcp-wc-warning" class="sflmcp-platform-warning sflmcp-is-hidden">
 						<span class="dashicons dashicons-warning"></span>
 						<?php esc_html_e( 'WooCommerce is not installed. Triggers will not work until WooCommerce is active.', 'stifli-flex-mcp' ); ?>
 					</p>
@@ -295,7 +295,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 					<p class="description" id="trigger-description"></p>
 				</div>
 
-				<div class="sflmcp-form-row sflmcp-placeholders-row" style="display: none;">
+				<div class="sflmcp-form-row sflmcp-placeholders-row sflmcp-is-hidden">
 					<label><?php esc_html_e( 'Available Placeholders', 'stifli-flex-mcp' ); ?></label>
 					<div id="available-placeholders" class="sflmcp-placeholders"></div>
 					<p class="description"><?php esc_html_e( 'Click a placeholder to insert it into your prompt.', 'stifli-flex-mcp' ); ?></p>
@@ -335,7 +335,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 					<div class="sflmcp-test-chat-header">
 						<span class="dashicons dashicons-format-chat"></span>
 						<?php esc_html_e( 'Test Chat', 'stifli-flex-mcp' ); ?>
-						<button type="button" id="sflmcp-clear-test-chat" class="button-link" style="margin-left:auto;">
+						<button type="button" id="sflmcp-clear-test-chat" class="button-link sflmcp-push-right">
 							<?php esc_html_e( 'Clear', 'stifli-flex-mcp' ); ?>
 						</button>
 					</div>
@@ -360,14 +360,14 @@ class StifliFlexMcp_Event_Automation_Admin {
 					</div>
 				</div>
 
-				<div class="sflmcp-form-row" style="margin-top:16px;">
+				<div class="sflmcp-form-row sflmcp-form-row-spaced">
 					<label for="system_prompt"><?php esc_html_e( 'System Prompt (optional)', 'stifli-flex-mcp' ); ?></label>
 					<textarea id="system_prompt" name="system_prompt" rows="3"
 							  placeholder="<?php esc_attr_e( 'Custom instructions for the AI. Leave empty to use default.', 'stifli-flex-mcp' ); ?>"><?php echo esc_textarea( $automation['system_prompt'] ?? '' ); ?></textarea>
 				</div>
 
 				<!-- Tools detection summary (shown after test) -->
-				<div id="sflmcp-test-summary" class="sflmcp-test-summary" style="display:none;">
+				<div id="sflmcp-test-summary" class="sflmcp-test-summary sflmcp-is-hidden">
 					<div class="sflmcp-test-summary-header">
 						<span class="dashicons dashicons-admin-tools"></span>
 						<strong><?php esc_html_e( 'Tools Detected', 'stifli-flex-mcp' ); ?></strong>
@@ -416,7 +416,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 					</div>
 				</div>
 
-				<div id="sflmcp-custom-tools-section" class="sflmcp-form-row" style="display:none;">
+				<div id="sflmcp-custom-tools-section" class="sflmcp-form-row sflmcp-is-hidden">
 					<label><?php esc_html_e( 'Select Tools', 'stifli-flex-mcp' ); ?></label>
 					<div class="sflmcp-tools-selector">
 						<div class="sflmcp-tools-header">
@@ -465,7 +465,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 				</div>
 
 				<!-- Email Config -->
-				<div id="sflmcp-email-config" class="sflmcp-output-config" style="<?php echo empty( $automation['output_email'] ) ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-email-config" class="sflmcp-output-config<?php echo empty( $automation['output_email'] ) ? ' sflmcp-is-hidden' : ''; ?>">
 					<div class="sflmcp-form-row">
 						<label for="sflmcp-email-recipients"><?php esc_html_e( 'Recipients', 'stifli-flex-mcp' ); ?></label>
 						<input type="text" id="sflmcp-email-recipients" name="email_recipients" 
@@ -480,7 +480,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 				</div>
 
 				<!-- Webhook Config -->
-				<div id="sflmcp-webhook-config" class="sflmcp-output-config" style="<?php echo empty( $automation['output_webhook'] ) ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-webhook-config" class="sflmcp-output-config<?php echo empty( $automation['output_webhook'] ) ? ' sflmcp-is-hidden' : ''; ?>">
 					<div class="sflmcp-form-row">
 						<label><?php esc_html_e( 'Webhook Preset', 'stifli-flex-mcp' ); ?></label>
 						<select id="sflmcp-webhook-preset" name="webhook_preset">
@@ -499,7 +499,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 				</div>
 
 				<!-- Draft Config -->
-				<div id="sflmcp-draft-config" class="sflmcp-output-config" style="<?php echo empty( $automation['output_draft'] ) ? 'display:none;' : ''; ?>">
+				<div id="sflmcp-draft-config" class="sflmcp-output-config<?php echo empty( $automation['output_draft'] ) ? ' sflmcp-is-hidden' : ''; ?>">
 					<div class="sflmcp-form-row">
 						<label for="sflmcp-draft-post-type"><?php esc_html_e( 'Post Type', 'stifli-flex-mcp' ); ?></label>
 						<select id="sflmcp-draft-post-type" name="draft_post_type">
@@ -538,7 +538,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 		</form>
 
 		<!-- Test Modal (kept for backward compatibility but using chat style now) -->
-		<div id="sflmcp-task-modal" class="sflmcp-modal" style="display:none;">
+		<div id="sflmcp-task-modal" class="sflmcp-modal sflmcp-is-hidden">
 			<div class="sflmcp-modal-content">
 				<div class="sflmcp-modal-header">
 					<h3 id="sflmcp-modal-title"></h3>
@@ -582,7 +582,7 @@ class StifliFlexMcp_Event_Automation_Admin {
 		</div>
 
 		<!-- Log Detail Modal -->
-		<div id="sflmcp-task-modal" class="sflmcp-modal" style="display:none;">
+		<div id="sflmcp-task-modal" class="sflmcp-modal sflmcp-is-hidden">
 			<div class="sflmcp-modal-content">
 				<div class="sflmcp-modal-header">
 					<h3 id="sflmcp-modal-title"><?php esc_html_e( 'Log Details', 'stifli-flex-mcp' ); ?></h3>

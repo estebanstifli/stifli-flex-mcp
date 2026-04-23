@@ -350,15 +350,7 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 		$formatted = array();
 
 		foreach ( $mcp_tools as $tool ) {
-			$params = $tool['inputSchema'] ?? array( 'type' => 'object', 'properties' => new stdClass() );
-			
-			// Ensure proper structure for Gemini
-			if ( ! isset( $params['type'] ) ) {
-				$params['type'] = 'object';
-			}
-			if ( ! isset( $params['properties'] ) ) {
-				$params['properties'] = new stdClass();
-			}
+			$params = StifliFlexMcpUtils::normalizeToolInputSchema( $tool['inputSchema'] ?? array() );
 
 			// Gemini doesn't support additionalProperties in all cases
 			if ( isset( $params['additionalProperties'] ) ) {
