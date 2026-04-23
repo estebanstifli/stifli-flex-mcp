@@ -2,7 +2,7 @@
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags: ai copilot, mcp, chatgpt, ai writing, woocommerce ai
+Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
 Stable tag: 3.2.0
