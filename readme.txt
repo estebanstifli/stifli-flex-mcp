@@ -409,6 +409,9 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.1 =
+* fix bug
+
 = 3.2.0 =
 * **🗂️ Tools UI overhaul** — Tools are now organized into collapsible category groups with expand/collapse controls, read/write mode badges, and token count per category for easier management
 * **🧩 New "Plugins" tab** — Dedicated integrations hub with 12 pre-loaded plugin integrations ready to connect:
