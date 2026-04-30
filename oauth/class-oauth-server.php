@@ -531,9 +531,12 @@ class StifliFlexMcp_OAuth_Server {
 		$result  = $storage->register_client( $body );
 
 		if ( is_wp_error( $result ) ) {
+			$err_code = $result->get_error_code();
+			// Database failures are server errors, not client errors.
+			$status   = ( 'server_error_db' === $err_code || 'server_error' === $err_code ) ? 500 : 400;
 			return new WP_REST_Response(
-				array( 'error' => $result->get_error_code(), 'error_description' => $result->get_error_message() ),
-				400
+				array( 'error' => $err_code, 'error_description' => $result->get_error_message() ),
+				$status
 			);
 		}
 

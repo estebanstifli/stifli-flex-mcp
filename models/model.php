@@ -165,6 +165,7 @@ class StifliFlexMcpModel {
         // Escritura/mutación
         $WRITE = array(
             'wp_create_post','wp_update_post','wp_delete_post',
+            'wp_set_featured_image',
             'wp_create_comment','wp_update_comment','wp_delete_comment',
             'wp_rm_update_post_seo',
             // Yoast SEO write
@@ -179,7 +180,7 @@ class StifliFlexMcpModel {
             'wp_generate_image',
             'wp_generate_video',
             // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
-            'wp_update_option','wp_delete_option',
+            'wp_update_option',
             'wp_update_post_meta','wp_delete_post_meta',
             'wp_create_term','wp_delete_term',
             'wp_create_nav_menu','wp_add_nav_menu_item','wp_update_nav_menu_item','wp_delete_nav_menu_item','wp_delete_nav_menu',
@@ -401,7 +402,7 @@ class StifliFlexMcpModel {
                 // Posts (mutación)
                 'wp_create_post' => array(
                     'name' => 'wp_create_post',
-                    'description' => 'Create a post. Requires post_title. Optional: post_content, post_status, post_type, post_excerpt, post_author, meta_input, post_category, tax_input, etc. The parameters should match the standard WordPress wp_insert_post() function.',
+                    'description' => 'Create a post. Requires post_title. Optional: post_content, post_status, post_type, post_excerpt, post_author, featured_media (attachment ID), meta_input, post_category, tax_input, etc.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -411,6 +412,7 @@ class StifliFlexMcpModel {
                             'post_type'    => array('type' => 'string'),
                             'post_excerpt' => array('type' => 'string'),
                             'post_author'  => array('type' => 'integer'),
+                            'featured_media' => array('type' => 'integer', 'description' => 'Attachment ID to use as featured image (thumbnail).'),
                             'meta_input'   => array('type' => 'object'),
                             'post_name'    => array('type' => 'string'),
                             'post_category'=> array('type' => 'array', 'items' => array('type' => 'integer')),
@@ -421,15 +423,28 @@ class StifliFlexMcpModel {
                 ),
                 'wp_update_post' => array(
                     'name' => 'wp_update_post',
-                    'description' => 'Update a post by ID. The "fields" object should use the standard parameters accepted by the WordPress wp_update_post() function, such as post_title, post_content, post_category (array of category IDs), tax_input, etc.',
+                    'description' => 'Update a post by ID. The "fields" object should use the standard parameters accepted by the WordPress wp_update_post() function. Optional top-level featured_media (attachment ID) sets the featured image.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID' => array('type' => 'integer'),
                             'fields' => array('type' => 'object'),
                             'meta_input' => array('type' => 'object'),
+                            'featured_media' => array('type' => 'integer', 'description' => 'Attachment ID to set as featured image.'),
                         ),
                         'required' => array('ID'),
+                    ),
+                ),
+                'wp_set_featured_image' => array(
+                    'name' => 'wp_set_featured_image',
+                    'description' => 'Set or remove the featured image (post thumbnail) of a post. Pass attachment_id=0 to remove.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'       => array('type' => 'integer'),
+                            'attachment_id' => array('type' => 'integer', 'description' => 'Attachment post ID. Use 0 to clear the featured image.'),
+                        ),
+                        'required' => array('post_id', 'attachment_id'),
                     ),
                 ),
                 'wp_delete_post' => array(
@@ -744,17 +759,7 @@ class StifliFlexMcpModel {
                         'required' => array('option','value'),
                     ),
                 ),
-                'wp_delete_option' => array(
-                    'name' => 'wp_delete_option',
-                    'description' => 'Delete a WordPress option.',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'option' => array('type' => 'string'),
-                        ),
-                        'required' => array('option'),
-                    ),
-                ),
+                // wp_delete_option intentionally removed for safety: cannot be reliably undone.
                 'wp_get_post_meta' => array(
                     'name' => 'wp_get_post_meta',
                     'description' => 'Get post meta (post_id, meta_key, single).',
@@ -1720,6 +1725,7 @@ class StifliFlexMcpModel {
             'wp_create_post' => 'edit_posts',
             'wp_update_post' => 'edit_posts',
             'wp_delete_post' => 'delete_posts',
+            'wp_set_featured_image' => 'edit_posts',
             // pages
             'wp_create_page' => 'edit_pages',
             'wp_update_page' => 'edit_pages',
@@ -1760,7 +1766,6 @@ class StifliFlexMcpModel {
             'wp_switch_theme' => 'switch_themes',
             // options/meta/settings
             'wp_update_option' => 'manage_options',
-            'wp_delete_option' => 'manage_options',
             'wp_update_post_meta' => 'manage_options',
             'wp_delete_post_meta' => 'manage_options',
             'wp_get_settings' => 'manage_options',
@@ -1990,6 +1995,16 @@ class StifliFlexMcpModel {
                             update_post_meta($new, sanitize_key($k), maybe_serialize($v));
                         }
                     }
+                    // Featured image (post thumbnail).
+                    if ( isset( $args['featured_media'] ) ) {
+                        $att_id = intval( $args['featured_media'] );
+                        if ( $att_id > 0 ) {
+                            $att = get_post( $att_id );
+                            if ( $att && 'attachment' === $att->post_type ) {
+                                set_post_thumbnail( $new, $att_id );
+                            }
+                        }
+                    }
                     $addResultText($r, 'Post created ID ' . $new);
                 }
                 break;
@@ -2014,7 +2029,51 @@ class StifliFlexMcpModel {
                         update_post_meta($u, sanitize_key($k), maybe_serialize($v));
                     }
                 }
+                if ( isset( $args['featured_media'] ) ) {
+                    $att_id = intval( $args['featured_media'] );
+                    if ( $att_id > 0 ) {
+                        $att = get_post( $att_id );
+                        if ( $att && 'attachment' === $att->post_type ) {
+                            set_post_thumbnail( $u, $att_id );
+                        }
+                    } else {
+                        delete_post_thumbnail( $u );
+                    }
+                }
                 $addResultText($r, 'Post #' . $u . ' updated');
+                break;
+            case 'wp_set_featured_image':
+                $post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                if ( ! $post_id ) {
+                    $r['error'] = array( 'code' => -42602, 'message' => 'post_id required' );
+                    break;
+                }
+                $post_obj = get_post( $post_id );
+                if ( ! $post_obj ) {
+                    $r['error'] = array( 'code' => -42600, 'message' => 'Post not found' );
+                    break;
+                }
+                if ( ! current_user_can( 'edit_post', $post_id ) ) {
+                    $r['error'] = array( 'code' => 'permission_denied', 'message' => 'Insufficient permissions to edit this post.' );
+                    break;
+                }
+                $att_id = intval( $utils::getArrayValue( $args, 'attachment_id', 0 ) );
+                if ( $att_id > 0 ) {
+                    $att = get_post( $att_id );
+                    if ( ! $att || 'attachment' !== $att->post_type ) {
+                        $r['error'] = array( 'code' => -42600, 'message' => 'Attachment not found' );
+                        break;
+                    }
+                    $ok = set_post_thumbnail( $post_id, $att_id );
+                    if ( $ok ) {
+                        $addResultText( $r, 'Featured image set: post #' . $post_id . ' -> attachment #' . $att_id );
+                    } else {
+                        $r['error'] = array( 'code' => -42603, 'message' => 'Failed to set featured image' );
+                    }
+                } else {
+                    delete_post_thumbnail( $post_id );
+                    $addResultText( $r, 'Featured image cleared for post #' . $post_id );
+                }
                 break;
             case 'wp_delete_post':
                 if (empty($args['ID'])) {
@@ -2136,10 +2195,14 @@ class StifliFlexMcpModel {
                 }
                 $list = array();
                 foreach (get_comments($cargs) as $c) {
+                    // Mask author email and IP for privacy/GDPR; full data is
+                    // available natively in WP admin to users with the cap.
                     $list[] = array(
                         'comment_ID' => $c->comment_ID,
                         'comment_post_ID' => $c->comment_post_ID,
                         'comment_author' => $c->comment_author,
+                        'comment_author_email' => StifliFlexMcpUtils::maskEmail( (string) $c->comment_author_email ),
+                        'comment_author_IP' => StifliFlexMcpUtils::maskIp( (string) $c->comment_author_IP ),
                         'comment_content' => wp_trim_words(wp_strip_all_tags($c->comment_content), 40),
                         'comment_date' => $c->comment_date,
                         'comment_approved' => $c->comment_approved,
@@ -2247,13 +2310,23 @@ class StifliFlexMcpModel {
                 
                 if (!empty($meta_key)) {
                     $value = get_user_meta($user_id, sanitize_key($meta_key), true);
+                    if ( StifliFlexMcpUtils::keyLooksSensitive( $meta_key ) ) {
+                        $value = is_scalar( $value ) && '' !== (string) $value ? '[REDACTED]' : StifliFlexMcpUtils::redactSecrets( $value, $meta_key );
+                    } else {
+                        $value = StifliFlexMcpUtils::redactSecrets( $value, $meta_key );
+                    }
                     $addResultText($r, 'User meta ' . $meta_key . ': ' . wp_json_encode($value, JSON_PRETTY_PRINT));
                 } else {
                     // Get all meta
                     $all_meta = get_user_meta($user_id);
                     $cleaned = array();
                     foreach ($all_meta as $key => $values) {
-                        $cleaned[$key] = count($values) === 1 ? $values[0] : $values;
+                        $val = count($values) === 1 ? $values[0] : $values;
+                        if ( StifliFlexMcpUtils::keyLooksSensitive( $key ) ) {
+                            $cleaned[$key] = is_scalar( $val ) && '' !== (string) $val ? '[REDACTED]' : '[REDACTED]';
+                        } else {
+                            $cleaned[$key] = StifliFlexMcpUtils::redactSecrets( $val, $key );
+                        }
                     }
                     $addResultText($r, 'All user meta for user #' . $user_id . ': ' . wp_json_encode($cleaned, JSON_PRETTY_PRINT));
                 }
@@ -2342,13 +2415,34 @@ class StifliFlexMcpModel {
                 
                 if (!$url) { $r['error'] = array('code' => -42602, 'message' => 'url required'); break; }
                 if (!current_user_can('upload_files')) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to upload files'); break; }
-                
-                // Temporarily allow all MIME types for images
-                add_filter('upload_mimes', function($mimes) {
-                    $mimes['jpg|jpeg|jpe'] = 'image/jpeg';
-                    $mimes['png'] = 'image/png';
-                    $mimes['gif'] = 'image/gif';
-                    $mimes['webp'] = 'image/webp';
+
+                // SSRF protection: HTTPS only, block private/reserved IPs and internal hosts.
+                // Allow opting out only via filter (e.g. for local-dev environments).
+                $require_https = (bool) apply_filters( 'sflmcp_upload_require_https', true, $url );
+                $url_check = StifliFlexMcpUtils::validateOutboundUrl( $url, $require_https );
+                if ( is_wp_error( $url_check ) ) {
+                    stifli_flex_mcp_log( 'wp_upload_image_from_url: blocked URL = ' . $url . ' reason=' . $url_check->get_error_code() );
+                    $r['error'] = array(
+                        'code'    => $url_check->get_error_code(),
+                        'message' => 'URL rejected: ' . $url_check->get_error_message(),
+                    );
+                    break;
+                }
+
+                // Restrict allowed image MIME types. SVG and HTML/script-capable
+                // formats are explicitly excluded to avoid stored XSS.
+                $allowed_image_mimes = apply_filters( 'sflmcp_upload_allowed_image_mimes', array(
+                    'image/jpeg' => array( 'jpg', 'jpeg', 'jpe' ),
+                    'image/png'  => array( 'png' ),
+                    'image/gif'  => array( 'gif' ),
+                    'image/webp' => array( 'webp' ),
+                ) );
+
+                add_filter('upload_mimes', function($mimes) use ( $allowed_image_mimes ) {
+                    foreach ( $allowed_image_mimes as $mime => $exts ) {
+                        $key = implode( '|', $exts );
+                        $mimes[ $key ] = $mime;
+                    }
                     return $mimes;
                 });
                 
@@ -2360,12 +2454,24 @@ class StifliFlexMcpModel {
                     require_once ABSPATH . 'wp-admin/includes/media.php';
                     require_once ABSPATH . 'wp-admin/includes/image.php';
                 }
-                $tmp = download_url($url);
+                // Cap download size at 20MB by default (filterable).
+                $max_bytes = (int) apply_filters( 'sflmcp_upload_max_bytes', 20 * 1024 * 1024, $url );
+                $tmp = download_url( $url, 30, false );
                 
                 if (is_wp_error($tmp)) { 
                     stifli_flex_mcp_log('wp_upload_image_from_url: Download error = ' . $tmp->get_error_message());
                     $r['error'] = array('code' => 'download_error', 'message' => $tmp->get_error_message()); 
                     break; 
+                }
+
+                // Enforce size limit after download.
+                if ( $max_bytes > 0 && file_exists( $tmp ) && filesize( $tmp ) > $max_bytes ) {
+                    @unlink( $tmp );
+                    $r['error'] = array(
+                        'code'    => 'file_too_large',
+                        'message' => 'Downloaded file exceeds the maximum allowed size (' . $max_bytes . ' bytes).',
+                    );
+                    break;
                 }
                 
                 stifli_flex_mcp_log('wp_upload_image_from_url: Downloaded to temp file = ' . $tmp);
@@ -2408,7 +2514,38 @@ class StifliFlexMcpModel {
                 // Force proper MIME type
                 $file_info = wp_check_filetype($basename);
                 $file['type'] = $file_info['type'];
-                
+
+                // Validate the actual downloaded file is a real image of an allowed MIME.
+                $detected_mime = '';
+                if ( function_exists( 'finfo_open' ) ) {
+                    $finfo_v = finfo_open( FILEINFO_MIME_TYPE );
+                    if ( $finfo_v ) {
+                        $detected_mime = (string) finfo_file( $finfo_v, $tmp );
+                        finfo_close( $finfo_v );
+                    }
+                } elseif ( function_exists( 'mime_content_type' ) ) {
+                    $detected_mime = (string) mime_content_type( $tmp );
+                }
+                $detected_mime = strtolower( $detected_mime );
+                if ( ! isset( $allowed_image_mimes[ $detected_mime ] ) ) {
+                    @unlink( $tmp );
+                    $r['error'] = array(
+                        'code'    => 'mime_not_allowed',
+                        'message' => 'Downloaded file MIME (' . $detected_mime . ') is not an allowed image type.',
+                    );
+                    break;
+                }
+                // Final sanity: getimagesize() must succeed (rules out SVG/HTML disguised as image).
+                $imgsize = @getimagesize( $tmp );
+                if ( ! is_array( $imgsize ) || empty( $imgsize[2] ) ) {
+                    @unlink( $tmp );
+                    $r['error'] = array(
+                        'code'    => 'invalid_image',
+                        'message' => 'Downloaded file is not a valid image.',
+                    );
+                    break;
+                }
+
                 $fileLog = wp_json_encode($file);
                 if (false === $fileLog) {
                     $fileLog = '[unserializable]';
@@ -4400,6 +4537,12 @@ class StifliFlexMcpModel {
                 }
                 $single = isset($args['single']) ? (bool)$args['single'] : true;
                 $value = get_post_meta($post_id, $meta_key, $single);
+                // Redact secrets before exposing meta values to the LLM.
+                if ( StifliFlexMcpUtils::keyLooksSensitive( $meta_key ) ) {
+                    $value = is_scalar( $value ) && '' !== (string) $value ? '[REDACTED]' : $value;
+                } else {
+                    $value = StifliFlexMcpUtils::redactSecrets( $value, $meta_key );
+                }
                 $metaValueLog = wp_json_encode($value, JSON_PRETTY_PRINT);
                 if (false === $metaValueLog) {
                     $metaValueLog = '[unserializable]';
@@ -4455,6 +4598,13 @@ class StifliFlexMcpModel {
                     break;
                 }
                 $val = get_option($option);
+                // Redact secrets recursively. If the option key itself looks
+                // sensitive (e.g. *_api_key), the whole value is masked.
+                if ( StifliFlexMcpUtils::keyLooksSensitive( $option ) ) {
+                    $val = is_scalar( $val ) && '' !== (string) $val ? '[REDACTED]' : StifliFlexMcpUtils::redactSecrets( $val, $option );
+                } else {
+                    $val = StifliFlexMcpUtils::redactSecrets( $val, $option );
+                }
                 $optionValueLog = wp_json_encode($val, JSON_PRETTY_PRINT);
                 if (false === $optionValueLog) {
                     $optionValueLog = '[unserializable]';
@@ -4472,6 +4622,19 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
                     break;
                 }
+                // Hard denylist + sensitive-pattern check + optional allowlist.
+                $writable = StifliFlexMcpUtils::checkOptionWritable( $option );
+                if ( true !== $writable ) {
+                    $messages = array(
+                        'option_denied_hard'              => 'This option is on the hard denylist and cannot be modified via MCP.',
+                        'option_denied_sensitive_pattern' => 'This option name matches a sensitive pattern (key/secret/token/etc.) and cannot be modified via MCP.',
+                        'option_not_in_allowlist'         => 'Strict mode is enabled and this option is not in the writable allowlist (filter sflmcp_writable_options).',
+                        'invalid_option'                  => 'Invalid option name.',
+                    );
+                    $msg = isset( $messages[ $writable ] ) ? $messages[ $writable ] : 'Option write blocked.';
+                    $r['error'] = array( 'code' => 'option_write_blocked', 'message' => $msg . ' (' . $option . ')' );
+                    break;
+                }
                 $old_val = get_option($option, null);
                 $updated = update_option($option, $value);
                 if ($updated) {
@@ -4482,23 +4645,7 @@ class StifliFlexMcpModel {
                     $addResultText($r, 'No se pudo actualizar la opción (' . $option . ').');
                 }
                 break;
-            case 'wp_delete_option':
-                if (!current_user_can('manage_options')) {
-                    $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular opciones.');
-                    break;
-                }
-                $option = isset($args['option']) ? sanitize_text_field($args['option']) : '';
-                if (!$option) {
-                    $r['error'] = array('code' => 'invalid_params', 'message' => 'Falta el parámetro option.');
-                    break;
-                }
-                $deleted = delete_option($option);
-                if ($deleted) {
-                    $addResultText($r, 'Opción (' . $option . ') eliminada');
-                } else {
-                    $addResultText($r, 'No se eliminó la opción (' . $option . ')');
-                }
-                break;
+            // wp_delete_option intentionally removed: too destructive without reliable undo.
             case 'wp_get_settings':
                 if (!current_user_can('manage_options')) {
                     $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para leer configuración.');
@@ -4511,7 +4658,13 @@ class StifliFlexMcpModel {
                 }
                 $settings = array();
                 foreach ($keys as $key) {
-                    $settings[$key] = get_option(sanitize_text_field($key));
+                    $clean_key = sanitize_text_field($key);
+                    $raw       = get_option($clean_key);
+                    if ( StifliFlexMcpUtils::keyLooksSensitive( $clean_key ) ) {
+                        $settings[$clean_key] = is_scalar($raw) && '' !== (string) $raw ? '[REDACTED]' : StifliFlexMcpUtils::redactSecrets( $raw, $clean_key );
+                    } else {
+                        $settings[$clean_key] = StifliFlexMcpUtils::redactSecrets( $raw, $clean_key );
+                    }
                 }
                 $addResultText($r, wp_json_encode($settings, JSON_PRETTY_PRINT));
                 break;
@@ -4526,12 +4679,22 @@ class StifliFlexMcpModel {
                     break;
                 }
                 $updated = array();
+                $blocked = array();
                 foreach ($settings as $key => $value) {
                     $key = sanitize_text_field($key);
+                    $writable = StifliFlexMcpUtils::checkOptionWritable( $key );
+                    if ( true !== $writable ) {
+                        $blocked[$key] = $writable;
+                        continue;
+                    }
                     $result = update_option($key, $value);
                     $updated[$key] = $result;
                 }
-                $addResultText($r, 'Configuración actualizada: ' . wp_json_encode($updated, JSON_PRETTY_PRINT));
+                $msg = 'Configuración actualizada: ' . wp_json_encode($updated, JSON_PRETTY_PRINT);
+                if ( ! empty( $blocked ) ) {
+                    $msg .= "\nOpciones bloqueadas (no se modificaron): " . wp_json_encode( $blocked );
+                }
+                $addResultText($r, $msg);
                 break;
                 
             // Post Revisions

@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.2.1
+Stable tag: 3.2.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -409,6 +409,16 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.2 =
+* Security: Added centralized recursive secret redaction for MCP outputs.
+* Security: Applied redaction to sensitive reads (`wp_get_option`, `wp_get_settings`, `wp_get_post_meta`, `wp_get_user_meta`) and masked email/IP fields in `wp_get_comments`.
+* Security: Hardened `wp_update_option` and `wp_update_settings` with hard denylist, sensitive-pattern blocking, and optional allowlist via `sflmcp_writable_options`.
+* Security: Removed `wp_delete_option` tool (destructive operation without reliable undo), including migration cleanup for existing installs.
+* Security: Hardened `wp_upload_image_from_url` with SSRF protection (private/reserved IP blocking), HTTPS requirement, 20MB limit (filterable), MIME allowlist, and image validation.
+* New: Added `wp_set_featured_image` tool and support for `featured_media` in `wp_create_post` and `wp_update_post`.
+* OAuth: Dynamic client registration now returns HTTP 500 on DB insert failures, logs internal DB errors, and avoids exposing SQL internals.
+* Infrastructure: Added `sflmcp_db_version` upgrade flow for versioned DB migrations.
+
 = 3.2.1 =
 * fix bug
 

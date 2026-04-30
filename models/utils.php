@@ -220,4 +220,335 @@ class StifliFlexMcpUtils {
 		}
 		return (int) ceil($charCount / 4);
 	}
+
+	/**
+	 * Default regex patterns matched against keys/option-names that
+	 * potentially contain secrets. Filterable via 'sflmcp_secret_key_patterns'.
+	 *
+	 * @return string[]
+	 */
+	public static function getSecretKeyPatterns() {
+		$patterns = array(
+			'/(^|[_\-.])(api[_\-]?key|apikey)([_\-.]|$)/i',
+			'/(^|[_\-.])(secret|client[_\-]?secret)([_\-.]|$)/i',
+			'/(^|[_\-.])(token|access[_\-]?token|refresh[_\-]?token|bearer)([_\-.]|$)/i',
+			'/(^|[_\-.])(password|passwd|pwd|pass)([_\-.]|$)/i',
+			'/(^|[_\-.])(salt|nonce|auth[_\-]?key|secure[_\-]?auth)([_\-.]|$)/i',
+			'/(^|[_\-.])(private[_\-]?key|priv[_\-]?key)([_\-.]|$)/i',
+			'/(stripe|paypal|sendgrid|mailgun|twilio|aws|s3|recaptcha)[_\-]?(key|secret|token)/i',
+			'/^(sk_live|pk_live|sk_test|pk_test|rk_live|rk_test)/i',
+			'/_yoast_indexable_/i', // not really secret but noisy; keep separate filter if needed
+		);
+		if ( function_exists( 'apply_filters' ) ) {
+			$patterns = apply_filters( 'sflmcp_secret_key_patterns', $patterns );
+			if ( ! is_array( $patterns ) ) {
+				$patterns = array();
+			}
+		}
+		return $patterns;
+	}
+
+	/**
+	 * Regex patterns matched against string VALUES (when the key gives no hint)
+	 * to detect tokens, JWTs, AWS keys, Bearer auth headers, etc.
+	 *
+	 * @return string[]
+	 */
+	public static function getSecretValuePatterns() {
+		$patterns = array(
+			'/^Bearer\s+[A-Za-z0-9._\-]+/i',
+			'/eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{5,}/', // JWT
+			'/^(sk_live|pk_live|sk_test|pk_test|rk_live|rk_test)_[A-Za-z0-9]{16,}/',
+			'/AKIA[0-9A-Z]{16}/', // AWS access key id
+			'/AIza[0-9A-Za-z\-_]{35}/', // Google API key
+			'/ghp_[A-Za-z0-9]{30,}/', // GitHub PAT
+			'/xox[abprs]-[A-Za-z0-9\-]{10,}/', // Slack token
+		);
+		if ( function_exists( 'apply_filters' ) ) {
+			$patterns = apply_filters( 'sflmcp_secret_value_patterns', $patterns );
+			if ( ! is_array( $patterns ) ) {
+				$patterns = array();
+			}
+		}
+		return $patterns;
+	}
+
+	/**
+	 * Decide whether a given key looks sensitive.
+	 *
+	 * @param string $key Key/option name.
+	 * @return bool
+	 */
+	public static function keyLooksSensitive( $key ) {
+		if ( ! is_string( $key ) || '' === $key ) {
+			return false;
+		}
+		foreach ( self::getSecretKeyPatterns() as $pattern ) {
+			if ( @preg_match( $pattern, $key ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Decide whether a given string value looks like a secret/token.
+	 *
+	 * @param string $value
+	 * @return bool
+	 */
+	public static function valueLooksSensitive( $value ) {
+		if ( ! is_string( $value ) || '' === $value ) {
+			return false;
+		}
+		foreach ( self::getSecretValuePatterns() as $pattern ) {
+			if ( @preg_match( $pattern, $value ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Recursively redact secrets from any value (string, array, object).
+	 *
+	 * Rules:
+	 * - If a key matches a secret pattern, its value is replaced by [REDACTED].
+	 * - If a string value matches a secret VALUE pattern, it is redacted.
+	 * - Arrays/objects are walked recursively (depth-limited to avoid loops).
+	 * - If $context_key is provided, the top-level scalar is treated as belonging
+	 *   to that key (so wp_get_option('foo_api_key') returns [REDACTED]).
+	 *
+	 * @param mixed       $value       Value to redact.
+	 * @param string|null $context_key Optional parent key name.
+	 * @param int         $depth       Internal recursion guard.
+	 * @return mixed Redacted copy.
+	 */
+	public static function redactSecrets( $value, $context_key = null, $depth = 0 ) {
+		if ( $depth > 12 ) {
+			return $value;
+		}
+
+		// Top-level / leaf scalar tied to a sensitive key.
+		if ( ! is_array( $value ) && ! is_object( $value ) ) {
+			if ( null !== $context_key && self::keyLooksSensitive( (string) $context_key ) ) {
+				if ( is_scalar( $value ) && '' !== (string) $value ) {
+					return '[REDACTED]';
+				}
+				return $value;
+			}
+			if ( is_string( $value ) && self::valueLooksSensitive( $value ) ) {
+				return '[REDACTED]';
+			}
+			return $value;
+		}
+
+		if ( is_object( $value ) ) {
+			$value = (array) $value;
+		}
+
+		$out = array();
+		foreach ( $value as $k => $v ) {
+			$key_str = (string) $k;
+			if ( self::keyLooksSensitive( $key_str ) ) {
+				if ( is_array( $v ) || is_object( $v ) ) {
+					// Even nested structures under a sensitive key are wiped.
+					$out[ $k ] = '[REDACTED]';
+				} elseif ( is_scalar( $v ) && '' !== (string) $v ) {
+					$out[ $k ] = '[REDACTED]';
+				} else {
+					$out[ $k ] = $v;
+				}
+				continue;
+			}
+			$out[ $k ] = self::redactSecrets( $v, $key_str, $depth + 1 );
+		}
+		return $out;
+	}
+
+	/**
+	 * Hard denylist of WordPress options that must never be writable via MCP,
+	 * regardless of capability. Filterable via 'sflmcp_option_write_denylist'.
+	 *
+	 * @return string[]
+	 */
+	public static function getOptionWriteDenylist() {
+		$deny = array(
+			'siteurl', 'home', 'WPLANG',
+			'admin_email', 'new_admin_email',
+			'users_can_register', 'default_role',
+			'db_version', 'initial_db_version', 'secret',
+			'auth_key', 'auth_salt', 'logged_in_key', 'logged_in_salt',
+			'nonce_key', 'nonce_salt', 'secure_auth_key', 'secure_auth_salt',
+			'active_plugins', 'template', 'stylesheet', 'current_theme',
+			'recently_activated', 'uploads_use_yearmonth_folders',
+			'fileupload_url', 'upload_path',
+			'permalink_structure', 'rewrite_rules',
+			'cron', 'rss_use_excerpt',
+			// Plugin-specific high-risk
+			'sflmcp_oauth_auto_approve', 'sflmcp_token', 'sflmcp_settings',
+		);
+		if ( function_exists( 'apply_filters' ) ) {
+			$deny = apply_filters( 'sflmcp_option_write_denylist', $deny );
+			if ( ! is_array( $deny ) ) {
+				$deny = array();
+			}
+		}
+		return array_map( 'strtolower', array_filter( $deny, 'is_string' ) );
+	}
+
+	/**
+	 * Decide whether an option name is safe to write via MCP.
+	 * Combines a hard denylist + the secret key patterns.
+	 *
+	 * @param string $option Option name.
+	 * @return true|string True if writable, otherwise a reason string.
+	 */
+	public static function checkOptionWritable( $option ) {
+		if ( ! is_string( $option ) || '' === $option ) {
+			return 'invalid_option';
+		}
+		$lower = strtolower( $option );
+		$deny  = self::getOptionWriteDenylist();
+		if ( in_array( $lower, $deny, true ) ) {
+			return 'option_denied_hard';
+		}
+		if ( self::keyLooksSensitive( $option ) ) {
+			return 'option_denied_sensitive_pattern';
+		}
+		// Optional strict-mode allowlist (opt-in via filter).
+		$allow = function_exists( 'apply_filters' )
+			? apply_filters( 'sflmcp_writable_options', null )
+			: null;
+		if ( is_array( $allow ) ) {
+			$allow_lower = array_map( 'strtolower', array_filter( $allow, 'is_string' ) );
+			if ( ! in_array( $lower, $allow_lower, true ) ) {
+				return 'option_not_in_allowlist';
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Mask an email address for display in untrusted outputs.
+	 *
+	 * @param string $email
+	 * @return string
+	 */
+	public static function maskEmail( $email ) {
+		if ( ! is_string( $email ) || '' === $email ) {
+			return '';
+		}
+		$at = strrpos( $email, '@' );
+		if ( false === $at || $at < 1 ) {
+			return '[redacted]';
+		}
+		$local  = substr( $email, 0, $at );
+		$domain = substr( $email, $at + 1 );
+		$local_masked = strlen( $local ) <= 2
+			? str_repeat( '*', strlen( $local ) )
+			: substr( $local, 0, 1 ) . str_repeat( '*', max( 1, strlen( $local ) - 2 ) ) . substr( $local, -1 );
+		return $local_masked . '@' . $domain;
+	}
+
+	/**
+	 * Mask an IP address (IPv4 or IPv6) for display in untrusted outputs.
+	 *
+	 * @param string $ip
+	 * @return string
+	 */
+	public static function maskIp( $ip ) {
+		if ( ! is_string( $ip ) || '' === $ip ) {
+			return '';
+		}
+		if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			$parts = explode( '.', $ip );
+			if ( 4 === count( $parts ) ) {
+				return $parts[0] . '.' . $parts[1] . '.x.x';
+			}
+		}
+		if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
+			$parts = explode( ':', $ip );
+			$keep  = array_slice( $parts, 0, 2 );
+			return implode( ':', $keep ) . ':****';
+		}
+		return '[redacted]';
+	}
+
+	/**
+	 * Validate a URL for safe outbound fetch (used by media/URL upload tools).
+	 *
+	 * Blocks:
+	 * - non-http(s) schemes
+	 * - http (when $require_https is true)
+	 * - URLs whose host resolves to a private/reserved IP (SSRF protection)
+	 * - obvious internal hostnames (localhost, *.local, *.internal)
+	 *
+	 * @param string $url           URL to validate.
+	 * @param bool   $require_https Require HTTPS.
+	 * @return true|WP_Error
+	 */
+	public static function validateOutboundUrl( $url, $require_https = true ) {
+		if ( ! is_string( $url ) || '' === $url ) {
+			return new WP_Error( 'invalid_url', 'URL is empty' );
+		}
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) || empty( $parts['host'] ) ) {
+			return new WP_Error( 'invalid_url', 'URL must include scheme and host' );
+		}
+		$scheme = strtolower( $parts['scheme'] );
+		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+			return new WP_Error( 'invalid_url_scheme', 'Only http(s) URLs are allowed' );
+		}
+		if ( $require_https && 'https' !== $scheme ) {
+			// Allow http for explicit local hosts in dev (loopback), but still
+			// block them at the IP check unless caller disables require_https.
+			return new WP_Error( 'https_required', 'Only HTTPS URLs are allowed' );
+		}
+		$host = strtolower( $parts['host'] );
+		// Block obvious internal names.
+		$blocked_hosts = array( 'localhost', 'localhost.localdomain', 'ip6-localhost' );
+		if ( in_array( $host, $blocked_hosts, true ) ) {
+			return new WP_Error( 'host_blocked', 'Internal hostname blocked' );
+		}
+		if ( preg_match( '/\.(local|internal|lan|intranet|test|localhost)$/i', $host ) ) {
+			return new WP_Error( 'host_blocked', 'Internal/reserved hostname blocked' );
+		}
+
+		// Resolve host to IP(s) and validate each one.
+		$ips = array();
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			$ips[] = $host;
+		} else {
+			$records = @dns_get_record( $host, DNS_A | DNS_AAAA );
+			if ( is_array( $records ) ) {
+				foreach ( $records as $rec ) {
+					if ( ! empty( $rec['ip'] ) ) {
+						$ips[] = $rec['ip'];
+					} elseif ( ! empty( $rec['ipv6'] ) ) {
+						$ips[] = $rec['ipv6'];
+					}
+				}
+			}
+			if ( empty( $ips ) ) {
+				$resolved = @gethostbynamel( $host );
+				if ( is_array( $resolved ) ) {
+					$ips = array_merge( $ips, $resolved );
+				}
+			}
+		}
+		if ( empty( $ips ) ) {
+			return new WP_Error( 'host_unresolvable', 'Could not resolve host' );
+		}
+		foreach ( $ips as $ip ) {
+			if ( ! filter_var(
+				$ip,
+				FILTER_VALIDATE_IP,
+				FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+			) ) {
+				return new WP_Error( 'private_ip_blocked', 'URL resolves to a private/reserved IP' );
+			}
+		}
+		return true;
+	}
 }

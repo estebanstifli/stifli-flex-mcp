@@ -190,7 +190,14 @@ class StifliFlexMcp_OAuth_Storage {
 		);
 
 		if ( false === $inserted ) {
-			return new WP_Error( 'server_error', 'Failed to register client.' );
+			$db_error = isset( $wpdb->last_error ) ? (string) $wpdb->last_error : '';
+			if ( '' !== $db_error && function_exists( 'stifli_flex_mcp_log' ) ) {
+				stifli_flex_mcp_log( 'OAuth register_client DB error: ' . $db_error );
+			} elseif ( '' !== $db_error ) {
+				error_log( '[stifli-flex-mcp] OAuth register_client DB error: ' . $db_error );
+			}
+			// Return a generic error code; do not leak SQL details to the public.
+			return new WP_Error( 'server_error_db', 'Failed to register client (database error).' );
 		}
 
 		$result = array(

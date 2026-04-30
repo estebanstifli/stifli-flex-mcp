@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.2.1
+Version: 3.2.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -439,6 +439,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_create_post', 'Create a post. Requires post_title. Supports post_content, post_status, post_type, etc.', 'WordPress - Posts', 1),
 		array('wp_update_post', 'Update a post by ID with fields object.', 'WordPress - Posts', 1),
 		array('wp_delete_post', 'Delete a post by ID.', 'WordPress - Posts', 1),
+		array('wp_set_featured_image', 'Set or remove the featured image (post thumbnail) of a post.', 'WordPress - Posts', 1),
 		
 		// Pages
 		array('wp_get_pages', 'List pages with filters (post_status, search, limit, offset, orderby, order).', 'WordPress - Pages', 1),
@@ -504,7 +505,6 @@ function stifli_flex_mcp_seed_initial_tools() {
 		// Options y Meta
 		array('wp_get_option', 'Get a WordPress option by key.', 'WordPress - Options', 1),
 		array('wp_update_option', 'Update a WordPress option.', 'WordPress - Options', 1),
-		array('wp_delete_option', 'Delete a WordPress option by key.', 'WordPress - Options', 1),
 		array('wp_get_post_meta', 'Get post meta by post_id and meta_key.', 'WordPress - Meta', 1),
 		array('wp_update_post_meta', 'Update post meta.', 'WordPress - Meta', 1),
 		array('wp_delete_post_meta', 'Delete post meta by post_id and meta_key.', 'WordPress - Meta', 1),
@@ -747,6 +747,52 @@ function stifli_flex_mcp_upgrade_302() {
 }
 
 /**
+ * Current StifLi Flex MCP database/schema version.
+ *
+ * Bump this constant whenever a new upgrade routine is added so existing
+ * installs run the migration once and only once.
+ */
+if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
+	define( 'SFLMCP_DB_VERSION', '2026.04.30' );
+}
+
+/**
+ * Run idempotent DB/schema upgrades when the stored version is older
+ * than the current SFLMCP_DB_VERSION. Safe to call on every load.
+ */
+function stifli_flex_mcp_maybe_upgrade_db() {
+	$current = (string) get_option( 'sflmcp_db_version', '' );
+	if ( $current === SFLMCP_DB_VERSION ) {
+		return;
+	}
+	// Place new migrations here in chronological order.
+	stifli_flex_mcp_upgrade_remove_wp_delete_option();
+	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
+}
+
+/**
+ * Upgrade routine: remove the wp_delete_option tool from existing installs.
+ * This tool was retired because deletions of WordPress options cannot be
+ * reliably undone via the ChangeTracker.
+ */
+function stifli_flex_mcp_upgrade_remove_wp_delete_option() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_remove_wp_delete_option_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+	$wpdb->delete( $tools_table, array( 'tool_name' => 'wp_delete_option' ), array( '%s' ) );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+	$wpdb->delete( $profile_tools_table, array( 'tool_name' => 'wp_delete_option' ), array( '%s' ) );
+
+	update_option( $flag, '1' );
+}
+
+/**
  * Upgrade routine: remove legacy Elementor tools from core tables.
  * Elementor tools now live only in the standalone Elementor plugin.
  */
@@ -962,7 +1008,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Core
 				'mcp_ping',
 				// Posts (6)
-				'wp_get_posts', 'wp_get_post', 'wp_create_post', 'wp_update_post', 'wp_delete_post',
+				'wp_get_posts', 'wp_get_post', 'wp_create_post', 'wp_update_post', 'wp_delete_post', 'wp_set_featured_image',
 				// Pages (4)
 				'wp_get_pages', 'wp_create_page', 'wp_update_page', 'wp_delete_page',
 				// Comments (4)
@@ -985,8 +1031,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_tags', 'wp_create_tag', 'wp_update_tag', 'wp_delete_tag',
 				// Menus (4)
 				'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_create_nav_menu',
-				// Options (3)
-				'wp_get_option', 'wp_update_option', 'wp_delete_option',
+				// Options (2)
+				'wp_get_option', 'wp_update_option',
 				// Post Meta (3)
 				'wp_get_post_meta', 'wp_update_post_meta', 'wp_delete_post_meta',
 				// Settings (2)
@@ -2949,6 +2995,8 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_apply_plugin_integration_overrides();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
+	// Centralized DB-version-driven upgrade hook (must run after seeds).
+	stifli_flex_mcp_maybe_upgrade_db();
 	if (class_exists('StifliFlexMcp')) {
 		$stifli_flex_mcp_instance = new StifliFlexMcp();
 		$stifli_flex_mcp_instance->init();

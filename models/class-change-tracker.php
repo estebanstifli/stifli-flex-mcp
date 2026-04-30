@@ -45,6 +45,7 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_create_post'            => array( 'create', 'post', null ),
 		'wp_update_post'            => array( 'update', 'post', 'ID' ),
 		'wp_delete_post'            => array( 'delete', 'post', 'ID' ),
+		'wp_set_featured_image'     => array( 'update', 'post', 'post_id' ),
 		'wp_create_page'            => array( 'create', 'page', null ),
 		'wp_update_page'            => array( 'update', 'page', 'ID' ),
 		'wp_delete_page'            => array( 'delete', 'page', 'ID' ),
@@ -79,7 +80,6 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_delete_nav_menu'        => array( 'delete', 'nav_menu', 'menu_id' ),
 		// --- Options / Settings ---
 		'wp_update_option'          => array( 'update', 'option', 'option' ),
-		'wp_delete_option'          => array( 'delete', 'option', 'option' ),
 		'wp_update_settings'        => array( 'update', 'option', null ),
 		// --- Post Meta ---
 		'wp_update_post_meta'       => array( 'update', 'post_meta', 'post_id' ),
