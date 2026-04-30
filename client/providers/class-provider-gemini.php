@@ -209,9 +209,10 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 				$prompt, $output, $total, $cached
 			) );
 			$usage_data = array(
-				'input_tokens'  => $prompt,
-				'output_tokens' => $output,
-				'cached_tokens' => $cached,
+				'input_tokens'          => $prompt,
+				'output_tokens'         => $output,
+				'cached_tokens'         => $cached,
+				'billable_input_tokens' => max( 0, $prompt - $cached ),
 			);
 		}
 
@@ -237,9 +238,10 @@ class StifliFlexMcp_Client_Gemini extends StifliFlexMcp_Client_Provider_Base {
 				$est_output = (int) ceil( strlen( $parsed['text'] ) / 4 );
 			}
 			$parsed['usage'] = array(
-				'input_tokens'  => $est_input,
-				'output_tokens' => $est_output,
-				'cached_tokens' => 0,
+				'input_tokens'          => $est_input,
+				'output_tokens'         => $est_output,
+				'cached_tokens'         => 0,
+				'billable_input_tokens' => $est_input,
 			);
 			stifli_flex_mcp_log( '[Gemini] Usage not reported by API, estimated input=' . $est_input . ' output=' . $est_output );
 		}

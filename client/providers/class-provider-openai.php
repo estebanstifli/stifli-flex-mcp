@@ -229,21 +229,28 @@ class StifliFlexMcp_Client_OpenAI extends StifliFlexMcp_Client_Provider_Base {
 		// Include usage data for token tracking
 		if ( isset( $response['usage'] ) && is_array( $response['usage'] ) ) {
 			$u = $response['usage'];
-			$parsed['usage'] = array(
-				'input_tokens'  => isset( $u['input_tokens'] ) ? $u['input_tokens'] : ( isset( $u['prompt_tokens'] ) ? $u['prompt_tokens'] : 0 ),
-				'output_tokens' => isset( $u['output_tokens'] ) ? $u['output_tokens'] : ( isset( $u['completion_tokens'] ) ? $u['completion_tokens'] : 0 ),
-				'cached_tokens' => 0,
-			);
+			$input_tokens  = isset( $u['input_tokens'] ) ? (int) $u['input_tokens'] : ( isset( $u['prompt_tokens'] ) ? (int) $u['prompt_tokens'] : 0 );
+			$output_tokens = isset( $u['output_tokens'] ) ? (int) $u['output_tokens'] : ( isset( $u['completion_tokens'] ) ? (int) $u['completion_tokens'] : 0 );
+			$cached_tokens = 0;
 			if ( isset( $u['input_tokens_details']['cached_tokens'] ) ) {
-				$parsed['usage']['cached_tokens'] = $u['input_tokens_details']['cached_tokens'];
+				$cached_tokens = (int) $u['input_tokens_details']['cached_tokens'];
 			} elseif ( isset( $u['prompt_tokens_details']['cached_tokens'] ) ) {
-				$parsed['usage']['cached_tokens'] = $u['prompt_tokens_details']['cached_tokens'];
-			}		} else {
+				$cached_tokens = (int) $u['prompt_tokens_details']['cached_tokens'];
+			}
+
+			$parsed['usage'] = array(
+				'input_tokens'          => $input_tokens,
+				'output_tokens'         => $output_tokens,
+				'cached_tokens'         => $cached_tokens,
+				'billable_input_tokens' => max( 0, $input_tokens - $cached_tokens ),
+			);
+		} else {
 			$est_output = ! empty( $parsed['text'] ) ? (int) ceil( strlen( $parsed['text'] ) / 4 ) : 0;
 			$parsed['usage'] = array(
-				'input_tokens'  => 0,
-				'output_tokens' => $est_output,
-				'cached_tokens' => 0,
+				'input_tokens'          => 0,
+				'output_tokens'         => $est_output,
+				'cached_tokens'         => 0,
+				'billable_input_tokens' => 0,
 			);
 			stifli_flex_mcp_log( '[OpenAI] Usage not reported by API, estimated output=' . $est_output );		}
 

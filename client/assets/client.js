@@ -677,25 +677,34 @@
     function updateTokenBars(usage) {
         var MAX_TOKENS = 12000;
         var $bars = $('#sflmcp-token-bars');
-        var $fill = $('#sflmcp-token-fill');
-        var $value = $('#sflmcp-token-value');
+        var $inputFill = $('#sflmcp-token-input-fill');
+        var $inputValue = $('#sflmcp-token-input-value');
         var $cachedFill = $('#sflmcp-token-cached-fill');
         var $cachedValue = $('#sflmcp-token-cached-value');
+        var $outputFill = $('#sflmcp-token-output-fill');
+        var $outputValue = $('#sflmcp-token-output-value');
 
         if (!$bars.length) return;
 
-        var input = parseInt(usage.input_tokens, 10) || 0;
+        var rawInput = parseInt(usage.input_tokens, 10) || 0;
         var output = parseInt(usage.output_tokens, 10) || 0;
         var cached = parseInt(usage.cached_tokens, 10) || 0;
-        // Show non-cached tokens only (reflects actual billable cost)
-        var total = Math.max(0, input + output - cached);
+        var billableInput = parseInt(usage.billable_input_tokens, 10);
+
+        // Some providers report cached prompt tokens inside input, others do not.
+        // Providers normalize billable_input_tokens server-side so the input bar
+        // reflects the effective paid input tokens for the current response.
+        if (isNaN(billableInput)) {
+            billableInput = Math.max(0, rawInput - cached);
+        }
 
         // Show the bars container
         $bars.show();
 
         // Calculate percentages (capped at 100%)
-        var totalPct = Math.min((total / MAX_TOKENS) * 100, 100);
+        var inputPct = Math.min((billableInput / MAX_TOKENS) * 100, 100);
         var cachedPct = Math.min((cached / MAX_TOKENS) * 100, 100);
+        var outputPct = Math.min((output / MAX_TOKENS) * 100, 100);
 
         // Determine color level
         function getLevel(pct) {
@@ -705,27 +714,32 @@
             return 'sflmcp-level-critical';
         }
 
-        // Reset width to 0 for animation effect, then animate
-        $fill.css('width', '0%')
-            .removeClass('sflmcp-level-low sflmcp-level-medium sflmcp-level-high sflmcp-level-critical')
-            .addClass(getLevel(totalPct));
+        function prepareBar($fill, pct) {
+            $fill.css('width', '0%')
+                .removeClass('sflmcp-level-low sflmcp-level-medium sflmcp-level-high sflmcp-level-critical')
+                .addClass(getLevel(pct));
+        }
 
-        $cachedFill.css('width', '0%')
-            .removeClass('sflmcp-level-low sflmcp-level-medium sflmcp-level-high sflmcp-level-critical')
-            .addClass(getLevel(cachedPct));
+        // Reset width to 0 for animation effect, then animate
+        prepareBar($inputFill, inputPct);
+        prepareBar($cachedFill, cachedPct);
+        prepareBar($outputFill, outputPct);
 
         // Trigger reflow then animate
-        $fill[0].offsetWidth; // force reflow
+        $inputFill[0].offsetWidth; // force reflow
         $cachedFill[0].offsetWidth;
+        $outputFill[0].offsetWidth;
 
         requestAnimationFrame(function() {
-            $fill.css('width', totalPct + '%');
+            $inputFill.css('width', inputPct + '%');
             $cachedFill.css('width', cachedPct + '%');
+            $outputFill.css('width', outputPct + '%');
         });
 
         // Animate the number count-up
-        animateCounter($value, total);
+        animateCounter($inputValue, billableInput);
         animateCounter($cachedValue, cached);
+        animateCounter($outputValue, output);
     }
 
     /**

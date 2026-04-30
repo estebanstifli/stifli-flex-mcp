@@ -205,10 +205,12 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 			$raw_input      = isset( $u['input_tokens'] ) ? (int) $u['input_tokens'] : 0;
 			$cache_read     = isset( $u['cache_read_input_tokens'] ) ? (int) $u['cache_read_input_tokens'] : 0;
 			$cache_creation = isset( $u['cache_creation_input_tokens'] ) ? (int) $u['cache_creation_input_tokens'] : 0;
+			$total_input    = $raw_input + $cache_read + $cache_creation;
 			$usage_data = array(
-				'input_tokens'  => $raw_input + $cache_read + $cache_creation,
-				'output_tokens' => isset( $u['output_tokens'] ) ? (int) $u['output_tokens'] : 0,
-				'cached_tokens' => $cache_read,
+				'input_tokens'          => $total_input,
+				'output_tokens'         => isset( $u['output_tokens'] ) ? (int) $u['output_tokens'] : 0,
+				'cached_tokens'         => $cache_read,
+				'billable_input_tokens' => max( 0, $total_input - $cache_read ),
 			);
 		}
 
@@ -240,9 +242,10 @@ class StifliFlexMcp_Client_Claude extends StifliFlexMcp_Client_Provider_Base {
 		} else {
 			$est_output = ! empty( $parsed['text'] ) ? (int) ceil( strlen( $parsed['text'] ) / 4 ) : 0;
 			$parsed['usage'] = array(
-				'input_tokens'  => 0,
-				'output_tokens' => $est_output,
-				'cached_tokens' => 0,
+				'input_tokens'          => 0,
+				'output_tokens'         => $est_output,
+				'cached_tokens'         => 0,
+				'billable_input_tokens' => 0,
 			);
 			stifli_flex_mcp_log( '[Claude] Usage not reported by API, estimated output=' . $est_output );
 		}

@@ -473,11 +473,11 @@ class StifliFlexMcp_Client_Admin {
 			
 			<div class="sflmcp-token-bars sflmcp-is-hidden" id="sflmcp-token-bars">
 				<div class="sflmcp-token-row">
-					<span class="sflmcp-token-label"><?php esc_html_e( 'Tokens', 'stifli-flex-mcp' ); ?></span>
+					<span class="sflmcp-token-label"><?php esc_html_e( 'Input', 'stifli-flex-mcp' ); ?></span>
 					<div class="sflmcp-token-track">
-						<div class="sflmcp-token-fill" id="sflmcp-token-fill"></div>
+						<div class="sflmcp-token-fill" id="sflmcp-token-input-fill"></div>
 					</div>
-					<span class="sflmcp-token-value" id="sflmcp-token-value">0</span>
+					<span class="sflmcp-token-value" id="sflmcp-token-input-value">0</span>
 				</div>
 				<div class="sflmcp-token-row">
 					<span class="sflmcp-token-label"><?php esc_html_e( 'Cached', 'stifli-flex-mcp' ); ?></span>
@@ -485,6 +485,13 @@ class StifliFlexMcp_Client_Admin {
 						<div class="sflmcp-token-fill sflmcp-token-fill-cached" id="sflmcp-token-cached-fill"></div>
 					</div>
 					<span class="sflmcp-token-value" id="sflmcp-token-cached-value">0</span>
+				</div>
+				<div class="sflmcp-token-row">
+					<span class="sflmcp-token-label"><?php esc_html_e( 'Output', 'stifli-flex-mcp' ); ?></span>
+					<div class="sflmcp-token-track">
+						<div class="sflmcp-token-fill" id="sflmcp-token-output-fill"></div>
+					</div>
+					<span class="sflmcp-token-value" id="sflmcp-token-output-value">0</span>
 				</div>
 			</div>
 

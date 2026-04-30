@@ -521,7 +521,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		
 		// Custom Post Types & Site Health
 		array('wp_get_post_types', 'Get all registered post types.', 'WordPress - Post Types', 1),
-		array('wp_get_site_health', 'Get site health and diagnostic information.', 'WordPress - Health', 1),
+		array('wp_get_site_health', 'Run a WordPress site audit with selectable depth: 0 basic, 1 medium, 2 deep.', 'WordPress - Health', 1),
 		
 		// Settings
 		array('wp_get_settings', 'Get WordPress settings.', 'WordPress - Settings', 1),

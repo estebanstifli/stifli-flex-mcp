@@ -1523,10 +1523,17 @@ class StifliFlexMcpModel {
                 // Site Health
                 'wp_get_site_health' => array(
                     'name' => 'wp_get_site_health',
-                    'description' => 'Get WordPress site health information (version, PHP, database, plugins, themes, debug mode).',
+                    'description' => 'Run a WordPress site audit with selectable depth. Level 0: basic, fast checks. Level 1: medium, all direct Site Health checks. Level 2: deep, adds async checks and storage scan.',
                     'inputSchema' => array(
                         'type' => 'object',
-                        'properties' => (object) array(),
+                        'properties' => array(
+                            'level' => array(
+                                'type' => 'integer',
+                                'description' => 'Audit depth. 0 = basic and fast. 1 = medium with all direct Site Health checks. 2 = deep with async Site Health checks and directory sizes. Default: 0.',
+                                'minimum' => 0,
+                                'maximum' => 2,
+                            ),
+                        ),
                         'required' => array(),
                     ),
                 ),
@@ -5227,68 +5234,25 @@ class StifliFlexMcpModel {
                 
             // Site Health
             case 'wp_get_site_health':
-                global $wpdb;
-                
-                $serverSoftware = isset($_SERVER['SERVER_SOFTWARE']) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown';
-                $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : 'Unknown';
-                $health = array(
-                    'wordpress' => array(
-                        'version' => get_bloginfo('version'),
-                        'site_url' => get_site_url(),
-                        'home_url' => get_home_url(),
-                        'is_multisite' => is_multisite(),
-                        'language' => get_bloginfo('language'),
-                    ),
-                    'server' => array(
-                        'php_version' => phpversion(),
-                        'server_software' => $serverSoftware,
-                        'https' => is_ssl(),
-                        'user_agent' => $userAgent,
-                    ),
-                    'database' => array(
-                        'extension' => $wpdb->use_mysqli ? 'mysqli' : 'mysql',
-                        'server_version' => $wpdb->db_version(),
-                        'client_version' => $wpdb->db_server_info(),
-                        'database_name' => DB_NAME,
-                        'database_user' => DB_USER,
-                        'database_host' => DB_HOST,
-                        'database_charset' => DB_CHARSET,
-                        'table_prefix' => $wpdb->prefix,
-                    ),
-                    'theme' => array(
-                        'name' => wp_get_theme()->get('Name'),
-                        'version' => wp_get_theme()->get('Version'),
-                        'author' => wp_get_theme()->get('Author'),
-                        'parent_theme' => wp_get_theme()->get('Template'),
-                    ),
-                    'plugins' => array(
-                        'active' => count(get_option('active_plugins', array())),
-                        'total' => count(get_plugins()),
-                    ),
-                    'debug' => array(
-                        'wp_debug' => defined('WP_DEBUG') && WP_DEBUG,
-                        'wp_debug_log' => defined('WP_DEBUG_LOG') && WP_DEBUG_LOG,
-                        'wp_debug_display' => defined('WP_DEBUG_DISPLAY') && WP_DEBUG_DISPLAY,
-                        'script_debug' => defined('SCRIPT_DEBUG') && SCRIPT_DEBUG,
-                    ),
-                    'constants' => array(
-                        'wp_memory_limit' => WP_MEMORY_LIMIT,
-                        'wp_max_memory_limit' => WP_MAX_MEMORY_LIMIT,
-                        'wp_content_dir' => WP_CONTENT_DIR,
-                        'wp_plugin_dir' => WP_PLUGIN_DIR,
-                        'uploads_dir' => wp_upload_dir()['basedir'] ?? 'Unknown',
-                    ),
+                $audit_level = $this->normalizeSiteHealthAuditLevel( $utils::getArrayValue( $args, 'level', 0 ) );
+                $health_report = $this->getSiteHealthAuditReport( $audit_level );
+                $summary = isset($health_report['summary']) && is_array($health_report['summary']) ? $health_report['summary'] : array();
+
+                $headline = sprintf(
+                    'Site audit level %d (%s). Score %d/100 (%s). Critical issues: %d. Recommended improvements: %d. Checks run: %d.',
+                    intval( $health_report['audit_level']['value'] ?? $audit_level ),
+                    isset( $health_report['audit_level']['label'] ) ? $health_report['audit_level']['label'] : 'basic',
+                    intval( $summary['score'] ?? 0 ),
+                    isset( $summary['overall_status'] ) ? $summary['overall_status'] : 'unknown',
+                    intval( $summary['critical'] ?? 0 ),
+                    intval( $summary['recommended'] ?? 0 ),
+                    intval( $summary['tests_run'] ?? 0 )
                 );
-                
-                // Add WooCommerce info if active
-                if (class_exists('WooCommerce')) {
-                    $health['woocommerce'] = array(
-                        'version' => WC()->version,
-                        'database_version' => get_option('woocommerce_db_version'),
-                    );
-                }
-                
-                $addResultText($r, 'Site health: ' . wp_json_encode($health, JSON_PRETTY_PRINT));
+
+                $addResultText(
+                    $r,
+                    $headline . "\n\n" . wp_json_encode( $health_report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+                );
                 break;
 
             /* ── Changelog / Audit Log Tools ───────────────────── */
@@ -5461,6 +5425,624 @@ class StifliFlexMcpModel {
         $recordChangeIfNeeded();
 
         return $r;
+    }
+
+    /**
+     * Build an extended Site Health audit report.
+     *
+     * @param int $level Audit depth: 0 basic, 1 medium, 2 deep.
+     * @return array
+     */
+    private function getSiteHealthAuditReport( $level = 0 ) {
+        global $wpdb;
+
+        $level = $this->normalizeSiteHealthAuditLevel( $level );
+
+        if ( $level >= 2 && file_exists( ABSPATH . 'wp-admin/includes/admin.php' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/admin.php';
+        }
+
+        if ( ! function_exists( 'get_plugins' ) && file_exists( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+
+        if ( ! class_exists( 'WP_Site_Health' ) && file_exists( ABSPATH . 'wp-admin/includes/class-wp-site-health.php' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/class-wp-site-health.php';
+        }
+
+        if ( ! class_exists( 'WP_Debug_Data' ) && file_exists( ABSPATH . 'wp-admin/includes/class-wp-debug-data.php' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/class-wp-debug-data.php';
+        }
+
+        $theme          = wp_get_theme();
+        $uploads        = wp_upload_dir();
+        $all_plugins    = function_exists( 'get_plugins' ) ? get_plugins() : array();
+        $active_plugins = (array) get_option( 'active_plugins', array() );
+        $memory_limit   = defined( 'WP_MEMORY_LIMIT' ) ? WP_MEMORY_LIMIT : '';
+        $max_memory     = defined( 'WP_MAX_MEMORY_LIMIT' ) ? WP_MAX_MEMORY_LIMIT : '';
+
+        $site_profile = array(
+            'wordpress' => array(
+                'version'           => get_bloginfo( 'version' ),
+                'environment_type'  => function_exists( 'wp_get_environment_type' ) ? wp_get_environment_type() : 'production',
+                'site_url'          => get_site_url(),
+                'home_url'          => get_home_url(),
+                'is_multisite'      => is_multisite(),
+                'language'          => get_bloginfo( 'language' ),
+                'https'             => is_ssl(),
+            ),
+            'server' => array(
+                'php_version'       => phpversion(),
+                'server_software'   => isset( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : 'Unknown',
+                'database_version'  => method_exists( $wpdb, 'db_version' ) ? $wpdb->db_version() : '',
+                'database_charset'  => defined( 'DB_CHARSET' ) ? DB_CHARSET : '',
+                'table_prefix'      => $wpdb->prefix,
+            ),
+            'theme' => array(
+                'name'              => $theme->get( 'Name' ),
+                'version'           => $theme->get( 'Version' ),
+                'parent_theme'      => $theme->get( 'Template' ),
+            ),
+            'plugins' => array(
+                'active'            => count( $active_plugins ),
+                'inactive'          => max( 0, count( $all_plugins ) - count( $active_plugins ) ),
+                'total'             => count( $all_plugins ),
+            ),
+            'runtime' => array(
+                'wp_memory_limit'       => $memory_limit,
+                'wp_memory_limit_bytes' => function_exists( 'wp_convert_hr_to_bytes' ) ? wp_convert_hr_to_bytes( $memory_limit ) : null,
+                'wp_max_memory_limit'   => $max_memory,
+                'wp_max_memory_bytes'   => function_exists( 'wp_convert_hr_to_bytes' ) ? wp_convert_hr_to_bytes( $max_memory ) : null,
+                'object_cache'          => function_exists( 'wp_using_ext_object_cache' ) ? wp_using_ext_object_cache() : false,
+                'wp_cron_disabled'      => defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON,
+                'alternate_wp_cron'     => defined( 'ALTERNATE_WP_CRON' ) && ALTERNATE_WP_CRON,
+            ),
+            'debug' => array(
+                'wp_debug'          => defined( 'WP_DEBUG' ) && WP_DEBUG,
+                'wp_debug_log'      => defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG,
+                'wp_debug_display'  => defined( 'WP_DEBUG_DISPLAY' ) && WP_DEBUG_DISPLAY,
+                'script_debug'      => defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG,
+            ),
+            'paths' => array(
+                'content_dir'       => defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '',
+                'plugin_dir'        => defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : '',
+                'uploads_dir'       => is_array( $uploads ) && isset( $uploads['basedir'] ) ? $uploads['basedir'] : 'Unknown',
+            ),
+        );
+
+        if ( class_exists( 'WooCommerce' ) && function_exists( 'WC' ) && WC() ) {
+            $site_profile['woocommerce'] = array(
+                'version'          => WC()->version,
+                'database_version' => get_option( 'woocommerce_db_version' ),
+            );
+        }
+
+        $tests            = $this->collectSiteHealthTests( $level );
+        $analysis         = $this->buildSiteHealthAuditSummary( $tests );
+        $pending_updates  = $this->getSiteHealthUpdateSnapshot( $all_plugins );
+        $directory_sizes  = $level >= 2
+            ? $this->getSiteHealthDirectorySizes()
+            : array(
+                'skipped' => true,
+                'reason'  => 'Directory sizes are only included at level 2 (deep) to avoid slow scans.',
+            );
+
+        $tests_mode = 'selected direct tests';
+        if ( 1 === $level ) {
+            $tests_mode = 'all direct Site Health tests';
+        } elseif ( 2 === $level ) {
+            $tests_mode = 'all direct and async Site Health tests';
+        }
+
+        return array(
+            'audit_level'   => array(
+                'value'        => $level,
+                'label'        => $this->getSiteHealthAuditLevelLabel( $level ),
+                'tests_mode'   => $tests_mode,
+                'storage_scan' => $level >= 2,
+            ),
+            'summary'       => $analysis['summary'],
+            'site_profile'  => $site_profile,
+            'updates'       => $pending_updates,
+            'storage'       => $directory_sizes,
+            'audit'         => array(
+                'top_findings'               => $analysis['top_findings'],
+                'prioritized_recommendations'=> $analysis['prioritized_recommendations'],
+            ),
+            'health_checks' => array(
+                'counts'             => $analysis['counts'],
+                'counts_by_category' => $analysis['counts_by_category'],
+                'tests'              => $tests,
+            ),
+        );
+    }
+
+    /**
+     * Collect Site Health tests that can run directly in the current request.
+     *
+     * @param int $level Audit depth.
+     * @return array
+     */
+    private function collectSiteHealthTests( $level = 0 ) {
+        if ( ! class_exists( 'WP_Site_Health' ) || ! method_exists( 'WP_Site_Health', 'get_tests' ) ) {
+            return array();
+        }
+
+        $level = $this->normalizeSiteHealthAuditLevel( $level );
+
+        $site_health = method_exists( 'WP_Site_Health', 'get_instance' )
+            ? WP_Site_Health::get_instance()
+            : new WP_Site_Health();
+
+        $tests = WP_Site_Health::get_tests();
+        $basic_direct_tests = array(
+            'wordpress_version',
+            'plugin_version',
+            'theme_version',
+            'php_version',
+            'php_extensions',
+            'php_default_timezone',
+            'php_sessions',
+            'sql_server',
+            'utf8mb4_support',
+            'debug_enabled',
+            'file_uploads',
+            'plugin_theme_auto_updates',
+            'opcode_cache',
+        );
+
+        if (
+            function_exists( 'wp_get_environment_type' )
+            && 'development' === wp_get_environment_type()
+            && isset( $tests['async']['https_status'] )
+        ) {
+            unset( $tests['async']['https_status'] );
+        }
+
+        if ( 0 === $level ) {
+            $tests['direct'] = array_filter(
+                $tests['direct'],
+                function( $identifier ) use ( $basic_direct_tests ) {
+                    return in_array( $identifier, $basic_direct_tests, true );
+                },
+                ARRAY_FILTER_USE_KEY
+            );
+            $tests['async'] = array();
+        } elseif ( 1 === $level ) {
+            $tests['async'] = array();
+        }
+
+        $results = array();
+
+        foreach ( $tests['direct'] as $identifier => $test_definition ) {
+            $results[] = $this->normalizeSiteHealthTestResult(
+                $this->executeSiteHealthTest( $site_health, $test_definition, false ),
+                $identifier,
+                $test_definition['label'] ?? ''
+            );
+        }
+
+        foreach ( $tests['async'] as $identifier => $test_definition ) {
+            $results[] = $this->normalizeSiteHealthTestResult(
+                $this->executeSiteHealthTest( $site_health, $test_definition, true ),
+                $identifier,
+                $test_definition['label'] ?? ''
+            );
+        }
+
+        return $results;
+    }
+
+    /**
+     * Execute a Site Health test definition.
+     *
+     * @param WP_Site_Health $site_health     Site health instance.
+     * @param array          $test_definition Test definition.
+     * @param bool           $is_async        Whether this is an async test.
+     * @return array
+     */
+    private function executeSiteHealthTest( $site_health, $test_definition, $is_async = false ) {
+        try {
+            if ( $is_async ) {
+                if ( ! empty( $test_definition['async_direct_test'] ) && is_callable( $test_definition['async_direct_test'] ) ) {
+                    return call_user_func( $test_definition['async_direct_test'] );
+                }
+
+                if ( isset( $test_definition['test'] ) && is_callable( $test_definition['test'] ) ) {
+                    return call_user_func( $test_definition['test'] );
+                }
+            } else {
+                if ( isset( $test_definition['test'] ) && is_string( $test_definition['test'] ) ) {
+                    $test_function = sprintf( 'get_test_%s', $test_definition['test'] );
+
+                    if ( method_exists( $site_health, $test_function ) && is_callable( array( $site_health, $test_function ) ) ) {
+                        return call_user_func( array( $site_health, $test_function ) );
+                    }
+                }
+
+                if ( isset( $test_definition['test'] ) && is_callable( $test_definition['test'] ) ) {
+                    return call_user_func( $test_definition['test'] );
+                }
+            }
+        } catch ( Throwable $e ) {
+            return array(
+                'test'        => isset( $test_definition['test'] ) && is_string( $test_definition['test'] ) ? sanitize_key( $test_definition['test'] ) : 'unknown',
+                'label'       => isset( $test_definition['label'] ) ? $test_definition['label'] : 'Site Health test failed to execute',
+                'status'      => 'recommended',
+                'badge'       => array(
+                    'label' => 'System',
+                    'color' => 'gray',
+                ),
+                'description' => 'The test could not be executed directly in the current context: ' . $e->getMessage(),
+                'actions'     => '',
+            );
+        }
+
+        return array(
+            'test'        => isset( $test_definition['test'] ) && is_string( $test_definition['test'] ) ? sanitize_key( $test_definition['test'] ) : 'unknown',
+            'label'       => isset( $test_definition['label'] ) ? $test_definition['label'] : 'Site Health test not available',
+            'status'      => 'recommended',
+            'badge'       => array(
+                'label' => 'System',
+                'color' => 'gray',
+            ),
+            'description' => 'The test could not be executed directly in the current context.',
+            'actions'     => '',
+        );
+    }
+
+    /**
+     * Normalize a Site Health test result for MCP output.
+     *
+     * @param mixed  $result         Test result.
+     * @param string $identifier     Test identifier.
+     * @param string $fallback_label Fallback label.
+     * @return array
+     */
+    private function normalizeSiteHealthTestResult( $result, $identifier, $fallback_label ) {
+        if ( is_object( $result ) ) {
+            $result = (array) $result;
+        }
+
+        if ( ! is_array( $result ) ) {
+            $result = array();
+        }
+
+        $status = isset( $result['status'] ) && in_array( $result['status'], array( 'good', 'recommended', 'critical' ), true )
+            ? $result['status']
+            : 'recommended';
+
+        $badge = isset( $result['badge'] ) && is_array( $result['badge'] ) ? $result['badge'] : array();
+        $category = isset( $badge['label'] ) ? $this->normalizeSiteHealthText( $badge['label'] ) : 'General';
+
+        return array(
+            'id'          => sanitize_key( $identifier ),
+            'test'        => isset( $result['test'] ) ? sanitize_key( $result['test'] ) : sanitize_key( $identifier ),
+            'label'       => $this->normalizeSiteHealthText( $result['label'] ?? $fallback_label ),
+            'status'      => $status,
+            'category'    => $category,
+            'badge'       => array(
+                'label' => $category,
+                'color' => isset( $badge['color'] ) ? sanitize_key( $badge['color'] ) : 'gray',
+            ),
+            'description' => $this->normalizeSiteHealthText( $result['description'] ?? '' ),
+            'actions'     => $this->normalizeSiteHealthText( $result['actions'] ?? '' ),
+        );
+    }
+
+    /**
+     * Build an executive summary from Site Health tests.
+     *
+     * @param array $tests Normalized Site Health tests.
+     * @return array
+     */
+    private function buildSiteHealthAuditSummary( $tests ) {
+        $counts = array(
+            'total'       => 0,
+            'good'        => 0,
+            'recommended' => 0,
+            'critical'    => 0,
+            'skipped'     => 0,
+        );
+        $counts_by_category = array();
+        $findings = array();
+
+        foreach ( $tests as $test ) {
+            $status = isset( $test['status'] ) ? $test['status'] : 'recommended';
+            if ( ! isset( $counts[ $status ] ) ) {
+                $counts['skipped']++;
+                continue;
+            }
+
+            $counts['total']++;
+            $counts[ $status ]++;
+
+            $category = isset( $test['category'] ) && '' !== $test['category'] ? $test['category'] : 'General';
+            if ( ! isset( $counts_by_category[ $category ] ) ) {
+                $counts_by_category[ $category ] = array(
+                    'good'        => 0,
+                    'recommended' => 0,
+                    'critical'    => 0,
+                );
+            }
+
+            if ( isset( $counts_by_category[ $category ][ $status ] ) ) {
+                $counts_by_category[ $category ][ $status ]++;
+            }
+
+            if ( 'good' !== $status ) {
+                $findings[] = array(
+                    'status'      => $status,
+                    'category'    => $category,
+                    'test'        => $test['test'] ?? '',
+                    'label'       => $test['label'] ?? '',
+                    'description' => $test['description'] ?? '',
+                    'actions'     => $test['actions'] ?? '',
+                );
+            }
+        }
+
+        usort(
+            $findings,
+            function( $left, $right ) {
+                $priority = array(
+                    'critical'    => 0,
+                    'recommended' => 1,
+                    'good'        => 2,
+                );
+
+                $left_priority  = $priority[ $left['status'] ] ?? 9;
+                $right_priority = $priority[ $right['status'] ] ?? 9;
+
+                if ( $left_priority === $right_priority ) {
+                    return strcmp( $left['label'], $right['label'] );
+                }
+
+                return $left_priority - $right_priority;
+            }
+        );
+
+        $recommendations = array();
+        foreach ( $findings as $finding ) {
+            $action_text = ! empty( $finding['actions'] ) ? $finding['actions'] : $finding['description'];
+            if ( empty( $action_text ) ) {
+                $action_text = $finding['label'];
+            }
+
+            $recommendation_key = md5( strtolower( $finding['test'] . '|' . $action_text ) );
+            if ( isset( $recommendations[ $recommendation_key ] ) ) {
+                continue;
+            }
+
+            $recommendations[ $recommendation_key ] = array(
+                'status'   => $finding['status'],
+                'category' => $finding['category'],
+                'test'     => $finding['test'],
+                'label'    => $finding['label'],
+                'action'   => $action_text,
+            );
+        }
+
+        $score = max( 0, 100 - ( $counts['critical'] * 20 ) - ( $counts['recommended'] * 7 ) );
+        if ( 0 === $counts['total'] ) {
+            $score = 0;
+        }
+
+        $overall_status = 'good';
+        if ( $counts['critical'] > 0 ) {
+            $overall_status = 'critical';
+        } elseif ( $counts['recommended'] > 0 ) {
+            $overall_status = 'recommended';
+        }
+
+        return array(
+            'summary' => array(
+                'overall_status' => $overall_status,
+                'score'          => $score,
+                'tests_run'      => $counts['total'],
+                'good'           => $counts['good'],
+                'recommended'    => $counts['recommended'],
+                'critical'       => $counts['critical'],
+            ),
+            'counts'                    => $counts,
+            'counts_by_category'        => $counts_by_category,
+            'top_findings'              => array_slice( $findings, 0, 8 ),
+            'prioritized_recommendations' => array_values( array_slice( $recommendations, 0, 8, true ) ),
+        );
+    }
+
+    /**
+     * Get pending update information without forcing remote refreshes.
+     *
+     * @param array $all_plugins All installed plugins.
+     * @return array
+     */
+    private function getSiteHealthUpdateSnapshot( $all_plugins ) {
+        $snapshot = array(
+            'core'    => array(
+                'pending' => 0,
+                'items'   => array(),
+            ),
+            'plugins' => array(
+                'pending' => 0,
+                'items'   => array(),
+            ),
+            'themes'  => array(
+                'pending' => 0,
+                'items'   => array(),
+            ),
+        );
+
+        $core_updates = get_site_transient( 'update_core' );
+        if ( is_object( $core_updates ) && ! empty( $core_updates->updates ) && is_array( $core_updates->updates ) ) {
+            foreach ( $core_updates->updates as $update ) {
+                if ( ! is_object( $update ) ) {
+                    continue;
+                }
+
+                $response = isset( $update->response ) ? (string) $update->response : '';
+                if ( 'latest' === $response ) {
+                    continue;
+                }
+
+                $snapshot['core']['items'][] = array(
+                    'current_version' => get_bloginfo( 'version' ),
+                    'new_version'     => isset( $update->current ) ? sanitize_text_field( $update->current ) : '',
+                    'response'        => $response,
+                );
+            }
+        }
+        $snapshot['core']['pending'] = count( $snapshot['core']['items'] );
+
+        $plugin_updates = get_site_transient( 'update_plugins' );
+        if ( is_object( $plugin_updates ) && ! empty( $plugin_updates->response ) ) {
+            foreach ( (array) $plugin_updates->response as $plugin_file => $update ) {
+                if ( ! is_object( $update ) ) {
+                    continue;
+                }
+
+                $snapshot['plugins']['items'][] = array(
+                    'plugin'          => isset( $all_plugins[ $plugin_file ]['Name'] ) ? $all_plugins[ $plugin_file ]['Name'] : $plugin_file,
+                    'file'            => $plugin_file,
+                    'current_version' => isset( $all_plugins[ $plugin_file ]['Version'] ) ? $all_plugins[ $plugin_file ]['Version'] : '',
+                    'new_version'     => isset( $update->new_version ) ? sanitize_text_field( $update->new_version ) : '',
+                );
+            }
+        }
+        $snapshot['plugins']['pending'] = count( $snapshot['plugins']['items'] );
+
+        $theme_updates = get_site_transient( 'update_themes' );
+        $all_themes    = wp_get_themes();
+        if ( is_object( $theme_updates ) && ! empty( $theme_updates->response ) && is_array( $theme_updates->response ) ) {
+            foreach ( $theme_updates->response as $stylesheet => $update ) {
+                if ( ! is_array( $update ) ) {
+                    continue;
+                }
+
+                $theme = isset( $all_themes[ $stylesheet ] ) ? $all_themes[ $stylesheet ] : null;
+                $snapshot['themes']['items'][] = array(
+                    'theme'           => $theme ? $theme->get( 'Name' ) : $stylesheet,
+                    'stylesheet'      => $stylesheet,
+                    'current_version' => $theme ? $theme->get( 'Version' ) : '',
+                    'new_version'     => isset( $update['new_version'] ) ? sanitize_text_field( $update['new_version'] ) : '',
+                );
+            }
+        }
+        $snapshot['themes']['pending'] = count( $snapshot['themes']['items'] );
+
+        return $snapshot;
+    }
+
+    /**
+     * Get directory sizes from WordPress debug data.
+     *
+     * @return array
+     */
+    private function getSiteHealthDirectorySizes() {
+        if ( ! class_exists( 'WP_Debug_Data' ) || ! method_exists( 'WP_Debug_Data', 'get_sizes' ) ) {
+            return array();
+        }
+
+        try {
+            $sizes = WP_Debug_Data::get_sizes();
+        } catch ( Throwable $e ) {
+            return array(
+                'error' => $e->getMessage(),
+            );
+        }
+
+        if ( ! is_array( $sizes ) ) {
+            return array();
+        }
+
+        $formatted = array();
+        $total_raw = 0;
+
+        foreach ( $sizes as $name => $size_data ) {
+            if ( ! is_array( $size_data ) ) {
+                continue;
+            }
+
+            $raw_bytes = isset( $size_data['raw'] ) ? intval( $size_data['raw'] ) : 0;
+            if ( $raw_bytes > 0 ) {
+                $total_raw += $raw_bytes;
+            }
+
+            $formatted[ sanitize_key( $name ) ] = array(
+                'size'      => isset( $size_data['size'] ) ? sanitize_text_field( (string) $size_data['size'] ) : ( $raw_bytes > 0 ? size_format( $raw_bytes, 2 ) : '' ),
+                'raw_bytes' => $raw_bytes,
+            );
+        }
+
+        if ( $total_raw > 0 ) {
+            $formatted['total'] = array(
+                'size'      => size_format( $total_raw, 2 ),
+                'raw_bytes' => $total_raw,
+            );
+        }
+
+        return $formatted;
+    }
+
+    /**
+     * Strip HTML noise from Site Health text.
+     *
+     * @param mixed $text Raw Site Health text.
+     * @return string
+     */
+    private function normalizeSiteHealthText( $text ) {
+        if ( is_array( $text ) || is_object( $text ) ) {
+            $text = wp_json_encode( $text );
+        }
+
+        if ( ! is_string( $text ) || '' === $text ) {
+            return '';
+        }
+
+        $text = html_entity_decode( wp_strip_all_tags( $text, true ), ENT_QUOTES, get_bloginfo( 'charset' ) ?: 'UTF-8' );
+        $text = preg_replace( '/\s+/', ' ', $text );
+
+        return trim( (string) $text );
+    }
+
+    /**
+     * Normalize requested audit depth.
+     *
+     * @param mixed $level Requested level.
+     * @return int
+     */
+    private function normalizeSiteHealthAuditLevel( $level ) {
+        $level = intval( $level );
+
+        if ( $level < 0 ) {
+            return 0;
+        }
+
+        if ( $level > 2 ) {
+            return 2;
+        }
+
+        return $level;
+    }
+
+    /**
+     * Get human-readable audit level label.
+     *
+     * @param int $level Audit level.
+     * @return string
+     */
+    private function getSiteHealthAuditLevelLabel( $level ) {
+        $level = $this->normalizeSiteHealthAuditLevel( $level );
+
+        if ( 2 === $level ) {
+            return 'deep';
+        }
+
+        if ( 1 === $level ) {
+            return 'medium';
+        }
+
+        return 'basic';
     }
 
     /**
