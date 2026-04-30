@@ -538,9 +538,6 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('yoast_get_meta', 'Get Yoast SEO meta fields for a post (title, description, OG, Twitter). Requires Yoast SEO.', 'WordPress - SEO', 1),
 		array('yoast_set_meta', 'Set Yoast SEO meta fields for a post. Requires Yoast SEO.', 'WordPress - SEO', 1),
 		array('yoast_reindex', 'Clear Yoast SEO indexables cache for a post or site-wide. Requires Yoast SEO.', 'WordPress - SEO', 1),
-		// SEO - Unified (auto-detects Yoast / Rank Math / AIOSEO)
-		array('wp_get_seo_meta', 'Unified SEO meta read for a post. Auto-detects Yoast, Rank Math, or AIOSEO and returns normalized fields.', 'WordPress - SEO', 1),
-		array('wp_update_seo_meta', 'Unified SEO meta write for a post. Auto-detects Yoast, Rank Math, or AIOSEO.', 'WordPress - SEO', 1),
 		// ACF
 		array('acf_get_field_groups', 'List all ACF field groups with keys, titles and location rules. Requires ACF.', 'Plugins - ACF', 1),
 		array('acf_get_fields', 'Get ACF field values for a post. Requires ACF.', 'Plugins - ACF', 1),
@@ -762,7 +759,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.05.11' );
+	define( 'SFLMCP_DB_VERSION', '2026.05.12' );
 }
 
 /**
@@ -778,6 +775,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_remove_wp_delete_option();
 	stifli_flex_mcp_upgrade_323_seed_new_tools();
 	stifli_flex_mcp_upgrade_324_seed_plugin_settings_tool();
+	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
 }
 
@@ -809,7 +807,6 @@ function stifli_flex_mcp_upgrade_remove_wp_delete_option() {
  *
  * New tools:
  *  - wp_update_term, wp_get_term_meta, wp_update_term_meta, wp_delete_term_meta
- *  - wp_get_seo_meta, wp_update_seo_meta (unified Yoast/Rank Math/AIOSEO)
  *  - wp_reorder_menu_items
  */
 function stifli_flex_mcp_upgrade_323_seed_new_tools() {
@@ -835,8 +832,6 @@ function stifli_flex_mcp_upgrade_323_seed_new_tools() {
 		array( 'wp_update_term_meta', 'Update term meta.', 'WordPress - Taxonomies', 1 ),
 		array( 'wp_delete_term_meta', 'Delete term meta.', 'WordPress - Taxonomies', 1 ),
 		array( 'wp_reorder_menu_items', 'Reorder items in a navigation menu (batch update menu_order/parent).', 'WordPress - Menus', 1 ),
-		array( 'wp_get_seo_meta', 'Unified SEO meta read for a post. Auto-detects Yoast, Rank Math, or AIOSEO.', 'WordPress - SEO', 1 ),
-		array( 'wp_update_seo_meta', 'Unified SEO meta write for a post. Auto-detects Yoast, Rank Math, or AIOSEO.', 'WordPress - SEO', 1 ),
 	);
 
 	foreach ( $new_tools as $tool ) {
@@ -875,6 +870,29 @@ function stifli_flex_mcp_upgrade_323_seed_new_tools() {
 				);
 			}
 		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine: remove unified SEO tools from existing installs.
+ * Provider-specific SEO tools remain available.
+ */
+function stifli_flex_mcp_upgrade_remove_unified_seo_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_remove_unified_seo_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	$tool_names = array( 'wp_get_seo_meta', 'wp_update_seo_meta' );
+
+	foreach ( $tool_names as $tool_name ) {
+		$wpdb->delete( $tools_table, array( 'tool_name' => $tool_name ), array( '%s' ) );
+		$wpdb->delete( $profile_tools_table, array( 'tool_name' => $tool_name ), array( '%s' ) );
 	}
 
 	update_option( $flag, '1' );
@@ -1202,8 +1220,6 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_site_health',
 				// Utilities (1) — wp_generate_video excluded by default; enable in Multimedia Settings
 				'wp_generate_image',
-				// SEO unified (auto-detects Yoast/Rank Math/AIOSEO)
-				'wp_get_seo_meta', 'wp_update_seo_meta',
 				// Snippets (7) — requires WPCode or Code Snippets plugin
 				'snippet_list', 'snippet_get', 'snippet_create', 'snippet_update', 'snippet_delete', 'snippet_activate', 'snippet_deactivate',
 			),

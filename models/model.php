@@ -185,7 +185,6 @@ class StifliFlexMcpModel {
             'wp_create_term','wp_delete_term',
             'wp_update_term',
             'wp_update_term_meta','wp_delete_term_meta',
-            'wp_update_seo_meta',
             'wp_create_nav_menu','wp_add_nav_menu_item','wp_update_nav_menu_item','wp_delete_nav_menu_item','wp_delete_nav_menu',
             'wp_reorder_menu_items',
             'wp_create_page','wp_update_page','wp_delete_page',
@@ -1024,43 +1023,6 @@ class StifliFlexMcpModel {
                         'required' => array(),
                     ),
                 ),
-
-                // Unified SEO meta (auto-detects Yoast / Rank Math / AIOSEO)
-                'wp_get_seo_meta' => array(
-                    'name' => 'wp_get_seo_meta',
-                    'description' => 'Get SEO meta for a post in a unified format. Auto-detects Yoast SEO, Rank Math, or All in One SEO. Returns provider name plus normalized fields: title, description, focus_keyword, canonical, noindex, nofollow, facebook_title/description/image, twitter_title/description/image.',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'post_id' => array('type' => 'integer'),
-                        ),
-                        'required' => array('post_id'),
-                    ),
-                ),
-                'wp_update_seo_meta' => array(
-                    'name' => 'wp_update_seo_meta',
-                    'description' => 'Update SEO meta for a post in a unified format. Auto-detects Yoast SEO, Rank Math, or All in One SEO. Pass any subset of: title, description, focus_keyword, canonical, noindex (bool), nofollow (bool), facebook_title/description/image, twitter_title/description/image.',
-                    'inputSchema' => array(
-                        'type' => 'object',
-                        'properties' => array(
-                            'post_id'              => array('type' => 'integer'),
-                            'title'                => array('type' => 'string'),
-                            'description'          => array('type' => 'string'),
-                            'focus_keyword'        => array('type' => 'string'),
-                            'canonical'            => array('type' => 'string'),
-                            'noindex'              => array('type' => 'boolean'),
-                            'nofollow'             => array('type' => 'boolean'),
-                            'facebook_title'       => array('type' => 'string'),
-                            'facebook_description' => array('type' => 'string'),
-                            'facebook_image'       => array('type' => 'string'),
-                            'twitter_title'        => array('type' => 'string'),
-                            'twitter_description'  => array('type' => 'string'),
-                            'twitter_image'        => array('type' => 'string'),
-                        ),
-                        'required' => array('post_id'),
-                    ),
-                ),
-
                 // Advanced Custom Fields (ACF)
                 'acf_get_field_groups' => array(
                     'name' => 'acf_get_field_groups',
@@ -1941,9 +1903,6 @@ class StifliFlexMcpModel {
             'yoast_get_meta' => 'edit_posts',
             'yoast_set_meta' => 'edit_posts',
             'yoast_reindex' => 'manage_options',
-            // Unified SEO meta (auto-detects provider)
-            'wp_get_seo_meta' => 'edit_posts',
-            'wp_update_seo_meta' => 'edit_posts',
             // ACF
             'acf_get_field_groups' => 'edit_posts',
             'acf_get_fields' => 'edit_posts',
@@ -4560,35 +4519,6 @@ class StifliFlexMcpModel {
                 }
                 $addResultText( $r, 'Yoast SEO reindex triggered. Scope: ' . $ys_scope );
                 break;
-
-            // ── Unified SEO meta (auto-detects Yoast / Rank Math / AIOSEO) ───
-            case 'wp_get_seo_meta':
-                require_once dirname(__FILE__) . '/seo/seo.php';
-                $seo_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
-                $seo_data = StifliFlexMcp_Seo::getMeta( $seo_post_id );
-                if ( is_wp_error( $seo_data ) ) {
-                    $r['error'] = array( 'code' => $seo_data->get_error_code(), 'message' => $seo_data->get_error_message() );
-                    break;
-                }
-                $addResultText( $r, wp_json_encode( $seo_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
-                break;
-            case 'wp_update_seo_meta':
-                require_once dirname(__FILE__) . '/seo/seo.php';
-                $seo_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
-                $seo_input = $args;
-                unset( $seo_input['post_id'] );
-                $seo_updated = StifliFlexMcp_Seo::setMeta( $seo_post_id, $seo_input );
-                if ( is_wp_error( $seo_updated ) ) {
-                    $r['error'] = array( 'code' => $seo_updated->get_error_code(), 'message' => $seo_updated->get_error_message() );
-                    break;
-                }
-                $addResultText( $r, wp_json_encode( array(
-                    'post_id'        => $seo_post_id,
-                    'provider'       => StifliFlexMcp_Seo::detectProvider(),
-                    'updated_fields' => $seo_updated,
-                ), JSON_PRETTY_PRINT ) );
-                break;
-
             // ── ACF ───────────────────────────────────────────────────────────
             case 'acf_get_field_groups':
                 if ( ! function_exists( 'acf_get_field_groups' ) ) {

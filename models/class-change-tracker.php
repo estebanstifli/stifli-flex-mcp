@@ -88,8 +88,6 @@ class StifliFlexMcp_ChangeTracker {
 		// --- Post Meta ---
 		'wp_update_post_meta'       => array( 'update', 'post_meta', 'post_id' ),
 		'wp_delete_post_meta'       => array( 'delete', 'post_meta', 'post_id' ),
-		// --- SEO meta (unified) ---
-		'wp_update_seo_meta'        => array( 'update', 'post_meta', 'post_id' ),
 		// --- Revisions ---
 		'wp_restore_post_revision'  => array( 'update', 'post', 'revision_id' ),
 		// --- WooCommerce Products ---
