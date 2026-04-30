@@ -58,7 +58,10 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_delete_user_meta'       => array( 'delete', 'user_meta', 'user_id' ),
 		// --- Terms / Categories / Tags ---
 		'wp_create_term'            => array( 'create', 'term', null ),
+		'wp_update_term'            => array( 'update', 'term', 'term_id' ),
 		'wp_delete_term'            => array( 'delete', 'term', 'term_id' ),
+		'wp_update_term_meta'       => array( 'update', 'term_meta', 'term_id' ),
+		'wp_delete_term_meta'       => array( 'delete', 'term_meta', 'term_id' ),
 		'wp_create_category'        => array( 'create', 'category', null ),
 		'wp_update_category'        => array( 'update', 'category', 'term_id' ),
 		'wp_delete_category'        => array( 'delete', 'category', 'term_id' ),
@@ -78,12 +81,15 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_update_nav_menu_item'   => array( 'update', 'nav_menu_item', 'menu_item_id' ),
 		'wp_delete_nav_menu_item'   => array( 'delete', 'nav_menu_item', 'menu_item_id' ),
 		'wp_delete_nav_menu'        => array( 'delete', 'nav_menu', 'menu_id' ),
+		'wp_reorder_menu_items'     => array( 'update', 'nav_menu', 'menu_id' ),
 		// --- Options / Settings ---
 		'wp_update_option'          => array( 'update', 'option', 'option' ),
 		'wp_update_settings'        => array( 'update', 'option', null ),
 		// --- Post Meta ---
 		'wp_update_post_meta'       => array( 'update', 'post_meta', 'post_id' ),
 		'wp_delete_post_meta'       => array( 'delete', 'post_meta', 'post_id' ),
+		// --- SEO meta (unified) ---
+		'wp_update_seo_meta'        => array( 'update', 'post_meta', 'post_id' ),
 		// --- Revisions ---
 		'wp_restore_post_revision'  => array( 'update', 'post', 'revision_id' ),
 		// --- WooCommerce Products ---

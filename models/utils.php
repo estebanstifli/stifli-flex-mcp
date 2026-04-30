@@ -552,3 +552,65 @@ class StifliFlexMcpUtils {
 		return true;
 	}
 }
+
+if ( ! function_exists( 'sflmcp_redact_sensitive_value' ) ) {
+	/**
+	 * Recursively redact sensitive fields by key name.
+	 *
+	 * @param mixed  $value Value to inspect.
+	 * @param string $key   Optional context key.
+	 * @return mixed
+	 */
+	function sflmcp_redact_sensitive_value( $value, $key = '' ) {
+		$keywords = array(
+			'api_key', 'apikey', 'key', 'token', 'secret', 'password', 'passwd', 'pwd', 'salt',
+			'license', 'license_key', 'private_key', 'client_secret', 'consumer_secret',
+			'access_token', 'refresh_token', 'auth', 'bearer',
+		);
+
+		$key_is_sensitive = function ( $name ) use ( $keywords ) {
+			if ( ! is_string( $name ) || '' === $name ) {
+				return false;
+			}
+			$lower = strtolower( $name );
+			foreach ( $keywords as $needle ) {
+				if ( false !== strpos( $lower, $needle ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+
+		if ( $key_is_sensitive( (string) $key ) ) {
+			return '[REDACTED]';
+		}
+
+		if ( is_array( $value ) ) {
+			$out = array();
+			foreach ( $value as $child_key => $child_value ) {
+				$child_key_str = (string) $child_key;
+				if ( $key_is_sensitive( $child_key_str ) ) {
+					$out[ $child_key ] = '[REDACTED]';
+					continue;
+				}
+				$out[ $child_key ] = sflmcp_redact_sensitive_value( $child_value, $child_key_str );
+			}
+			return $out;
+		}
+
+		if ( is_object( $value ) ) {
+			$out = new stdClass();
+			foreach ( get_object_vars( $value ) as $child_key => $child_value ) {
+				$child_key_str = (string) $child_key;
+				if ( $key_is_sensitive( $child_key_str ) ) {
+					$out->{$child_key} = '[REDACTED]';
+					continue;
+				}
+				$out->{$child_key} = sflmcp_redact_sensitive_value( $child_value, $child_key_str );
+			}
+			return $out;
+		}
+
+		return $value;
+	}
+}

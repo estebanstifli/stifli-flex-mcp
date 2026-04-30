@@ -1,20 +1,20 @@
-=== StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server === 
+=== StifLi Flex MCP - MCP Server for WordPress with Undo === 
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.2.2
+Stable tag: 3.2.4
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI Copilot for the WordPress editor, AI Chat Agent for full site management & MCP server for external AI clients. OpenAI, Claude & Gemini.
+The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent. OpenAI, Claude & Gemini.
 
 == Description ==
 
-**StifLi Flex MCP** brings the power of AI directly into your WordPress workflow. Write faster, edit smarter, and manage your entire site through natural conversation — without leaving the editor.
+**StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect AI clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
 
 Three powerful tools in one plugin:
 
@@ -409,6 +409,23 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.4 =
+* New: Added `wp_get_plugin_settings` to inspect plugin-related `wp_options` by `plugin_slug`/prefixes with prepared SQL + limit controls and strict recursive redaction of secrets/tokens/passwords.
+* New: Unified `wp_get_seo_meta` and `wp_update_seo_meta` tools that auto-detect Yoast SEO, Rank Math or All in One SEO and expose normalized fields (title, description, focus_keyword, canonical, noindex, nofollow, OG/Twitter title/description/image).
+* New: Generalized term tools - added `wp_update_term` and extended `wp_create_term`/`wp_delete_term` with optional slug/parent/description plus per-taxonomy capability checks (existing `wp_*_category` and `wp_*_tag` tools kept as aliases).
+* New: Term meta tools `wp_get_term_meta` (with secret redaction), `wp_update_term_meta`, `wp_delete_term_meta`.
+* New: `wp_reorder_menu_items` tool to batch-update `menu_order`/`parent` for navigation menu items in one call (with one-click rollback).
+* Security: `wp_create_post`/`wp_update_post` now validate `post_type` exists and is public/show_ui, enforce post-type-aware capabilities, and require `edit_others_posts` cap when assigning a different `post_author`.
+* Infrastructure: New DB migration seeds the new tools into existing installs and attaches them to the "WordPress Full Management" profile.
+
+= 3.2.3 =
+* New: Unified `wp_get_seo_meta` and `wp_update_seo_meta` tools that auto-detect Yoast SEO, Rank Math or All in One SEO and expose normalized fields (title, description, focus_keyword, canonical, noindex, nofollow, OG/Twitter title/description/image).
+* New: Generalized term tools — added `wp_update_term` and extended `wp_create_term`/`wp_delete_term` with optional slug/parent/description plus per-taxonomy capability checks (existing `wp_*_category` and `wp_*_tag` tools kept as aliases).
+* New: Term meta tools `wp_get_term_meta` (with secret redaction), `wp_update_term_meta`, `wp_delete_term_meta`.
+* New: `wp_reorder_menu_items` tool to batch-update `menu_order`/`parent` for navigation menu items in one call (with one-click rollback).
+* Security: `wp_create_post`/`wp_update_post` now validate `post_type` exists and is public/show_ui, enforce post-type-aware capabilities, and require `edit_others_posts` cap when assigning a different `post_author`.
+* Infrastructure: New DB migration seeds the new tools into existing installs and attaches them to the "WordPress Full Management" profile.
+
 = 3.2.2 =
 * Security: Added centralized recursive secret redaction for MCP outputs.
 * Security: Applied redaction to sensitive reads (`wp_get_option`, `wp_get_settings`, `wp_get_post_meta`, `wp_get_user_meta`) and masked email/IP fields in `wp_get_comments`.

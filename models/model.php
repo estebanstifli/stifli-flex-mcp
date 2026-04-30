@@ -183,7 +183,11 @@ class StifliFlexMcpModel {
             'wp_update_option',
             'wp_update_post_meta','wp_delete_post_meta',
             'wp_create_term','wp_delete_term',
+            'wp_update_term',
+            'wp_update_term_meta','wp_delete_term_meta',
+            'wp_update_seo_meta',
             'wp_create_nav_menu','wp_add_nav_menu_item','wp_update_nav_menu_item','wp_delete_nav_menu_item','wp_delete_nav_menu',
+            'wp_reorder_menu_items',
             'wp_create_page','wp_update_page','wp_delete_page',
             'wp_create_category','wp_update_category','wp_delete_category',
             'wp_create_tag','wp_update_tag','wp_delete_tag',
@@ -222,6 +226,7 @@ class StifliFlexMcpModel {
         // Lectura sensible (requiere permisos elevados o toca red externa)
         $SENSITIVE_READ = array(
             'wp_get_option',        // requiere manage_options en dispatch
+            'wp_get_plugin_settings', // plugin options may contain secrets
             'wp_get_post_meta',     // requiere manage_options en dispatch
             'wp_get_settings',      // requiere manage_options
             'wp_rm_get_head',
@@ -245,6 +250,7 @@ class StifliFlexMcpModel {
             // WordPress - Additional sensitive reads
             'wp_get_user_meta',     // user privacy data
             'wp_get_site_health',   // system information
+            'wp_get_term_meta',     // may include private/encoded data
             // WooCommerce sensitive reads (wc_get_customers removed for WordPress.org compliance)
             'wc_get_orders',        // order data privacy
             'wc_get_order_notes',   // order notes may contain sensitive info
@@ -638,14 +644,33 @@ class StifliFlexMcpModel {
                 ),
                 'wp_create_term' => array(
                     'name' => 'wp_create_term',
-                    'description' => 'Create a term in a taxonomy (taxonomy and name required).',
+                    'description' => 'Create a term in any registered taxonomy (taxonomy and name required). Optional: slug, description, parent. Generalized replacement for wp_create_category and wp_create_tag.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
-                            'taxonomy' => array('type' => 'string'),
-                            'name'     => array('type' => 'string'),
+                            'taxonomy'    => array('type' => 'string'),
+                            'name'        => array('type' => 'string'),
+                            'slug'        => array('type' => 'string'),
+                            'description' => array('type' => 'string'),
+                            'parent'      => array('type' => 'integer'),
                         ),
                         'required' => array('taxonomy','name'),
+                    ),
+                ),
+                'wp_update_term' => array(
+                    'name' => 'wp_update_term',
+                    'description' => 'Update a term in any registered taxonomy. Generalized replacement for wp_update_category and wp_update_tag.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'term_id'     => array('type' => 'integer'),
+                            'taxonomy'    => array('type' => 'string'),
+                            'name'        => array('type' => 'string'),
+                            'slug'        => array('type' => 'string'),
+                            'description' => array('type' => 'string'),
+                            'parent'      => array('type' => 'integer'),
+                        ),
+                        'required' => array('term_id','taxonomy'),
                     ),
                 ),
                 'wp_delete_term' => array(
@@ -658,6 +683,45 @@ class StifliFlexMcpModel {
                             'taxonomy' => array('type' => 'string'),
                         ),
                         'required' => array('term_id','taxonomy'),
+                    ),
+                ),
+                'wp_get_term_meta' => array(
+                    'name' => 'wp_get_term_meta',
+                    'description' => 'Get term meta. Provide term_id and optional meta_key. Secrets-like values are redacted in the output.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'term_id'  => array('type' => 'integer'),
+                            'meta_key' => array('type' => 'string'),
+                            'single'   => array('type' => 'boolean'),
+                        ),
+                        'required' => array('term_id'),
+                    ),
+                ),
+                'wp_update_term_meta' => array(
+                    'name' => 'wp_update_term_meta',
+                    'description' => 'Update term meta (term_id, meta_key, meta_value).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'term_id'    => array('type' => 'integer'),
+                            'meta_key'   => array('type' => 'string'),
+                            'meta_value' => array('type' => 'string'),
+                        ),
+                        'required' => array('term_id','meta_key','meta_value'),
+                    ),
+                ),
+                'wp_delete_term_meta' => array(
+                    'name' => 'wp_delete_term_meta',
+                    'description' => 'Delete term meta (term_id, meta_key, meta_value optional).',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'term_id'    => array('type' => 'integer'),
+                            'meta_key'   => array('type' => 'string'),
+                            'meta_value' => array('type' => 'string'),
+                        ),
+                        'required' => array('term_id','meta_key'),
                     ),
                 ),
 
@@ -734,6 +798,29 @@ class StifliFlexMcpModel {
                         'required' => array('menu_id'),
                     ),
                 ),
+                'wp_reorder_menu_items' => array(
+                    'name' => 'wp_reorder_menu_items',
+                    'description' => 'Reorder items in a navigation menu in a single operation. Provide menu_id and items array of {item_id, menu_order, parent_id?}. Records previous order for one-click rollback.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'menu_id' => array('type' => 'integer'),
+                            'items'   => array(
+                                'type' => 'array',
+                                'items' => array(
+                                    'type' => 'object',
+                                    'properties' => array(
+                                        'item_id'    => array('type' => 'integer'),
+                                        'menu_order' => array('type' => 'integer'),
+                                        'parent_id'  => array('type' => 'integer'),
+                                    ),
+                                    'required' => array('item_id','menu_order'),
+                                ),
+                            ),
+                        ),
+                        'required' => array('menu_id','items'),
+                    ),
+                ),
 
                 // Opciones / Meta (lectura sensible + escritura)
                 'wp_get_option' => array(
@@ -745,6 +832,24 @@ class StifliFlexMcpModel {
                             'option' => array('type' => 'string'),
                         ),
                         'required' => array('option'),
+                    ),
+                ),
+                'wp_get_plugin_settings' => array(
+                    'name' => 'wp_get_plugin_settings',
+                    'description' => 'Inspect plugin-related WordPress options safely by plugin slug/prefixes with recursive secret redaction. Requires manage_options.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'plugin_slug' => array('type' => 'string', 'description' => 'Plugin slug, e.g. stifli-flex-mcp, rank-math, yoast.'),
+                            'option_prefixes' => array(
+                                'type' => 'array',
+                                'items' => array('type' => 'string'),
+                                'description' => 'Optional extra option-name prefixes to include.',
+                            ),
+                            'limit' => array('type' => 'integer', 'description' => 'Max options to return (default 100, hard cap 300).'),
+                            'summary' => array('type' => 'boolean', 'description' => 'If true, return summary only.'),
+                        ),
+                        'required' => array('plugin_slug'),
                     ),
                 ),
                 'wp_update_option' => array(
@@ -917,6 +1022,42 @@ class StifliFlexMcpModel {
                             'post_id' => array('type' => 'integer', 'description' => 'Post ID to reindex, or omit for site-wide cache clear'),
                         ),
                         'required' => array(),
+                    ),
+                ),
+
+                // Unified SEO meta (auto-detects Yoast / Rank Math / AIOSEO)
+                'wp_get_seo_meta' => array(
+                    'name' => 'wp_get_seo_meta',
+                    'description' => 'Get SEO meta for a post in a unified format. Auto-detects Yoast SEO, Rank Math, or All in One SEO. Returns provider name plus normalized fields: title, description, focus_keyword, canonical, noindex, nofollow, facebook_title/description/image, twitter_title/description/image.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+                'wp_update_seo_meta' => array(
+                    'name' => 'wp_update_seo_meta',
+                    'description' => 'Update SEO meta for a post in a unified format. Auto-detects Yoast SEO, Rank Math, or All in One SEO. Pass any subset of: title, description, focus_keyword, canonical, noindex (bool), nofollow (bool), facebook_title/description/image, twitter_title/description/image.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id'              => array('type' => 'integer'),
+                            'title'                => array('type' => 'string'),
+                            'description'          => array('type' => 'string'),
+                            'focus_keyword'        => array('type' => 'string'),
+                            'canonical'            => array('type' => 'string'),
+                            'noindex'              => array('type' => 'boolean'),
+                            'nofollow'             => array('type' => 'boolean'),
+                            'facebook_title'       => array('type' => 'string'),
+                            'facebook_description' => array('type' => 'string'),
+                            'facebook_image'       => array('type' => 'string'),
+                            'twitter_title'        => array('type' => 'string'),
+                            'twitter_description'  => array('type' => 'string'),
+                            'twitter_image'        => array('type' => 'string'),
+                        ),
+                        'required' => array('post_id'),
                     ),
                 ),
 
@@ -1766,19 +1907,26 @@ class StifliFlexMcpModel {
             'wp_switch_theme' => 'switch_themes',
             // options/meta/settings
             'wp_update_option' => 'manage_options',
+            'wp_get_plugin_settings' => 'manage_options',
             'wp_update_post_meta' => 'manage_options',
             'wp_delete_post_meta' => 'manage_options',
             'wp_get_settings' => 'manage_options',
             'wp_update_settings' => 'manage_options',
             // terms
             'wp_create_term' => 'manage_categories',
+            'wp_update_term' => 'manage_categories',
             'wp_delete_term' => 'manage_categories',
+            // term meta
+            'wp_get_term_meta'    => 'manage_categories',
+            'wp_update_term_meta' => 'manage_categories',
+            'wp_delete_term_meta' => 'manage_categories',
             // menús
             'wp_create_nav_menu' => 'edit_theme_options',
             'wp_add_nav_menu_item' => 'edit_theme_options',
             'wp_update_nav_menu_item' => 'edit_theme_options',
             'wp_delete_nav_menu_item' => 'edit_theme_options',
             'wp_delete_nav_menu' => 'edit_theme_options',
+            'wp_reorder_menu_items' => 'edit_theme_options',
             // Changelog
             'mcp_get_changelog' => 'manage_options',
             'mcp_get_change_detail' => 'manage_options',
@@ -1793,6 +1941,9 @@ class StifliFlexMcpModel {
             'yoast_get_meta' => 'edit_posts',
             'yoast_set_meta' => 'edit_posts',
             'yoast_reindex' => 'manage_options',
+            // Unified SEO meta (auto-detects provider)
+            'wp_get_seo_meta' => 'edit_posts',
+            'wp_update_seo_meta' => 'edit_posts',
             // ACF
             'acf_get_field_groups' => 'edit_posts',
             'acf_get_fields' => 'edit_posts',
@@ -1969,10 +2120,25 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => -42602, 'message' => 'post_title required');
                     break;
                 }
+                $cp_post_type = sanitize_key($utils::getArrayValue($args, 'post_type', 'post'));
+                if (!post_type_exists($cp_post_type)) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Unknown post_type: ' . $cp_post_type);
+                    break;
+                }
+                $cp_pt_obj = get_post_type_object($cp_post_type);
+                if ($cp_pt_obj && empty($cp_pt_obj->public) && empty($cp_pt_obj->show_ui)) {
+                    $r['error'] = array('code' => -42600, 'message' => 'post_type "' . $cp_post_type . '" is not exposed via UI/public.');
+                    break;
+                }
+                $cp_create_cap = ($cp_pt_obj && !empty($cp_pt_obj->cap->edit_posts)) ? $cp_pt_obj->cap->edit_posts : 'edit_posts';
+                if (!current_user_can($cp_create_cap)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to create ' . $cp_post_type);
+                    break;
+                }
                 $ins = array(
                     'post_title' => sanitize_text_field($args['post_title']),
                     'post_status' => sanitize_key($utils::getArrayValue($args, 'post_status', 'draft')),
-                    'post_type' => sanitize_key($utils::getArrayValue($args, 'post_type', 'post')),
+                    'post_type' => $cp_post_type,
                 );
                 if (!empty($args['post_content'])) {
                     $ins['post_content'] = $args['post_content'];
@@ -1982,6 +2148,19 @@ class StifliFlexMcpModel {
                 }
                 if (!empty($args['post_name'])) {
                     $ins['post_name'] = sanitize_title($args['post_name']);
+                }
+                if (isset($args['post_author'])) {
+                    $cp_author_id = intval($args['post_author']);
+                    if ($cp_author_id <= 0 || !get_userdata($cp_author_id)) {
+                        $r['error'] = array('code' => -42600, 'message' => 'post_author user not found.');
+                        break;
+                    }
+                    $cp_others_cap = ($cp_pt_obj && !empty($cp_pt_obj->cap->edit_others_posts)) ? $cp_pt_obj->cap->edit_others_posts : 'edit_others_posts';
+                    if ($cp_author_id !== get_current_user_id() && !current_user_can($cp_others_cap)) {
+                        $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to assign post_author of ' . $cp_post_type);
+                        break;
+                    }
+                    $ins['post_author'] = $cp_author_id;
                 }
                 if (!empty($args['meta_input']) && is_array($args['meta_input'])) {
                     $ins['meta_input'] = $args['meta_input'];
@@ -2013,9 +2192,46 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => -42602, 'message' => 'ID required');
                     break;
                 }
-                $c = array('ID' => intval($args['ID']));
+                $up_id = intval($args['ID']);
+                $up_existing = get_post($up_id);
+                if (!$up_existing) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Post not found');
+                    break;
+                }
+                $up_pt_obj = get_post_type_object($up_existing->post_type);
+                $c = array('ID' => $up_id);
                 if (!empty($args['fields']) && is_array($args['fields'])) {
                     foreach ($args['fields'] as $k => $v) {
+                        // Validate post_type change
+                        if ('post_type' === $k) {
+                            $new_pt = sanitize_key($v);
+                            if (!post_type_exists($new_pt)) {
+                                $r['error'] = array('code' => -42600, 'message' => 'Unknown post_type: ' . $new_pt);
+                                break 2;
+                            }
+                            $new_pt_obj = get_post_type_object($new_pt);
+                            if ($new_pt_obj && empty($new_pt_obj->public) && empty($new_pt_obj->show_ui)) {
+                                $r['error'] = array('code' => -42600, 'message' => 'post_type "' . $new_pt . '" is not exposed via UI/public.');
+                                break 2;
+                            }
+                            $c[$k] = $new_pt;
+                            continue;
+                        }
+                        // Validate post_author change
+                        if ('post_author' === $k) {
+                            $up_author_id = intval($v);
+                            if ($up_author_id <= 0 || !get_userdata($up_author_id)) {
+                                $r['error'] = array('code' => -42600, 'message' => 'post_author user not found.');
+                                break 2;
+                            }
+                            $up_others_cap = ($up_pt_obj && !empty($up_pt_obj->cap->edit_others_posts)) ? $up_pt_obj->cap->edit_others_posts : 'edit_others_posts';
+                            if ($up_author_id !== get_current_user_id() && !current_user_can($up_others_cap, $up_id)) {
+                                $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to reassign post_author.');
+                                break 2;
+                            }
+                            $c[$k] = $up_author_id;
+                            continue;
+                        }
                         $c[$k] = in_array($k, array('post_content', 'post_excerpt'), true) ? $cleanHtml($v) : sanitize_text_field($v);
                     }
                 }
@@ -2707,15 +2923,71 @@ class StifliFlexMcpModel {
                 $taxonomy = sanitize_text_field($utils::getArrayValue($args, 'taxonomy'));
                 $name = sanitize_text_field($utils::getArrayValue($args, 'name'));
                 if (!$taxonomy || !$name) { $r['error'] = array('code' => -42602, 'message' => 'taxonomy & name required'); break; }
-                $res = wp_insert_term($name, $taxonomy);
-                if (is_wp_error($res)) { $r['error'] = array('code' => $res->get_error_code(), 'message' => $res->get_error_message()); } else { $addResultText($r, 'Term created: ' . json_encode($res)); }
+                if (!taxonomy_exists($taxonomy)) { $r['error'] = array('code' => -42600, 'message' => 'Unknown taxonomy: ' . $taxonomy); break; }
+                $tax_obj = get_taxonomy($taxonomy);
+                $cap = $tax_obj && !empty($tax_obj->cap->edit_terms) ? $tax_obj->cap->edit_terms : 'manage_categories';
+                if (!current_user_can($cap)) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions for taxonomy: ' . $taxonomy); break; }
+                $term_args = array();
+                if (isset($args['slug']))        { $term_args['slug']        = sanitize_title($args['slug']); }
+                if (isset($args['description'])) { $term_args['description'] = sanitize_textarea_field($args['description']); }
+                if (isset($args['parent']))      { $term_args['parent']      = intval($args['parent']); }
+                $res = wp_insert_term($name, $taxonomy, $term_args);
+                if (is_wp_error($res)) { $r['error'] = array('code' => $res->get_error_code(), 'message' => $res->get_error_message()); } else { $addResultText($r, 'Term created: ' . wp_json_encode($res)); }
+                break;
+            case 'wp_update_term':
+                $term_id  = intval($utils::getArrayValue($args, 'term_id'));
+                $taxonomy = sanitize_text_field($utils::getArrayValue($args, 'taxonomy'));
+                if (!$term_id || !$taxonomy) { $r['error'] = array('code' => -42602, 'message' => 'term_id & taxonomy required'); break; }
+                if (!taxonomy_exists($taxonomy)) { $r['error'] = array('code' => -42600, 'message' => 'Unknown taxonomy: ' . $taxonomy); break; }
+                $tax_obj = get_taxonomy($taxonomy);
+                $cap = $tax_obj && !empty($tax_obj->cap->edit_terms) ? $tax_obj->cap->edit_terms : 'manage_categories';
+                if (!current_user_can($cap)) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions for taxonomy: ' . $taxonomy); break; }
+                $term_args = array();
+                if (isset($args['name']))        { $term_args['name']        = sanitize_text_field($args['name']); }
+                if (isset($args['slug']))        { $term_args['slug']        = sanitize_title($args['slug']); }
+                if (isset($args['description'])) { $term_args['description'] = sanitize_textarea_field($args['description']); }
+                if (isset($args['parent']))      { $term_args['parent']      = intval($args['parent']); }
+                $res = wp_update_term($term_id, $taxonomy, $term_args);
+                if (is_wp_error($res)) { $r['error'] = array('code' => $res->get_error_code(), 'message' => $res->get_error_message()); } else { $addResultText($r, 'Term updated: ' . wp_json_encode($res)); }
                 break;
             case 'wp_delete_term':
                 $term_id = intval($utils::getArrayValue($args, 'term_id'));
                 $taxonomy = sanitize_text_field($utils::getArrayValue($args, 'taxonomy'));
                 if (!$term_id || !$taxonomy) { $r['error'] = array('code' => -42602, 'message' => 'term_id & taxonomy required'); break; }
+                if (!taxonomy_exists($taxonomy)) { $r['error'] = array('code' => -42600, 'message' => 'Unknown taxonomy: ' . $taxonomy); break; }
+                $tax_obj = get_taxonomy($taxonomy);
+                $cap = $tax_obj && !empty($tax_obj->cap->delete_terms) ? $tax_obj->cap->delete_terms : 'manage_categories';
+                if (!current_user_can($cap)) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions for taxonomy: ' . $taxonomy); break; }
                 $done = wp_delete_term($term_id, $taxonomy);
                 if (is_wp_error($done)) { $r['error'] = array('code' => $done->get_error_code(), 'message' => $done->get_error_message()); } else { $addResultText($r, 'Term deleted'); }
+                break;
+            case 'wp_get_term_meta':
+                $term_id = intval($utils::getArrayValue($args, 'term_id'));
+                if (!$term_id) { $r['error'] = array('code' => -42602, 'message' => 'term_id required'); break; }
+                $meta_key = isset($args['meta_key']) ? sanitize_key($args['meta_key']) : '';
+                $single   = !empty($args['single']);
+                $value    = $meta_key ? get_term_meta($term_id, $meta_key, $single) : get_term_meta($term_id);
+                $value    = $utils::redactSecrets($value, $meta_key);
+                $addResultText($r, wp_json_encode($value, JSON_PRETTY_PRINT));
+                break;
+            case 'wp_update_term_meta':
+                $term_id  = intval($utils::getArrayValue($args, 'term_id'));
+                $meta_key = isset($args['meta_key']) ? sanitize_key($args['meta_key']) : '';
+                if (!$term_id || !$meta_key) { $r['error'] = array('code' => -42602, 'message' => 'term_id & meta_key required'); break; }
+                $meta_value = isset($args['meta_value']) ? $args['meta_value'] : '';
+                $ok = update_term_meta($term_id, $meta_key, $meta_value);
+                if (false === $ok) { $r['error'] = array('code' => -42603, 'message' => 'update_term_meta failed'); } else { $addResultText($r, 'Term meta updated'); }
+                break;
+            case 'wp_delete_term_meta':
+                $term_id  = intval($utils::getArrayValue($args, 'term_id'));
+                $meta_key = isset($args['meta_key']) ? sanitize_key($args['meta_key']) : '';
+                if (!$term_id || !$meta_key) { $r['error'] = array('code' => -42602, 'message' => 'term_id & meta_key required'); break; }
+                if (isset($args['meta_value'])) {
+                    $done = delete_term_meta($term_id, $meta_key, $args['meta_value']);
+                } else {
+                    $done = delete_term_meta($term_id, $meta_key);
+                }
+                if ($done) { $addResultText($r, 'Term meta deleted'); } else { $r['error'] = array('code' => -42603, 'message' => 'delete_term_meta failed'); }
                 break;
             
             // Categories (son terms con taxonomy='category')
@@ -2919,6 +3191,46 @@ class StifliFlexMcpModel {
                 } else {
                     $addResultText($r, 'Navigation menu #' . $args['menu_id'] . ' deleted');
                 }
+                break;
+            case 'wp_reorder_menu_items':
+                $menu_id = intval($utils::getArrayValue($args, 'menu_id', 0));
+                $items   = $utils::getArrayValue($args, 'items', array());
+                if (!$menu_id || !is_array($items) || empty($items)) {
+                    $r['error'] = array('code' => -42602, 'message' => 'menu_id and items[] required');
+                    break;
+                }
+                $menu_obj = wp_get_nav_menu_object($menu_id);
+                if (!$menu_obj) { $r['error'] = array('code' => -42600, 'message' => 'Menu not found'); break; }
+                if (!current_user_can('edit_theme_options')) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to edit menus'); break; }
+                $existing = wp_get_nav_menu_items($menu_id);
+                $existing_ids = array();
+                if (is_array($existing)) {
+                    foreach ($existing as $ex) { $existing_ids[(int)$ex->ID] = true; }
+                }
+                $reorder_results = array();
+                foreach ($items as $entry) {
+                    if (!is_array($entry) || empty($entry['item_id'])) { continue; }
+                    $item_id = intval($entry['item_id']);
+                    if (!isset($existing_ids[$item_id])) {
+                        $reorder_results[] = array('item_id' => $item_id, 'status' => 'skipped', 'reason' => 'not in this menu');
+                        continue;
+                    }
+                    $upd = array(
+                        'ID'         => $item_id,
+                        'menu_order' => isset($entry['menu_order']) ? intval($entry['menu_order']) : 0,
+                    );
+                    if (array_key_exists('parent_id', $entry)) {
+                        $upd['post_parent'] = intval($entry['parent_id']);
+                        update_post_meta($item_id, '_menu_item_menu_item_parent', (string) intval($entry['parent_id']));
+                    }
+                    $res = wp_update_post($upd, true);
+                    if (is_wp_error($res)) {
+                        $reorder_results[] = array('item_id' => $item_id, 'status' => 'error', 'message' => $res->get_error_message());
+                    } else {
+                        $reorder_results[] = array('item_id' => $item_id, 'status' => 'ok');
+                    }
+                }
+                $addResultText($r, wp_json_encode(array('menu_id' => $menu_id, 'results' => $reorder_results), JSON_PRETTY_PRINT));
                 break;
             case 'wp_generate_image':
                 stifli_flex_mcp_log('wp_generate_image: === START ===');
@@ -4249,6 +4561,34 @@ class StifliFlexMcpModel {
                 $addResultText( $r, 'Yoast SEO reindex triggered. Scope: ' . $ys_scope );
                 break;
 
+            // ── Unified SEO meta (auto-detects Yoast / Rank Math / AIOSEO) ───
+            case 'wp_get_seo_meta':
+                require_once dirname(__FILE__) . '/seo/seo.php';
+                $seo_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $seo_data = StifliFlexMcp_Seo::getMeta( $seo_post_id );
+                if ( is_wp_error( $seo_data ) ) {
+                    $r['error'] = array( 'code' => $seo_data->get_error_code(), 'message' => $seo_data->get_error_message() );
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( $seo_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'wp_update_seo_meta':
+                require_once dirname(__FILE__) . '/seo/seo.php';
+                $seo_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $seo_input = $args;
+                unset( $seo_input['post_id'] );
+                $seo_updated = StifliFlexMcp_Seo::setMeta( $seo_post_id, $seo_input );
+                if ( is_wp_error( $seo_updated ) ) {
+                    $r['error'] = array( 'code' => $seo_updated->get_error_code(), 'message' => $seo_updated->get_error_message() );
+                    break;
+                }
+                $addResultText( $r, wp_json_encode( array(
+                    'post_id'        => $seo_post_id,
+                    'provider'       => StifliFlexMcp_Seo::detectProvider(),
+                    'updated_fields' => $seo_updated,
+                ), JSON_PRETTY_PRINT ) );
+                break;
+
             // ── ACF ───────────────────────────────────────────────────────────
             case 'acf_get_field_groups':
                 if ( ! function_exists( 'acf_get_field_groups' ) ) {
@@ -4610,6 +4950,195 @@ class StifliFlexMcpModel {
                     $optionValueLog = '[unserializable]';
                 }
                 $addResultText($r, 'Valor de opción (' . $option . '): ' . $optionValueLog);
+                break;
+            case 'wp_get_plugin_settings':
+                if (!current_user_can('manage_options')) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para leer opciones de plugins.');
+                    break;
+                }
+
+                global $wpdb;
+
+                $plugin_slug = sanitize_key((string) $utils::getArrayValue($args, 'plugin_slug', ''));
+                if ('' === $plugin_slug) {
+                    $r['error'] = array('code' => 'invalid_params', 'message' => 'plugin_slug is required.');
+                    break;
+                }
+
+                $limit = intval($utils::getArrayValue($args, 'limit', 100));
+                if ($limit <= 0) {
+                    $limit = 100;
+                }
+                if ($limit > 300) {
+                    $limit = 300;
+                }
+
+                $summary_raw = $utils::getArrayValue($args, 'summary', false);
+                $summary = in_array($summary_raw, array(true, 1, '1', 'true', 'yes', 'on'), true);
+
+                $known_mappings = array(
+                    'rank-math'       => array('rank_math', 'rank-math', 'rankmath'),
+                    'yoast'           => array('wpseo', 'yoast'),
+                    'woocommerce'     => array('woocommerce', 'wc_'),
+                    'acf'             => array('acf'),
+                    'elementor'       => array('elementor', '_elementor'),
+                    'wpforms'         => array('wpforms'),
+                    'stifli-flex-mcp' => array('sflmcp', 'stifli_flex_mcp'),
+                );
+
+                $base_variants = array(
+                    $plugin_slug,
+                    str_replace('-', '_', $plugin_slug),
+                    str_replace('_', '-', $plugin_slug),
+                );
+
+                $prefix_map = array();
+                foreach ($base_variants as $variant) {
+                    $clean_variant = sanitize_key((string) $variant);
+                    if ('' !== $clean_variant) {
+                        $prefix_map[$clean_variant] = true;
+                    }
+                }
+
+                if (isset($known_mappings[$plugin_slug]) && is_array($known_mappings[$plugin_slug])) {
+                    foreach ($known_mappings[$plugin_slug] as $mapped_prefix) {
+                        $clean_prefix = sanitize_key((string) $mapped_prefix);
+                        if ('' !== $clean_prefix) {
+                            $prefix_map[$clean_prefix] = true;
+                        }
+                    }
+                }
+
+                $custom_prefixes = $utils::getArrayValue($args, 'option_prefixes', array());
+                if (is_array($custom_prefixes)) {
+                    foreach ($custom_prefixes as $custom_prefix) {
+                        $clean_prefix = sanitize_key((string) $custom_prefix);
+                        if ('' !== $clean_prefix) {
+                            $prefix_map[$clean_prefix] = true;
+                        }
+                    }
+                }
+
+                $exact_matches = array_keys($prefix_map);
+
+                $like_prefixes = array();
+                foreach ($base_variants as $variant) {
+                    $clean_variant = sanitize_key((string) $variant);
+                    if ('' !== $clean_variant) {
+                        // Required explicit pattern: plugin_slug + '_%'.
+                        $like_prefixes[$clean_variant . '_'] = true;
+                    }
+                }
+                foreach ($exact_matches as $exact_prefix) {
+                    $like_prefixes[$exact_prefix] = true;
+                }
+
+                $where = array();
+                $params = array();
+
+                foreach ($exact_matches as $exact_match) {
+                    $where[] = 'option_name = %s';
+                    $params[] = $exact_match;
+                }
+                foreach (array_keys($like_prefixes) as $like_prefix) {
+                    $where[] = 'option_name LIKE %s';
+                    $params[] = $wpdb->esc_like($like_prefix) . '%';
+                }
+
+                if (empty($where)) {
+                    $payload = array(
+                        'count' => 0,
+                        'options' => array(),
+                    );
+                    $r['result'] = array(
+                        'content' => array(
+                            array('type' => 'text', 'text' => wp_json_encode($payload, JSON_PRETTY_PRINT)),
+                        ),
+                    );
+                    break;
+                }
+
+                $params[] = $limit;
+                $sql = "SELECT option_name, option_value FROM {$wpdb->options} WHERE (" . implode(' OR ', $where) . ') ORDER BY option_name ASC LIMIT %d';
+                $prepared = $wpdb->prepare($sql, $params);
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+                $rows = $wpdb->get_results($prepared, ARRAY_A);
+
+                $count_redactions = function($value) use (&$count_redactions) {
+                    if (is_string($value) && '[REDACTED]' === $value) {
+                        return 1;
+                    }
+                    if (is_array($value)) {
+                        $sum = 0;
+                        foreach ($value as $child) {
+                            $sum += $count_redactions($child);
+                        }
+                        return $sum;
+                    }
+                    if (is_object($value)) {
+                        return $count_redactions((array) $value);
+                    }
+                    return 0;
+                };
+
+                $result_options = array();
+                $example_keys = array();
+                $sensitive_fields_detected = 0;
+
+                if (!is_array($rows)) {
+                    $rows = array();
+                }
+
+                foreach ($rows as $row) {
+                    $option_name = isset($row['option_name']) ? (string) $row['option_name'] : '';
+                    $raw_value = isset($row['option_value']) ? maybe_unserialize($row['option_value']) : null;
+                    // First apply strict key-based redaction helper, then run the
+                    // existing recursive/value-pattern redaction as a second pass.
+                    $redacted_value = sflmcp_redact_sensitive_value($raw_value, $option_name);
+                    $redacted_value = StifliFlexMcpUtils::redactSecrets($redacted_value, $option_name);
+                    $sensitive_fields_detected += $count_redactions($redacted_value);
+
+                    if (count($example_keys) < 20) {
+                        $example_keys[] = $option_name;
+                    }
+
+                    if (!$summary) {
+                        $result_options[] = array(
+                            'option_name' => $option_name,
+                            'option_value' => $redacted_value,
+                        );
+                    }
+                }
+
+                if ($summary) {
+                    $payload = array(
+                        'total_options' => count($rows),
+                        'example_keys' => $example_keys,
+                        'sensitive_fields_detected' => (int) $sensitive_fields_detected,
+                    );
+                } else {
+                    $payload = array(
+                        'count' => count($result_options),
+                        'options' => $result_options,
+                    );
+                }
+
+                stifli_flex_mcp_log('wp_get_plugin_settings executed', array(
+                    'plugin_slug' => $plugin_slug,
+                    'rows' => count($rows),
+                    'summary' => $summary,
+                    'limit' => $limit,
+                ));
+
+                $payload_json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if (false === $payload_json) {
+                    $payload_json = '{}';
+                }
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => $payload_json),
+                    ),
+                );
                 break;
             case 'wp_update_option':
                 if (!current_user_can('manage_options')) {

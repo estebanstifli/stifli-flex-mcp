@@ -1,9 +1,9 @@
 <?php
 /*
-Plugin Name: StifLi Flex MCP - AI Copilot, Chat Agent and MCP Server
+Plugin Name: StifLi Flex MCP - MCP Server for WordPress with Undo
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.2.2
+Version: 3.2.4
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -481,8 +481,12 @@ function stifli_flex_mcp_seed_initial_tools() {
 		// Taxonomies
 		array('wp_get_taxonomies', 'List all registered taxonomies.', 'WordPress - Taxonomies', 1),
 		array('wp_get_terms', 'Get terms from a taxonomy.', 'WordPress - Taxonomies', 1),
-		array('wp_create_term', 'Create a new term in a taxonomy.', 'WordPress - Taxonomies', 1),
+		array('wp_create_term', 'Create a term in any taxonomy (generalized; supports slug, parent, description).', 'WordPress - Taxonomies', 1),
+		array('wp_update_term', 'Update a term in any taxonomy (generalized).', 'WordPress - Taxonomies', 1),
 		array('wp_delete_term', 'Delete a term by term_id and taxonomy.', 'WordPress - Taxonomies', 1),
+		array('wp_get_term_meta', 'Get term meta (with secret redaction).', 'WordPress - Taxonomies', 1),
+		array('wp_update_term_meta', 'Update term meta.', 'WordPress - Taxonomies', 1),
+		array('wp_delete_term_meta', 'Delete term meta.', 'WordPress - Taxonomies', 1),
 		
 		// Categories
 		array('wp_get_categories', 'List categories.', 'WordPress - Categories', 1),
@@ -501,9 +505,11 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_get_menus', 'List all navigation menus (alias for wp_get_nav_menus).', 'WordPress - Menus', 1),
 		array('wp_get_menu', 'Get a specific menu with its items.', 'WordPress - Menus', 1),
 		array('wp_create_nav_menu', 'Create a new navigation menu.', 'WordPress - Menus', 1),
+		array('wp_reorder_menu_items', 'Reorder items in a navigation menu (batch update menu_order/parent).', 'WordPress - Menus', 1),
 		
 		// Options y Meta
 		array('wp_get_option', 'Get a WordPress option by key.', 'WordPress - Options', 1),
+		array('wp_get_plugin_settings', 'Safely inspect plugin-related wp_options by plugin_slug/prefixes with recursive secret redaction.', 'WordPress - Options', 1),
 		array('wp_update_option', 'Update a WordPress option.', 'WordPress - Options', 1),
 		array('wp_get_post_meta', 'Get post meta by post_id and meta_key.', 'WordPress - Meta', 1),
 		array('wp_update_post_meta', 'Update post meta.', 'WordPress - Meta', 1),
@@ -532,6 +538,9 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('yoast_get_meta', 'Get Yoast SEO meta fields for a post (title, description, OG, Twitter). Requires Yoast SEO.', 'WordPress - SEO', 1),
 		array('yoast_set_meta', 'Set Yoast SEO meta fields for a post. Requires Yoast SEO.', 'WordPress - SEO', 1),
 		array('yoast_reindex', 'Clear Yoast SEO indexables cache for a post or site-wide. Requires Yoast SEO.', 'WordPress - SEO', 1),
+		// SEO - Unified (auto-detects Yoast / Rank Math / AIOSEO)
+		array('wp_get_seo_meta', 'Unified SEO meta read for a post. Auto-detects Yoast, Rank Math, or AIOSEO and returns normalized fields.', 'WordPress - SEO', 1),
+		array('wp_update_seo_meta', 'Unified SEO meta write for a post. Auto-detects Yoast, Rank Math, or AIOSEO.', 'WordPress - SEO', 1),
 		// ACF
 		array('acf_get_field_groups', 'List all ACF field groups with keys, titles and location rules. Requires ACF.', 'Plugins - ACF', 1),
 		array('acf_get_fields', 'Get ACF field values for a post. Requires ACF.', 'Plugins - ACF', 1),
@@ -753,7 +762,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.04.30' );
+	define( 'SFLMCP_DB_VERSION', '2026.05.11' );
 }
 
 /**
@@ -767,6 +776,8 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	}
 	// Place new migrations here in chronological order.
 	stifli_flex_mcp_upgrade_remove_wp_delete_option();
+	stifli_flex_mcp_upgrade_323_seed_new_tools();
+	stifli_flex_mcp_upgrade_324_seed_plugin_settings_tool();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
 }
 
@@ -788,6 +799,150 @@ function stifli_flex_mcp_upgrade_remove_wp_delete_option() {
 	$wpdb->delete( $tools_table, array( 'tool_name' => 'wp_delete_option' ), array( '%s' ) );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 	$wpdb->delete( $profile_tools_table, array( 'tool_name' => 'wp_delete_option' ), array( '%s' ) );
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.2.3): seed new tools introduced in v3.2.3 into existing
+ * installs and attach them to the "WordPress Full Management" profile.
+ *
+ * New tools:
+ *  - wp_update_term, wp_get_term_meta, wp_update_term_meta, wp_delete_term_meta
+ *  - wp_get_seo_meta, wp_update_seo_meta (unified Yoast/Rank Math/AIOSEO)
+ *  - wp_reorder_menu_items
+ */
+function stifli_flex_mcp_upgrade_323_seed_new_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_323_seed_new_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table         = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table      = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( ! $wpdb->get_var( "SHOW TABLES LIKE '{$tools_table}'" ) ) {
+		return;
+	}
+	$now = current_time( 'mysql', true );
+
+	$new_tools = array(
+		array( 'wp_update_term', 'Update a term in any taxonomy (generalized).', 'WordPress - Taxonomies', 1 ),
+		array( 'wp_get_term_meta', 'Get term meta (with secret redaction).', 'WordPress - Taxonomies', 1 ),
+		array( 'wp_update_term_meta', 'Update term meta.', 'WordPress - Taxonomies', 1 ),
+		array( 'wp_delete_term_meta', 'Delete term meta.', 'WordPress - Taxonomies', 1 ),
+		array( 'wp_reorder_menu_items', 'Reorder items in a navigation menu (batch update menu_order/parent).', 'WordPress - Menus', 1 ),
+		array( 'wp_get_seo_meta', 'Unified SEO meta read for a post. Auto-detects Yoast, Rank Math, or AIOSEO.', 'WordPress - SEO', 1 ),
+		array( 'wp_update_seo_meta', 'Unified SEO meta write for a post. Auto-detects Yoast, Rank Math, or AIOSEO.', 'WordPress - SEO', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name'        => $tool[0],
+					'tool_description' => $tool[1],
+					'category'         => $tool[2],
+					'enabled'          => $tool[3],
+					'created_at'       => $now,
+					'updated_at'       => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	// Attach to "WordPress Full Management" profile if it exists.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+	$profile_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profiles_table} WHERE profile_name = %s LIMIT 1", 'WordPress Full Management' ) );
+	if ( $profile_id ) {
+		foreach ( $new_tools as $tool ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$linked = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s", $profile_id, $tool[0] ) );
+			if ( ! $linked ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$wpdb->insert(
+					$profile_tools_table,
+					array( 'profile_id' => (int) $profile_id, 'tool_name' => $tool[0] ),
+					array( '%d', '%s' )
+				);
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.2.4): seed wp_get_plugin_settings into existing installs
+ * and attach it to the "WordPress Full Management" profile.
+ */
+function stifli_flex_mcp_upgrade_324_seed_plugin_settings_tool() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_324_seed_plugin_settings_tool_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table         = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table      = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+
+	$tools_like = $wpdb->esc_like( $tools_table );
+	$tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $tools_like ) ) === $tools_table;
+	if ( ! $tools_exists ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$tool = array(
+		'wp_get_plugin_settings',
+		'Safely inspect plugin-related wp_options by plugin_slug/prefixes with recursive secret redaction.',
+		'WordPress - Options',
+		1,
+	);
+
+	$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+	if ( ! $exists ) {
+		$wpdb->insert(
+			$tools_table,
+			array(
+				'tool_name'        => $tool[0],
+				'tool_description' => $tool[1],
+				'category'         => $tool[2],
+				'enabled'          => $tool[3],
+				'created_at'       => $now,
+				'updated_at'       => $now,
+			),
+			array( '%s', '%s', '%s', '%d', '%s', '%s' )
+		);
+	}
+
+	$profiles_like = $wpdb->esc_like( $profiles_table );
+	$profile_tools_like = $wpdb->esc_like( $profile_tools_table );
+	$profiles_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_like ) ) === $profiles_table;
+	$profile_tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profile_tools_like ) ) === $profile_tools_table;
+
+	if ( $profiles_exists && $profile_tools_exists ) {
+		$profile_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profiles_table} WHERE profile_name = %s LIMIT 1", 'WordPress Full Management' ) );
+		if ( $profile_id ) {
+			$linked = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s", $profile_id, $tool[0] ) );
+			if ( ! $linked ) {
+				$wpdb->insert(
+					$profile_tools_table,
+					array( 'profile_id' => (int) $profile_id, 'tool_name' => $tool[0] ),
+					array( '%d', '%s' )
+				);
+			}
+		}
+	}
 
 	update_option( $flag, '1' );
 }
@@ -1024,15 +1179,17 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Media (6)
 				'wp_get_media', 'wp_get_media_item', 'wp_upload_image_from_url', 'wp_upload_image', 'wp_update_media_item', 'wp_delete_media_item',
 				// Taxonomies (4)
-				'wp_get_taxonomies', 'wp_get_terms', 'wp_create_term', 'wp_delete_term',
+				'wp_get_taxonomies', 'wp_get_terms', 'wp_create_term', 'wp_update_term', 'wp_delete_term',
+				// Term meta (3)
+				'wp_get_term_meta', 'wp_update_term_meta', 'wp_delete_term_meta',
 				// Categories (4)
 				'wp_get_categories', 'wp_create_category', 'wp_update_category', 'wp_delete_category',
 				// Tags (4)
 				'wp_get_tags', 'wp_create_tag', 'wp_update_tag', 'wp_delete_tag',
 				// Menus (4)
-				'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_create_nav_menu',
-				// Options (2)
-				'wp_get_option', 'wp_update_option',
+				'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_create_nav_menu', 'wp_reorder_menu_items',
+				// Options (3)
+				'wp_get_option', 'wp_get_plugin_settings', 'wp_update_option',
 				// Post Meta (3)
 				'wp_get_post_meta', 'wp_update_post_meta', 'wp_delete_post_meta',
 				// Settings (2)
@@ -1045,6 +1202,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_site_health',
 				// Utilities (1) — wp_generate_video excluded by default; enable in Multimedia Settings
 				'wp_generate_image',
+				// SEO unified (auto-detects Yoast/Rank Math/AIOSEO)
+				'wp_get_seo_meta', 'wp_update_seo_meta',
 				// Snippets (7) — requires WPCode or Code Snippets plugin
 				'snippet_list', 'snippet_get', 'snippet_create', 'snippet_update', 'snippet_delete', 'snippet_activate', 'snippet_deactivate',
 			),
