@@ -109,9 +109,11 @@ class StifliFlexMcp_OAuth_Server {
 		}
 
 		// Authorization page: /?sflmcp_oauth=authorize
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- route selector only; no state mutation on read.
 		$oauth_route = isset( $_GET['sflmcp_oauth'] ) ? sanitize_key( wp_unslash( $_GET['sflmcp_oauth'] ) ) : '';
 		if ( 'authorize' === $oauth_route ) {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- diagnostic logging of query keys only.
 				stifli_flex_mcp_log( sprintf( 'OAuth: Authorize page %s, params: %s', $method, wp_json_encode( array_keys( $_GET ) ) ) );
 			}
 			if ( 'POST' === $method ) {

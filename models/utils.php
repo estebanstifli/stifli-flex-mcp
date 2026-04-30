@@ -1,4 +1,9 @@
 <?php
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 // Utilidades mínimas para StifliFlexMcp (stub)
 class StifliFlexMcpUtils {
 	/**

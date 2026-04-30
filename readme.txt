@@ -1,8 +1,8 @@
-=== StifLi Flex MCP - MCP Server for WordPress with Undo === 
+=== StifLi Flex MCP - MCP Server with Undo === 
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
+Tags:  mcp, ai copilot, chatgpt, claude, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
 Stable tag: 3.2.6
@@ -380,12 +380,12 @@ This method works even behind strict firewalls because all requests come from yo
 == Screenshots ==
 
 1. AI Copilot - Floating assistant inside the WordPress editor with quick actions
-2. AI Copilot - Visual feedback with green highlights and Keep/Undo banners
-3. AI Chat Agent - Chat with AI directly from WordPress admin
-4. AI Chat Agent - Settings and provider configuration
-5. MCP Server - Endpoint URLs and authentication setup
-6. MCP Server - Tool profiles management
-7. MCP Server - WordPress and WooCommerce tools management
+2. AI Chat Agent - Chat with AI directly from WordPress admin
+3. AI Chat Agent - Settings and provider configuration
+4. MCP Server - Endpoint URLs and authentication setup
+5. MCP Server - Tool profiles management
+6. MCP Server - WordPress and WooCommerce tools management
+7. MCP Server - Plugin Integrations
 
 == External Services ==
 

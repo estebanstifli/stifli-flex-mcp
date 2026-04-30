@@ -292,7 +292,7 @@ class StifliFlexMcpModel {
         
         if ($table_exists) {
             $tools_tbl = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools');
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from sanitized helper.
             $results = $wpdb->get_results(
                 $wpdb->prepare( "SELECT tool_name, token_estimate FROM {$tools_tbl} WHERE enabled = %d", 1 ),
                 ARRAY_A
@@ -2267,7 +2267,10 @@ class StifliFlexMcpModel {
             case 'wp_get_posts':
                 $postsLimit = max(1, intval($utils::getArrayValue($args, 'limit', 10, 1)));
                 $postsPaged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
-                $postsOffset = isset($args['offset']) ? max(0, intval($args['offset'])) : null;
+                $hasPostsOffset = array_key_exists('offset', $args);
+                $postsOffset = $hasPostsOffset ? max(0, intval($args['offset'])) : null;
+                // WP_Query prioritizes offset over paged; offset=0 should not force page 1 forever.
+                $usePostsOffset = null !== $postsOffset && $postsOffset > 0;
                 $includePostAuthor = $isTruthy($utils::getArrayValue($args, 'include_author', false));
                 $includePostFeaturedMedia = $isTruthy($utils::getArrayValue($args, 'include_featured_media', false));
                 $includePostTaxonomies = $isTruthy($utils::getArrayValue($args, 'include_taxonomies', false));
@@ -2282,7 +2285,7 @@ class StifliFlexMcpModel {
                 if ('' !== $postsSearch) {
                     $q['s'] = $postsSearch;
                 }
-                if (null !== $postsOffset) {
+                if ($usePostsOffset) {
                     $q['offset'] = $postsOffset;
                 } else {
                     $q['paged'] = $postsPaged;
@@ -2320,7 +2323,7 @@ class StifliFlexMcpModel {
                     $rows[] = $row;
                 }
                 if ($includePostsPagination) {
-                    $effectivePostsOffset = null !== $postsOffset ? $postsOffset : (($postsPaged - 1) * $postsLimit);
+                    $effectivePostsOffset = $usePostsOffset ? $postsOffset : (($postsPaged - 1) * $postsLimit);
                     $rows = array(
                         'items' => $rows,
                         'pagination' => $buildPaginationMeta((int) $postQuery->found_posts, $postsLimit, $effectivePostsOffset, $postsPaged),
@@ -2986,7 +2989,7 @@ class StifliFlexMcpModel {
 
                 // Enforce size limit after download.
                 if ( $max_bytes > 0 && file_exists( $tmp ) && filesize( $tmp ) > $max_bytes ) {
-                    @unlink( $tmp );
+                    wp_delete_file( $tmp );
                     $r['error'] = array(
                         'code'    => 'file_too_large',
                         'message' => 'Downloaded file exceeds the maximum allowed size (' . $max_bytes . ' bytes).',
@@ -3048,7 +3051,7 @@ class StifliFlexMcpModel {
                 }
                 $detected_mime = strtolower( $detected_mime );
                 if ( ! isset( $allowed_image_mimes[ $detected_mime ] ) ) {
-                    @unlink( $tmp );
+                    wp_delete_file( $tmp );
                     $r['error'] = array(
                         'code'    => 'mime_not_allowed',
                         'message' => 'Downloaded file MIME (' . $detected_mime . ') is not an allowed image type.',
@@ -3058,7 +3061,7 @@ class StifliFlexMcpModel {
                 // Final sanity: getimagesize() must succeed (rules out SVG/HTML disguised as image).
                 $imgsize = @getimagesize( $tmp );
                 if ( ! is_array( $imgsize ) || empty( $imgsize[2] ) ) {
-                    @unlink( $tmp );
+                    wp_delete_file( $tmp );
                     $r['error'] = array(
                         'code'    => 'invalid_image',
                         'message' => 'Downloaded file is not a valid image.',
@@ -4624,7 +4627,10 @@ class StifliFlexMcpModel {
                 $s = sanitize_text_field($utils::getArrayValue($args, 'q', $utils::getArrayValue($args, 'query', '')));
                 $limit = max(1, intval($utils::getArrayValue($args, 'limit', 10, 1)));
                 $paged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
-                $offset = isset($args['offset']) ? max(0, intval($args['offset'])) : null;
+                $hasOffset = array_key_exists('offset', $args);
+                $offset = $hasOffset ? max(0, intval($args['offset'])) : null;
+                // Keep paged behavior when offset is 0, otherwise page 2 can be stuck on page 1.
+                $useOffset = null !== $offset && $offset > 0;
                 $includePagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
                 $searchOrderby = sanitize_key($utils::getArrayValue($args, 'orderby', 'date'));
                 $searchOrder = strtoupper(sanitize_text_field($utils::getArrayValue($args, 'order', 'DESC')));
@@ -4649,7 +4655,7 @@ class StifliFlexMcpModel {
                 if ('' !== $searchTag) {
                     $queryArgs['tag'] = $searchTag;
                 }
-                if (null !== $offset) {
+                if ($useOffset) {
                     $queryArgs['offset'] = $offset;
                 } else {
                     $queryArgs['paged'] = $paged;
@@ -4677,7 +4683,7 @@ class StifliFlexMcpModel {
                     );
                 }
                 if ($includePagination) {
-                    $effectiveOffset = null !== $offset ? $offset : (($paged - 1) * $limit);
+                    $effectiveOffset = $useOffset ? $offset : (($paged - 1) * $limit);
                     $out = array(
                         'items' => $out,
                         'pagination' => $buildPaginationMeta((int) $q->found_posts, $limit, $effectiveOffset, $paged),
@@ -5458,10 +5464,15 @@ class StifliFlexMcpModel {
                 }
 
                 $params[] = $limit;
-                $sql = "SELECT option_name, option_value FROM {$wpdb->options} WHERE (" . implode(' OR ', $where) . ') ORDER BY option_name ASC LIMIT %d';
-                $prepared = $wpdb->prepare($sql, $params);
-                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-                $rows = $wpdb->get_results($prepared, ARRAY_A);
+                // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- Dynamic WHERE SQL is composed from static placeholder fragments; values are bound via $wpdb->prepare.
+                $rows = $wpdb->get_results(
+                    $wpdb->prepare(
+                        "SELECT option_name, option_value FROM {$wpdb->options} WHERE (" . implode(' OR ', $where) . ') ORDER BY option_name ASC LIMIT %d',
+                        $params
+                    ),
+                    ARRAY_A
+                );
+                // phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
                 $count_redactions = function($value) use (&$count_redactions) {
                     if (is_string($value) && '[REDACTED]' === $value) {

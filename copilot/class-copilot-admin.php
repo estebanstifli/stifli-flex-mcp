@@ -1241,6 +1241,7 @@ class StifliFlexMcp_Copilot_Admin {
 
 		$disabled_tools = array();
 		if ( ! empty( $_POST['webmcp_disabled_tools'] ) && is_array( $_POST['webmcp_disabled_tools'] ) ) {
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized per item below.
 			$raw_disabled_tools = wp_unslash( $_POST['webmcp_disabled_tools'] );
 			foreach ( $raw_disabled_tools as $tool ) {
 				$disabled_tools[] = sanitize_text_field( $tool );

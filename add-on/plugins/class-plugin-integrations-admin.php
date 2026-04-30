@@ -38,6 +38,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             : array();
 
         $enabled_tools_by_integration = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] )
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized in sanitize_enabled_tools_input().
             ? $this->sanitize_enabled_tools_input( wp_unslash( $_POST['enabled_tools'] ) )
             : array();
 
@@ -163,6 +164,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             ? array_map( 'sanitize_key', wp_unslash( $_POST['enabled_groups'] ) )
             : array();
         $enabled_tools_by_integration = isset( $_POST['enabled_tools'] ) && is_array( $_POST['enabled_tools'] )
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized in sanitize_enabled_tools_input().
             ? $this->sanitize_enabled_tools_input( wp_unslash( $_POST['enabled_tools'] ) )
             : array();
         $bulk_action = isset( $_POST['bulk_action'] ) ? sanitize_key( wp_unslash( $_POST['bulk_action'] ) ) : '';
@@ -354,7 +356,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
                 $stats['discovered_total']++;
 
-                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- point lookup.
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name comes from get_safe_table_sql().
                 $existing_row = $wpdb->get_row( $wpdb->prepare( "SELECT id, enabled FROM {$table_sql} WHERE ability_name = %s", $ability_name ), ARRAY_A );
                 if ( ! empty( $existing_row ) ) {
                     if ( isset( $existing_row['enabled'] ) && intval( $existing_row['enabled'] ) !== 1 ) {
@@ -683,7 +685,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
         if ( '' === $profiles_table_sql ) {
             return 0;
         }
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from helper.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_safe_table_sql().
         $active_profile_id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profiles_table_sql} WHERE is_active = %d LIMIT 1", 1 ) );
 
         return $active_profile_id ? intval( $active_profile_id ) : 0;
@@ -732,7 +734,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             $is_enabled = $enabled_by_group && ! isset( $disabled_tools[ $tool_name ] );
 
             if ( $is_enabled ) {
-                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from helper.
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_safe_table_sql().
                 $exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profile_tools_table_sql} WHERE profile_id = %d AND tool_name = %s LIMIT 1", $active_profile_id, $tool_name ) );
                 if ( ! $exists ) {
                     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
