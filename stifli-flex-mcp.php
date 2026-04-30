@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server for WordPress with Undo
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.2.4
+Version: 3.2.6
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -528,8 +528,8 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_update_settings', 'Update WordPress settings.', 'WordPress - Settings', 1),
 		
 		// Utilidades
-		array('search', 'Search posts by keyword.', 'WordPress - Utilities', 1),
-		array('fetch', 'Fetch content from a URL.', 'WordPress - Utilities', 1),
+		array('search', 'Search posts by keyword with optional author, taxonomy, date, sort, and paging filters.', 'WordPress - Utilities', 1),
+		array('fetch', 'Fetch content from a URL with optional query params, custom headers, timeout, HEAD mode, and response headers.', 'WordPress - Utilities', 1),
 		// SEO - Rank Math
 		array('wp_rm_get_head', 'Get rendered SEO head HTML for a URL using Rank Math endpoint. Requires Headless CMS Support enabled.', 'WordPress - SEO', 1),
 		array('wp_rm_get_post_seo', 'Get Rank Math SEO metadata fields for a post.', 'WordPress - SEO', 1),

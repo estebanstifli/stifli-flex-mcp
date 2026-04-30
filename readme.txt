@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.2.4
+Stable tag: 3.2.6
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -409,6 +409,17 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.6 =
+* New: Expanded `mcp_ping` with optional diagnostics (`diagnostics`, `timeout_sec`) to surface site URL, REST endpoint, HTTPS state, DNS resolution, and lightweight reachability checks without forcing remote calls by default.
+* New: Upgraded `wp_get_posts`, `wp_get_post`, `wp_get_comments`, `wp_get_users`, `search`, `wc_get_products`, and `wc_get_orders` with richer optional outputs and standardized `include_pagination` metadata wrappers.
+* New: Added opt-in enrichment flags for common read tools, including author, featured media, taxonomy context, avatar/registration data, product images/categories/attributes, and order item or totals summaries.
+* New: Improved `search` and `fetch` with broader filters, query-param support, custom request/response headers, and targeted remote inspection controls (`head_only`, `include_headers`, `extract_text`, `max_bytes`, `timeout_sec`).
+
+= 3.2.5 =
+* New: The AI Chat Agent token usage panel now shows three separate bars for billable input tokens, cached tokens, and output tokens.
+* Improvement: Normalized token accounting across OpenAI, Claude, and Gemini providers so the three bars reflect provider-specific cache semantics more truthfully.
+* New: Upgraded `wp_get_site_health` into a richer site audit tool with selectable depth levels (`0` basic, `1` medium, `2` deep) to balance diagnostic detail and timeout risk.
+
 = 3.2.4 =
 * New: Added `wp_get_plugin_settings` to inspect plugin-related `wp_options` by `plugin_slug`/prefixes with prepared SQL + limit controls and strict recursive redaction of secrets/tokens/passwords.
 * New: Generalized term tools - added `wp_update_term` and extended `wp_create_term`/`wp_delete_term` with optional slug/parent/description plus per-taxonomy capability checks (existing `wp_*_category` and `wp_*_tag` tools kept as aliases).

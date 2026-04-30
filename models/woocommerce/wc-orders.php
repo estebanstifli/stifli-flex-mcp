@@ -16,19 +16,29 @@ class StifliFlexMcp_WC_Orders {
             // Orders
             'wc_get_orders' => array(
                 'name' => 'wc_get_orders',
-                'description' => 'List WooCommerce orders with filters (status, customer, product, limit, offset, orderby, order, after, before).',
+                'description' => 'List WooCommerce orders with filters (status, customer/customer_id, product/product_id, limit, offset, paged, orderby, order, after, before). Optional enrichments: items, totals, shipping summary, compact mode, and pagination metadata.',
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
                         'status'   => array('type' => 'string'),
                         'customer' => array('type' => 'integer'),
+                        'customer_id' => array('type' => 'integer'),
                         'product'  => array('type' => 'integer'),
+                        'product_id' => array('type' => 'integer'),
                         'limit'    => array('type' => 'integer'),
                         'offset'   => array('type' => 'integer'),
+                        'paged'    => array('type' => 'integer'),
                         'orderby'  => array('type' => 'string'),
                         'order'    => array('type' => 'string'),
                         'after'    => array('type' => 'string'),
                         'before'   => array('type' => 'string'),
+                        'date_created_min' => array('type' => 'string'),
+                        'date_created_max' => array('type' => 'string'),
+                        'compact' => array('type' => 'boolean'),
+                        'include_items' => array('type' => 'boolean'),
+                        'include_totals_breakdown' => array('type' => 'boolean'),
+                        'include_shipping_summary' => array('type' => 'boolean'),
+                        'include_pagination' => array('type' => 'boolean'),
                     ),
                     'required' => array(),
                 ),
@@ -214,53 +224,177 @@ class StifliFlexMcp_WC_Orders {
             $r['error'] = array('code' => -50000, 'message' => 'WooCommerce is not active');
             return true;
         }
+
+        $isTruthy = function($value) {
+            if (is_bool($value)) {
+                return $value;
+            }
+            if (is_int($value)) {
+                return 1 === $value;
+            }
+            if (is_string($value)) {
+                return in_array(strtolower(trim($value)), array('1', 'true', 'yes', 'on'), true);
+            }
+            return !empty($value);
+        };
+        $buildPaginationMeta = function($totalItems, $limit, $offset = 0, $paged = 1) {
+            $limit = max(1, (int) $limit);
+            $offset = max(0, (int) $offset);
+            $paged = max(1, (int) $paged);
+            $currentPage = $offset > 0 ? (int) floor($offset / $limit) + 1 : $paged;
+            return array(
+                'total_items' => (int) $totalItems,
+                'per_page' => $limit,
+                'offset' => $offset,
+                'current_page' => $currentPage,
+                'total_pages' => (int) ceil(max(0, (int) $totalItems) / $limit),
+                'has_more' => ($offset + $limit) < (int) $totalItems,
+            );
+        };
+        $buildOrderRow = function($order, $compact, $includeItems, $includeTotalsBreakdown, $includeShippingSummary) {
+            $created = $order->get_date_created();
+            $row = array(
+                'id' => $order->get_id(),
+                'status' => $order->get_status(),
+                'total' => $order->get_total(),
+                'currency' => $order->get_currency(),
+                'date_created' => $created ? $created->date('Y-m-d H:i:s') : null,
+                'customer_id' => $order->get_customer_id(),
+                'items_count' => count($order->get_items()),
+            );
+
+            if (!$compact) {
+                $row['billing'] = array(
+                    'first_name' => $order->get_billing_first_name(),
+                    'last_name' => $order->get_billing_last_name(),
+                    'email' => $order->get_billing_email(),
+                );
+                $row['payment_method'] = $order->get_payment_method();
+                $row['payment_method_title'] = $order->get_payment_method_title();
+            }
+
+            if ($includeItems) {
+                $row['items'] = array();
+                foreach ($order->get_items() as $item) {
+                    $product = $item->get_product();
+                    $row['items'][] = array(
+                        'item_id' => $item->get_id(),
+                        'product_id' => $item->get_product_id(),
+                        'variation_id' => $item->get_variation_id(),
+                        'name' => $item->get_name(),
+                        'quantity' => $item->get_quantity(),
+                        'total' => $item->get_total(),
+                        'sku' => $product ? $product->get_sku() : '',
+                    );
+                }
+            }
+
+            if ($includeTotalsBreakdown) {
+                $feeTotal = 0.0;
+                foreach ($order->get_fees() as $fee) {
+                    $feeTotal += (float) $fee->get_total();
+                }
+                $row['totals'] = array(
+                    'subtotal' => $order->get_subtotal(),
+                    'discount_total' => $order->get_discount_total(),
+                    'shipping_total' => $order->get_shipping_total(),
+                    'fee_total' => $feeTotal,
+                    'tax_total' => $order->get_total_tax(),
+                    'grand_total' => $order->get_total(),
+                );
+            }
+
+            if ($includeShippingSummary) {
+                $row['shipping'] = array(
+                    'city' => $order->get_shipping_city(),
+                    'state' => $order->get_shipping_state(),
+                    'country' => $order->get_shipping_country(),
+                    'lines' => array(),
+                );
+                foreach ($order->get_shipping_methods() as $shippingItem) {
+                    $row['shipping']['lines'][] = array(
+                        'method_id' => $shippingItem->get_method_id(),
+                        'method_title' => $shippingItem->get_name(),
+                        'total' => $shippingItem->get_total(),
+                    );
+                }
+            }
+
+            return $row;
+        };
         
         switch ($tool) {
             case 'wc_get_orders':
+                $limit = intval($utils::getArrayValue($args, 'limit', 10));
+                $limit = $limit > 0 ? $limit : 10;
+                $paged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $offset = isset($args['offset']) ? max(0, intval($args['offset'])) : (($paged - 1) * $limit);
+                $compact = $isTruthy($utils::getArrayValue($args, 'compact', false));
+                $includeItems = $isTruthy($utils::getArrayValue($args, 'include_items', false));
+                $includeTotalsBreakdown = $isTruthy($utils::getArrayValue($args, 'include_totals_breakdown', false));
+                $includeShippingSummary = $isTruthy($utils::getArrayValue($args, 'include_shipping_summary', false));
+                $includePagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
                 $query_args = array(
-                    'limit' => intval($utils::getArrayValue($args, 'limit', 10)),
-                    'offset' => intval($utils::getArrayValue($args, 'offset', 0)),
+                    'limit' => $limit,
+                    'offset' => $offset,
                     'orderby' => sanitize_key($utils::getArrayValue($args, 'orderby', 'date')),
                     'order' => sanitize_key($utils::getArrayValue($args, 'order', 'DESC')),
                 );
+                if ($includePagination) {
+                    $query_args['paginate'] = true;
+                }
                 
                 if (!empty($args['status'])) {
                     $query_args['status'] = sanitize_text_field($args['status']);
                 }
-                if (!empty($args['customer_id'])) {
-                    $query_args['customer_id'] = intval($args['customer_id']);
+                $customerId = intval($utils::getArrayValue($args, 'customer_id', $utils::getArrayValue($args, 'customer', 0, 1), 1));
+                if ($customerId > 0) {
+                    $query_args['customer_id'] = $customerId;
                 }
-                if (!empty($args['product_id'])) {
-                    $query_args['product'] = intval($args['product_id']);
+                $productId = intval($utils::getArrayValue($args, 'product_id', $utils::getArrayValue($args, 'product', 0, 1), 1));
+                if ($productId > 0) {
+                    $query_args['product'] = $productId;
                 }
-                if (!empty($args['date_created_min'])) {
-                    $query_args['date_created'] = '>=' . sanitize_text_field($args['date_created_min']);
-                }
-                if (!empty($args['date_created_max'])) {
-                    $query_args['date_created'] = '<=' . sanitize_text_field($args['date_created_max']);
+                $after = sanitize_text_field($utils::getArrayValue($args, 'after', $utils::getArrayValue($args, 'date_created_min', '')));
+                $before = sanitize_text_field($utils::getArrayValue($args, 'before', $utils::getArrayValue($args, 'date_created_max', '')));
+                if ('' !== $after && '' !== $before) {
+                    $query_args['date_created'] = $after . '...' . $before;
+                } elseif ('' !== $after) {
+                    $query_args['date_created'] = '>=' . $after;
+                } elseif ('' !== $before) {
+                    $query_args['date_created'] = '<=' . $before;
                 }
                 
-                $orders = wc_get_orders($query_args);
+                $ordersResponse = wc_get_orders($query_args);
+                $orders = $ordersResponse;
+                $totalOrders = null;
+
+                if ($includePagination && is_object($ordersResponse) && isset($ordersResponse->orders)) {
+                    $orders = $ordersResponse->orders;
+                    $totalOrders = isset($ordersResponse->total) ? (int) $ordersResponse->total : null;
+                }
+                if (!is_array($orders)) {
+                    $orders = array();
+                }
+
                 $result = array();
                 
                 foreach ($orders as $order) {
-                    $result[] = array(
-                        'id' => $order->get_id(),
-                        'status' => $order->get_status(),
-                        'total' => $order->get_total(),
-                        'currency' => $order->get_currency(),
-                        'date_created' => $order->get_date_created()->date('Y-m-d H:i:s'),
-                        'customer_id' => $order->get_customer_id(),
-                        'billing' => array(
-                            'first_name' => $order->get_billing_first_name(),
-                            'last_name' => $order->get_billing_last_name(),
-                            'email' => $order->get_billing_email(),
-                        ),
-                        'items_count' => count($order->get_items()),
+                    $result[] = $buildOrderRow($order, $compact, $includeItems, $includeTotalsBreakdown, $includeShippingSummary);
+                }
+
+                $payload = $result;
+                if ($includePagination) {
+                    if (null === $totalOrders) {
+                        $totalOrders = count($result);
+                    }
+                    $payload = array(
+                        'items' => $result,
+                        'pagination' => $buildPaginationMeta($totalOrders, $limit, $offset, $paged),
                     );
                 }
                 
-                $addResultText($r, 'Found ' . count($result) . ' orders: ' . wp_json_encode($result, JSON_PRETTY_PRINT));
+                $addResultText($r, 'Found ' . count($result) . ' orders: ' . wp_json_encode($payload, JSON_PRETTY_PRINT));
                 return true;
                 
             case 'wc_create_order':

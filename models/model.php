@@ -365,10 +365,13 @@ class StifliFlexMcpModel {
                 // Diagnóstico
                 'mcp_ping' => array(
                     'name' => 'mcp_ping',
-                    'description' => 'Simple connectivity check. Returns the current GMT time and the WordPress site name.',
+                    'description' => 'Connectivity check with optional lightweight diagnostics. Returns the current GMT time, site info, and optional DNS/reachability details.',
                     'inputSchema' => array(
                         'type' => 'object',
-                        'properties' => (object) array(),
+                        'properties' => array(
+                            'diagnostics' => array('type' => 'boolean'),
+                            'timeout_sec' => array('type' => 'integer'),
+                        ),
                         'required' => array(),
                     ),
                 ),
@@ -376,7 +379,7 @@ class StifliFlexMcpModel {
                 // Posts (lectura)
                 'wp_get_posts' => array(
                     'name' => 'wp_get_posts',
-                    'description' => 'List posts with filters.',
+                    'description' => 'List posts with filters. Optional enrichments: author, featured media, taxonomies, and pagination metadata.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -388,17 +391,24 @@ class StifliFlexMcpModel {
                             'paged'       => array('type' => 'integer'),
                             'after'       => array('type' => 'string'),
                             'before'      => array('type' => 'string'),
+                            'include_author' => array('type' => 'boolean'),
+                            'include_featured_media' => array('type' => 'boolean'),
+                            'include_taxonomies' => array('type' => 'boolean'),
+                            'include_pagination' => array('type' => 'boolean'),
                         ),
                         'required' => array(),
                     ),
                 ),
                 'wp_get_post' => array(
                     'name' => 'wp_get_post',
-                    'description' => 'Get a single post by ID.',
+                    'description' => 'Get a single post by ID. Optional enrichments: author, featured media, and taxonomies.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID' => array('type' => 'integer'),
+                            'include_author' => array('type' => 'boolean'),
+                            'include_featured_media' => array('type' => 'boolean'),
+                            'include_taxonomies' => array('type' => 'boolean'),
                         ),
                         'required' => array('ID'),
                     ),
@@ -468,7 +478,7 @@ class StifliFlexMcpModel {
                 // Comentarios
                 'wp_get_comments' => array(
                     'name' => 'wp_get_comments',
-                    'description' => 'List comments. Supports post_id, status, search, limit, offset, paged.',
+                    'description' => 'List comments. Supports post_id, status, search, limit, offset, paged, after, before, and optional post title or pagination metadata.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -478,6 +488,10 @@ class StifliFlexMcpModel {
                             'limit'   => array('type' => 'integer'),
                             'offset'  => array('type' => 'integer'),
                             'paged'   => array('type' => 'integer'),
+                            'after'   => array('type' => 'string'),
+                            'before'  => array('type' => 'string'),
+                            'include_post_title' => array('type' => 'boolean'),
+                            'include_pagination' => array('type' => 'boolean'),
                         ),
                         'required' => array(),
                     ),
@@ -526,7 +540,7 @@ class StifliFlexMcpModel {
                 // Usuarios
                 'wp_get_users' => array(
                     'name' => 'wp_get_users',
-                    'description' => 'Retrieve users (fields: ID, user_login, display_name, roles). If no limit supplied, returns 10. `paged` ignored if `offset` is used.',
+                    'description' => 'Retrieve users (fields: ID, user_login, display_name, roles). Optional enrichments: registration date, avatar URL, post counts, and pagination metadata.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -535,6 +549,10 @@ class StifliFlexMcpModel {
                             'limit'  => array('type' => 'integer'),
                             'offset' => array('type' => 'integer'),
                             'paged'  => array('type' => 'integer'),
+                            'include_registered_date' => array('type' => 'boolean'),
+                            'include_avatar_url' => array('type' => 'boolean'),
+                            'include_post_counts' => array('type' => 'boolean'),
+                            'include_pagination' => array('type' => 'boolean'),
                         ),
                         'required' => array(),
                     ),
@@ -907,26 +925,49 @@ class StifliFlexMcpModel {
                 // Búsqueda y red
                 'search' => array(
                     'name' => 'search',
-                    'description' => 'Simple search across posts (q or query param).',
+                    'description' => 'Search posts with optional post type, author, category, tag, status, date, and sort filters plus paging and pagination metadata (q or query param).',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'q'     => array('type' => 'string'),
                             'limit' => array('type' => 'integer'),
+                            'offset' => array('type' => 'integer'),
+                            'paged' => array('type' => 'integer'),
+                            'post_type' => array('type' => 'string'),
+                            'post_status' => array('type' => 'string'),
+                            'author' => array('type' => 'integer'),
+                            'category' => array('type' => 'string'),
+                            'tag' => array('type' => 'string'),
+                            'orderby' => array('type' => 'string'),
+                            'order' => array('type' => 'string'),
+                            'after' => array('type' => 'string'),
+                            'before' => array('type' => 'string'),
+                            'include_pagination' => array('type' => 'boolean'),
                         ),
                         'required' => array(),
                     ),
                 ),
                 'fetch' => array(
                     'name' => 'fetch',
-                    'description' => 'Fetch a URL using WordPress HTTP API (url required, method optional).',
+                    'description' => 'Fetch a URL using WordPress HTTP API (url required, method optional). Optional controls: query params, custom request/response headers, timeout, redirects, HEAD-only mode, text extraction, and max body bytes.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'url'     => array('type' => 'string'),
                             'method'  => array('type' => 'string'),
                             'headers' => array('type' => 'object'),
+                            'query_params' => array('type' => 'object'),
                             'body'    => array('type' => 'string'),
+                            'timeout_sec' => array('type' => 'integer'),
+                            'max_redirects' => array('type' => 'integer'),
+                            'head_only' => array('type' => 'boolean'),
+                            'include_headers' => array('type' => 'boolean'),
+                            'include_request_headers' => array('type' => 'boolean'),
+                            'extract_text' => array('type' => 'boolean'),
+                            'max_bytes' => array('type' => 'integer'),
+                            'accept' => array('type' => 'string'),
+                            'content_type' => array('type' => 'string'),
+                            'user_agent' => array('type' => 'string'),
                         ),
                         'required' => array('url'),
                     ),
@@ -1967,6 +2008,153 @@ class StifliFlexMcpModel {
         $postExcerpt = function($p) {
             return wp_trim_words( wp_strip_all_tags( isset($p->post_excerpt) && !empty($p->post_excerpt) ? $p->post_excerpt : $p->post_content ), 55 );
         };
+        $isTruthy = function($value) {
+            if (is_bool($value)) {
+                return $value;
+            }
+            if (is_int($value)) {
+                return 1 === $value;
+            }
+            if (is_string($value)) {
+                return in_array(strtolower(trim($value)), array('1', 'true', 'yes', 'on'), true);
+            }
+            return !empty($value);
+        };
+        $buildPaginationMeta = function($totalItems, $limit, $offset = 0, $paged = 1) {
+            $limit = max(1, (int) $limit);
+            $offset = max(0, (int) $offset);
+            $paged = max(1, (int) $paged);
+            $currentPage = $offset > 0 ? (int) floor($offset / $limit) + 1 : $paged;
+            return array(
+                'total_items' => (int) $totalItems,
+                'per_page' => $limit,
+                'offset' => $offset,
+                'current_page' => $currentPage,
+                'total_pages' => (int) ceil(max(0, (int) $totalItems) / $limit),
+                'has_more' => ($offset + $limit) < (int) $totalItems,
+            );
+        };
+        $buildPostAuthor = function($postObj) {
+            $authorId = isset($postObj->post_author) ? (int) $postObj->post_author : 0;
+            if ($authorId <= 0) {
+                return null;
+            }
+            $author = get_userdata($authorId);
+            if (!$author) {
+                return array('ID' => $authorId);
+            }
+            return array(
+                'ID' => $author->ID,
+                'user_login' => $author->user_login,
+                'display_name' => $author->display_name,
+            );
+        };
+        $buildFeaturedMedia = function($postId) {
+            $attachmentId = (int) get_post_thumbnail_id($postId);
+            if ($attachmentId <= 0) {
+                return null;
+            }
+            return array(
+                'ID' => $attachmentId,
+                'url' => wp_get_attachment_url($attachmentId),
+                'alt_text' => get_post_meta($attachmentId, '_wp_attachment_image_alt', true),
+            );
+        };
+        $buildPostTaxonomies = function($postObj) {
+            $postId = isset($postObj->ID) ? (int) $postObj->ID : 0;
+            $postType = isset($postObj->post_type) ? $postObj->post_type : get_post_type($postId);
+            $taxonomies = get_object_taxonomies($postType, 'objects');
+            if (empty($taxonomies) || !is_array($taxonomies)) {
+                return array();
+            }
+            $summary = array();
+            foreach ($taxonomies as $taxonomy) {
+                if (empty($taxonomy->name)) {
+                    continue;
+                }
+                $terms = get_the_terms($postId, $taxonomy->name);
+                if (is_wp_error($terms) || empty($terms)) {
+                    continue;
+                }
+                $summary[$taxonomy->name] = array();
+                foreach ($terms as $term) {
+                    $summary[$taxonomy->name][] = array(
+                        'term_id' => $term->term_id,
+                        'name' => $term->name,
+                        'slug' => $term->slug,
+                    );
+                }
+            }
+            return $summary;
+        };
+        $sanitizeQueryParams = function($params) {
+            $normalized = array();
+            if (!is_array($params)) {
+                return $normalized;
+            }
+            foreach ($params as $paramName => $paramValue) {
+                $cleanName = preg_replace('/[^A-Za-z0-9_\-\.\[\]]/', '', (string) $paramName);
+                if ('' === $cleanName) {
+                    continue;
+                }
+                if (is_array($paramValue)) {
+                    $cleanValues = array();
+                    foreach ($paramValue as $value) {
+                        if (is_scalar($value) || null === $value) {
+                            $cleanValues[] = sanitize_text_field((string) $value);
+                        }
+                    }
+                    if (!empty($cleanValues)) {
+                        $normalized[$cleanName] = $cleanValues;
+                    }
+                    continue;
+                }
+                if (is_scalar($paramValue) || null === $paramValue) {
+                    $normalized[$cleanName] = sanitize_text_field((string) $paramValue);
+                }
+            }
+            return $normalized;
+        };
+        $sanitizeHeaderMap = function($headers) {
+            $normalized = array();
+            if (!is_array($headers)) {
+                return $normalized;
+            }
+            foreach ($headers as $headerName => $headerValue) {
+                $cleanName = preg_replace('/[^A-Za-z0-9\-]/', '', (string) $headerName);
+                if ('' === $cleanName) {
+                    continue;
+                }
+                if (is_array($headerValue)) {
+                    $parts = array();
+                    foreach ($headerValue as $value) {
+                        if (is_scalar($value) || null === $value) {
+                            $parts[] = trim(str_replace(array("\r", "\n"), ' ', sanitize_text_field((string) $value)));
+                        }
+                    }
+                    $cleanValue = implode(', ', array_filter($parts, function($part) {
+                        return '' !== $part;
+                    }));
+                } elseif (is_scalar($headerValue) || null === $headerValue) {
+                    $cleanValue = trim(str_replace(array("\r", "\n"), ' ', sanitize_text_field((string) $headerValue)));
+                } else {
+                    $cleanValue = '';
+                }
+                if ('' === $cleanValue) {
+                    continue;
+                }
+                $normalized[$cleanName] = $cleanValue;
+            }
+            return $normalized;
+        };
+        $hasHeaderName = function(array $headers, $headerName) {
+            foreach (array_keys($headers) as $existingHeaderName) {
+                if (0 === strcasecmp((string) $existingHeaderName, (string) $headerName)) {
+                    return true;
+                }
+            }
+            return false;
+        };
 
         // Validate args against tool schema (basic) before dispatching
         $tools_map = $this->getTools();
@@ -2018,43 +2206,124 @@ class StifliFlexMcpModel {
 
         switch ($tool) {
             case 'mcp_ping':
+                $diagnosticsEnabled = $isTruthy($utils::getArrayValue($args, 'diagnostics', false));
+                $timeoutSec = max(1, min(10, intval($utils::getArrayValue($args, 'timeout_sec', 3, 1))));
+                $homeUrl = home_url('/');
+                $restUrl = get_rest_url(null, '/');
                 $pingData = array(
                     'time' => gmdate('Y-m-d H:i:s'),
                     'name' => get_bloginfo('name'),
+                    'home_url' => $homeUrl,
+                    'rest_url' => $restUrl,
+                    'https' => is_ssl(),
+                    'wordpress_version' => get_bloginfo('version'),
+                    'php_version' => PHP_VERSION,
                 );
+
+                if ($diagnosticsEnabled) {
+                    $host = (string) wp_parse_url($homeUrl, PHP_URL_HOST);
+                    $resolvedIp = '';
+                    if ('' !== $host) {
+                        $resolvedIp = (string) gethostbyname($host);
+                    }
+                    $dnsResolved = '' !== $resolvedIp && ($resolvedIp !== $host || filter_var($host, FILTER_VALIDATE_IP));
+
+                    $pingData['diagnostics'] = array(
+                        'host' => $host,
+                        'resolved_ip' => $resolvedIp,
+                        'dns_resolved' => (bool) $dnsResolved,
+                        'timeout_sec' => $timeoutSec,
+                    );
+
+                    $homeResponse = wp_remote_head($homeUrl, array('timeout' => $timeoutSec, 'redirection' => 3));
+                    if (is_wp_error($homeResponse)) {
+                        $pingData['diagnostics']['home_request'] = array(
+                            'ok' => false,
+                            'message' => $homeResponse->get_error_message(),
+                        );
+                    } else {
+                        $pingData['diagnostics']['home_request'] = array(
+                            'ok' => true,
+                            'status' => (int) wp_remote_retrieve_response_code($homeResponse),
+                        );
+                    }
+
+                    $restResponse = wp_remote_get($restUrl, array('timeout' => $timeoutSec, 'redirection' => 3));
+                    if (is_wp_error($restResponse)) {
+                        $pingData['diagnostics']['rest_request'] = array(
+                            'ok' => false,
+                            'message' => $restResponse->get_error_message(),
+                        );
+                    } else {
+                        $pingData['diagnostics']['rest_request'] = array(
+                            'ok' => true,
+                            'status' => (int) wp_remote_retrieve_response_code($restResponse),
+                        );
+                    }
+                }
+
                 $addResultText($r, 'Ping successful: ' . wp_json_encode($pingData, JSON_PRETTY_PRINT));
                 break;
             case 'wp_get_posts':
+                $postsLimit = max(1, intval($utils::getArrayValue($args, 'limit', 10, 1)));
+                $postsPaged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $postsOffset = isset($args['offset']) ? max(0, intval($args['offset'])) : null;
+                $includePostAuthor = $isTruthy($utils::getArrayValue($args, 'include_author', false));
+                $includePostFeaturedMedia = $isTruthy($utils::getArrayValue($args, 'include_featured_media', false));
+                $includePostTaxonomies = $isTruthy($utils::getArrayValue($args, 'include_taxonomies', false));
+                $includePostsPagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
                 $q = array(
                     'post_type' => sanitize_key($utils::getArrayValue($args, 'post_type', 'post')),
                     'post_status' => sanitize_key($utils::getArrayValue($args, 'post_status', 'publish')),
-                    's' => sanitize_text_field($utils::getArrayValue($args, 'search')),
-                    'posts_per_page' => max(1, intval($utils::getArrayValue($args, 'limit', 10, 1))),
+                    'posts_per_page' => $postsLimit,
+                    'no_found_rows' => !$includePostsPagination,
                 );
-                if (isset($args['offset'])) {
-                    $q['offset'] = max(0, intval($args['offset']));
+                $postsSearch = sanitize_text_field($utils::getArrayValue($args, 'search'));
+                if ('' !== $postsSearch) {
+                    $q['s'] = $postsSearch;
                 }
-                if (isset($args['paged'])) {
-                    $q['paged'] = max(1, intval($args['paged']));
+                if (null !== $postsOffset) {
+                    $q['offset'] = $postsOffset;
+                } else {
+                    $q['paged'] = $postsPaged;
                 }
                 $date = array();
                 if (!empty($args['after'])) {
-                    $date['after'] = $args['after'];
+                    $date['after'] = sanitize_text_field($args['after']);
                 }
                 if (!empty($args['before'])) {
-                    $date['before'] = $args['before'];
+                    $date['before'] = sanitize_text_field($args['before']);
                 }
                 if ($date) {
                     $q['date_query'] = array($date);
                 }
+                $postQuery = new WP_Query($q);
                 $rows = array();
-                foreach (get_posts($q) as $p) {
-                    $rows[] = array(
+                foreach ($postQuery->posts as $p) {
+                    $row = array(
                         'ID' => $p->ID,
+                        'post_type' => $p->post_type,
                         'post_title' => $p->post_title,
                         'post_status' => $p->post_status,
                         'post_excerpt' => $postExcerpt($p),
                         'permalink' => get_permalink($p),
+                    );
+                    if ($includePostAuthor) {
+                        $row['author'] = $buildPostAuthor($p);
+                    }
+                    if ($includePostFeaturedMedia) {
+                        $row['featured_media'] = $buildFeaturedMedia($p->ID);
+                    }
+                    if ($includePostTaxonomies) {
+                        $row['taxonomies'] = $buildPostTaxonomies($p);
+                    }
+                    $rows[] = $row;
+                }
+                if ($includePostsPagination) {
+                    $effectivePostsOffset = null !== $postsOffset ? $postsOffset : (($postsPaged - 1) * $postsLimit);
+                    $rows = array(
+                        'items' => $rows,
+                        'pagination' => $buildPaginationMeta((int) $postQuery->found_posts, $postsLimit, $effectivePostsOffset, $postsPaged),
                     );
                 }
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
@@ -2069,8 +2338,12 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => -42600, 'message' => 'Post not found');
                     break;
                 }
+                $includeSingleAuthor = $isTruthy($utils::getArrayValue($args, 'include_author', false));
+                $includeSingleFeaturedMedia = $isTruthy($utils::getArrayValue($args, 'include_featured_media', false));
+                $includeSingleTaxonomies = $isTruthy($utils::getArrayValue($args, 'include_taxonomies', false));
                 $out = array(
                     'ID' => $p->ID,
+                    'post_type' => $p->post_type,
                     'post_title' => $p->post_title,
                     'post_status' => $p->post_status,
                     'post_content' => $cleanHtml($p->post_content),
@@ -2079,6 +2352,15 @@ class StifliFlexMcpModel {
                     'post_date' => $p->post_date,
                     'post_modified' => $p->post_modified,
                 );
+                if ($includeSingleAuthor) {
+                    $out['author'] = $buildPostAuthor($p);
+                }
+                if ($includeSingleFeaturedMedia) {
+                    $out['featured_media'] = $buildFeaturedMedia($p->ID);
+                }
+                if ($includeSingleTaxonomies) {
+                    $out['taxonomies'] = $buildPostTaxonomies($p);
+                }
                 $addResultText($r, wp_json_encode($out, JSON_PRETTY_PRINT));
                 break;
             case 'wp_create_post':
@@ -2363,23 +2645,39 @@ class StifliFlexMcpModel {
                 break;
             
             case 'wp_get_comments':
+                $commentsLimit = max(1, $utils::getArrayValue($args, 'limit', 10, 1));
+                $commentsPaged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $commentsOffset = isset($args['offset']) ? max(0, intval($args['offset'])) : (($commentsPaged - 1) * $commentsLimit);
+                $includeCommentPostTitle = $isTruthy($utils::getArrayValue($args, 'include_post_title', false));
+                $includeCommentsPagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
                 $cargs = array(
-                    'post_id' => $utils::getArrayValue($args, 'post_id', 0, 1),
                     'status' => $utils::getArrayValue($args, 'status', 'approve'),
-                    'search' => $utils::getArrayValue($args, 'search'),
-                    'number' => max(1, $utils::getArrayValue($args, 'limit', 10, 1)),
+                    'number' => $commentsLimit,
+                    'offset' => $commentsOffset,
                 );
-                if (isset($args['offset'])) {
-                    $cargs['offset'] = max(0, intval($args['offset']));
+                $commentsPostId = $utils::getArrayValue($args, 'post_id', 0, 1);
+                if (!empty($commentsPostId)) {
+                    $cargs['post_id'] = $commentsPostId;
                 }
-                if (isset($args['paged'])) {
-                    $cargs['paged'] = max(1, intval($args['paged']));
+                $commentsSearch = sanitize_text_field($utils::getArrayValue($args, 'search'));
+                if ('' !== $commentsSearch) {
+                    $cargs['search'] = $commentsSearch;
+                }
+                $commentsDate = array();
+                if (!empty($args['after'])) {
+                    $commentsDate['after'] = sanitize_text_field($args['after']);
+                }
+                if (!empty($args['before'])) {
+                    $commentsDate['before'] = sanitize_text_field($args['before']);
+                }
+                if (!empty($commentsDate)) {
+                    $cargs['date_query'] = array($commentsDate);
                 }
                 $list = array();
                 foreach (get_comments($cargs) as $c) {
                     // Mask author email and IP for privacy/GDPR; full data is
                     // available natively in WP admin to users with the cap.
-                    $list[] = array(
+                    $row = array(
                         'comment_ID' => $c->comment_ID,
                         'comment_post_ID' => $c->comment_post_ID,
                         'comment_author' => $c->comment_author,
@@ -2388,6 +2686,19 @@ class StifliFlexMcpModel {
                         'comment_content' => wp_trim_words(wp_strip_all_tags($c->comment_content), 40),
                         'comment_date' => $c->comment_date,
                         'comment_approved' => $c->comment_approved,
+                    );
+                    if ($includeCommentPostTitle) {
+                        $row['post_title'] = get_the_title($c->comment_post_ID);
+                    }
+                    $list[] = $row;
+                }
+                if ($includeCommentsPagination) {
+                    $countArgs = $cargs;
+                    unset($countArgs['number'], $countArgs['offset']);
+                    $countArgs['count'] = true;
+                    $list = array(
+                        'items' => $list,
+                        'pagination' => $buildPaginationMeta((int) get_comments($countArgs), $commentsLimit, $commentsOffset, $commentsPaged),
                     );
                 }
                 $addResultText($r, wp_json_encode($list, JSON_PRETTY_PRINT));
@@ -2456,24 +2767,51 @@ class StifliFlexMcpModel {
                 }
                 break;
             case 'wp_get_users':
+                $usersLimit = max(1, intval($utils::getArrayValue($args, 'limit', 10, 1)));
+                $usersPaged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $usersOffset = isset($args['offset']) ? max(0, intval($args['offset'])) : (($usersPaged - 1) * $usersLimit);
+                $includeRegisteredDate = $isTruthy($utils::getArrayValue($args, 'include_registered_date', false));
+                $includeAvatarUrl = $isTruthy($utils::getArrayValue($args, 'include_avatar_url', false));
+                $includePostCounts = $isTruthy($utils::getArrayValue($args, 'include_post_counts', false));
+                $includeUsersPagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
                 $q = array(
-                    'search' => '*' . esc_attr($utils::getArrayValue($args, 'search')) . '*',
-                    'role' => $utils::getArrayValue($args, 'role'),
-                    'number' => max(1, intval($utils::getArrayValue($args, 'limit', 10, 1))),
+                    'number' => $usersLimit,
+                    'offset' => $usersOffset,
+                    'count_total' => $includeUsersPagination,
                 );
-                if (isset($args['offset'])) {
-                    $q['offset'] = max(0, intval($args['offset']));
+                $usersSearch = trim((string) $utils::getArrayValue($args, 'search'));
+                if ('' !== $usersSearch) {
+                    $q['search'] = '*' . esc_attr($usersSearch) . '*';
+                    $q['search_columns'] = array('user_login', 'user_email', 'user_nicename', 'display_name');
                 }
-                if (isset($args['paged'])) {
-                    $q['paged'] = max(1, intval($args['paged']));
+                $usersRole = $utils::getArrayValue($args, 'role');
+                if (!empty($usersRole)) {
+                    $q['role'] = sanitize_text_field($usersRole);
                 }
+                $userQuery = new WP_User_Query($q);
                 $rows = array();
-                foreach (get_users($q) as $u) {
-                    $rows[] = array(
+                foreach ($userQuery->get_results() as $u) {
+                    $row = array(
                         'ID' => $u->ID,
                         'user_login' => $u->user_login,
                         'display_name' => $u->display_name,
                         'roles' => $u->roles,
+                    );
+                    if ($includeRegisteredDate) {
+                        $row['user_registered'] = $u->user_registered;
+                    }
+                    if ($includeAvatarUrl) {
+                        $row['avatar_url'] = get_avatar_url($u->ID);
+                    }
+                    if ($includePostCounts) {
+                        $row['post_count'] = (int) count_user_posts($u->ID);
+                    }
+                    $rows[] = $row;
+                }
+                if ($includeUsersPagination) {
+                    $rows = array(
+                        'items' => $rows,
+                        'pagination' => $buildPaginationMeta((int) $userQuery->get_total(), $usersLimit, $usersOffset, $usersPaged),
                     );
                 }
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
@@ -4285,13 +4623,75 @@ class StifliFlexMcpModel {
             case 'search':
                 $s = sanitize_text_field($utils::getArrayValue($args, 'q', $utils::getArrayValue($args, 'query', '')));
                 $limit = max(1, intval($utils::getArrayValue($args, 'limit', 10, 1)));
-                $q = new WP_Query(array('s' => $s, 'posts_per_page' => $limit));
+                $paged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $offset = isset($args['offset']) ? max(0, intval($args['offset'])) : null;
+                $includePagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
+                $searchOrderby = sanitize_key($utils::getArrayValue($args, 'orderby', 'date'));
+                $searchOrder = strtoupper(sanitize_text_field($utils::getArrayValue($args, 'order', 'DESC')));
+                $queryArgs = array(
+                    's' => $s,
+                    'post_type' => sanitize_key($utils::getArrayValue($args, 'post_type', 'post')),
+                    'post_status' => sanitize_key($utils::getArrayValue($args, 'post_status', 'publish')),
+                    'posts_per_page' => $limit,
+                    'orderby' => '' !== $searchOrderby ? $searchOrderby : 'date',
+                    'order' => in_array($searchOrder, array('ASC', 'DESC'), true) ? $searchOrder : 'DESC',
+                    'no_found_rows' => !$includePagination,
+                );
+                $searchAuthor = intval($utils::getArrayValue($args, 'author', 0, 1));
+                if ($searchAuthor > 0) {
+                    $queryArgs['author'] = $searchAuthor;
+                }
+                $searchCategory = sanitize_title($utils::getArrayValue($args, 'category', ''));
+                if ('' !== $searchCategory) {
+                    $queryArgs['category_name'] = $searchCategory;
+                }
+                $searchTag = sanitize_title($utils::getArrayValue($args, 'tag', ''));
+                if ('' !== $searchTag) {
+                    $queryArgs['tag'] = $searchTag;
+                }
+                if (null !== $offset) {
+                    $queryArgs['offset'] = $offset;
+                } else {
+                    $queryArgs['paged'] = $paged;
+                }
+                $searchDate = array();
+                if (!empty($args['after'])) {
+                    $searchDate['after'] = sanitize_text_field($args['after']);
+                }
+                if (!empty($args['before'])) {
+                    $searchDate['before'] = sanitize_text_field($args['before']);
+                }
+                if (!empty($searchDate)) {
+                    $queryArgs['date_query'] = array($searchDate);
+                }
+                $q = new WP_Query($queryArgs);
                 $out = array();
-                foreach ($q->posts as $p) { $out[] = array('ID' => $p->ID, 'post_title' => $p->post_title, 'excerpt' => $postExcerpt($p), 'permalink' => get_permalink($p)); }
+                foreach ($q->posts as $p) {
+                    $out[] = array(
+                        'ID' => $p->ID,
+                        'post_type' => $p->post_type,
+                        'post_status' => $p->post_status,
+                        'post_title' => $p->post_title,
+                        'excerpt' => $postExcerpt($p),
+                        'permalink' => get_permalink($p),
+                    );
+                }
+                if ($includePagination) {
+                    $effectiveOffset = null !== $offset ? $offset : (($paged - 1) * $limit);
+                    $out = array(
+                        'items' => $out,
+                        'pagination' => $buildPaginationMeta((int) $q->found_posts, $limit, $effectiveOffset, $paged),
+                    );
+                }
                 $addResultText($r, wp_json_encode($out, JSON_PRETTY_PRINT));
                 break;
             case 'fetch':
-                $url = esc_url_raw($utils::getArrayValue($args, 'url'));
+                $rawUrl = (string) $utils::getArrayValue($args, 'url');
+                $queryParams = $sanitizeQueryParams($utils::getArrayValue($args, 'query_params', array()));
+                if (!empty($queryParams)) {
+                    $rawUrl = add_query_arg($queryParams, $rawUrl);
+                }
+                $url = esc_url_raw($rawUrl);
                 if (!$url) { $r['error'] = array('code' => -42602, 'message' => 'url required'); break; }
                 // SSRF protection: block requests to private/reserved IP ranges.
                 $fetch_host = wp_parse_url( $url, PHP_URL_HOST );
@@ -4303,17 +4703,79 @@ class StifliFlexMcpModel {
                 if ( $fetch_ip && ! filter_var( $fetch_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
                     $r['error'] = array('code' => -42603, 'message' => 'Blocked: target resolves to a private or reserved IP range.'); break;
                 }
+                $timeoutSec = max(1, min(20, intval($utils::getArrayValue($args, 'timeout_sec', 10, 1))));
+                $maxRedirects = max(0, min(10, intval($utils::getArrayValue($args, 'max_redirects', 3, 1))));
+                $headOnly = $isTruthy($utils::getArrayValue($args, 'head_only', false));
+                $includeHeaders = $isTruthy($utils::getArrayValue($args, 'include_headers', false));
+                $includeRequestHeaders = $isTruthy($utils::getArrayValue($args, 'include_request_headers', false));
+                $extractText = $isTruthy($utils::getArrayValue($args, 'extract_text', false));
+                $maxBytes = max(128, min(50000, intval($utils::getArrayValue($args, 'max_bytes', 2000, 1))));
                 $method = strtoupper($utils::getArrayValue($args, 'method', 'GET'));
-                $opts = array();
-                if (!empty($args['headers']) && is_array($args['headers'])) { $opts['headers'] = $args['headers']; }
+                if ($headOnly) {
+                    $method = 'HEAD';
+                }
+                $requestHeaders = $sanitizeHeaderMap($utils::getArrayValue($args, 'headers', array()));
+                $acceptHeader = trim((string) $utils::getArrayValue($args, 'accept', ''));
+                if ('' !== $acceptHeader && !$hasHeaderName($requestHeaders, 'Accept')) {
+                    $requestHeaders['Accept'] = sanitize_text_field($acceptHeader);
+                }
+                $contentTypeHeader = trim((string) $utils::getArrayValue($args, 'content_type', ''));
+                if ('HEAD' !== $method && '' !== $contentTypeHeader && !$hasHeaderName($requestHeaders, 'Content-Type')) {
+                    $requestHeaders['Content-Type'] = sanitize_text_field($contentTypeHeader);
+                }
+                $userAgent = trim((string) $utils::getArrayValue($args, 'user_agent', ''));
+                $opts = array(
+                    'timeout' => $timeoutSec,
+                    'redirection' => $maxRedirects,
+                );
+                if ('' !== $userAgent) {
+                    $opts['user-agent'] = sanitize_text_field($userAgent);
+                }
+                if (!empty($requestHeaders)) {
+                    $opts['headers'] = $requestHeaders;
+                }
                 if (!empty($args['body'])) { $opts['body'] = $args['body']; }
-                if ('GET' === $method) { $resp = wp_remote_get($url, $opts); } else { $resp = wp_remote_request($url, array_merge($opts, array('method' => $method))); }
+                if ('HEAD' === $method) {
+                    $resp = wp_remote_head($url, $opts);
+                } elseif ('GET' === $method) {
+                    $resp = wp_remote_get($url, $opts);
+                } else {
+                    $resp = wp_remote_request($url, array_merge($opts, array('method' => $method)));
+                }
                 if (is_wp_error($resp)) { $r['error'] = array('code' => 'fetch_error', 'message' => $resp->get_error_message()); break; }
                 $code = wp_remote_retrieve_response_code($resp);
-                $body = wp_remote_retrieve_body($resp);
-                $maxlen = 2000;
-                $body_short = (strlen($body) > $maxlen) ? substr($body, 0, $maxlen) . "... [truncated]" : $body;
-                $addResultText($r, "Fetch status: $code\n" . $body_short);
+                $body = 'HEAD' === $method ? '' : wp_remote_retrieve_body($resp);
+                if ($extractText && '' !== $body) {
+                    $body = trim((string) preg_replace('/\s+/', ' ', wp_strip_all_tags($body)));
+                }
+                $bodyShort = (strlen($body) > $maxBytes) ? substr($body, 0, $maxBytes) . '... [truncated]' : $body;
+                if ($includeHeaders || 'HEAD' === $method) {
+                    $headers = wp_remote_retrieve_headers($resp);
+                    if (is_object($headers) && method_exists($headers, 'getAll')) {
+                        $headers = $headers->getAll();
+                    } elseif (!is_array($headers)) {
+                        $headers = (array) $headers;
+                    }
+                    $payload = array(
+                        'status' => (int) $code,
+                        'method' => $method,
+                        'url' => $url,
+                        'response_message' => wp_remote_retrieve_response_message($resp),
+                        'content_type' => wp_remote_retrieve_header($resp, 'content-type'),
+                    );
+                    if ($includeRequestHeaders) {
+                        $payload['request_headers'] = $requestHeaders;
+                    }
+                    if ($includeHeaders) {
+                        $payload['headers'] = $headers;
+                    }
+                    if ('HEAD' !== $method) {
+                        $payload['body'] = $bodyShort;
+                    }
+                    $addResultText($r, wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                } else {
+                    $addResultText($r, "Fetch status: $code\n" . $bodyShort);
+                }
                 break;
             case 'wp_rm_get_head':
                 if ( ! function_exists( 'rank_math' ) ) {

@@ -19,7 +19,7 @@ class StifliFlexMcp_WC_Products {
             // Products
             'wc_get_products' => array(
                 'name' => 'wc_get_products',
-                'description' => 'List WooCommerce products with filters (status, category, tag, search, limit, offset, orderby, order).',
+                'description' => 'List WooCommerce products with filters (status, category, tag, search, limit, offset, paged, orderby, order). Optional enrichments: images, categories, attributes, variation counts, and pagination metadata.',
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
@@ -29,9 +29,16 @@ class StifliFlexMcp_WC_Products {
                         'search'   => array('type' => 'string'),
                         'limit'    => array('type' => 'integer'),
                         'offset'   => array('type' => 'integer'),
+                        'paged'    => array('type' => 'integer'),
                         'orderby'  => array('type' => 'string'),
                         'order'    => array('type' => 'string'),
                         'type'     => array('type' => 'string'),
+                        'compact'  => array('type' => 'boolean'),
+                        'include_images' => array('type' => 'boolean'),
+                        'include_categories' => array('type' => 'boolean'),
+                        'include_attributes' => array('type' => 'boolean'),
+                        'include_variation_count' => array('type' => 'boolean'),
+                        'include_pagination' => array('type' => 'boolean'),
                     ),
                     'required' => array(),
                 ),
@@ -405,16 +412,118 @@ class StifliFlexMcp_WC_Products {
             $r['error'] = array('code' => -50000, 'message' => 'WooCommerce is not active');
             return true;
         }
+
+        $isTruthy = function($value) {
+            if (is_bool($value)) {
+                return $value;
+            }
+            if (is_int($value)) {
+                return 1 === $value;
+            }
+            if (is_string($value)) {
+                return in_array(strtolower(trim($value)), array('1', 'true', 'yes', 'on'), true);
+            }
+            return !empty($value);
+        };
+        $buildPaginationMeta = function($totalItems, $limit, $offset = 0, $paged = 1) {
+            $limit = max(1, (int) $limit);
+            $offset = max(0, (int) $offset);
+            $paged = max(1, (int) $paged);
+            $currentPage = $offset > 0 ? (int) floor($offset / $limit) + 1 : $paged;
+            return array(
+                'total_items' => (int) $totalItems,
+                'per_page' => $limit,
+                'offset' => $offset,
+                'current_page' => $currentPage,
+                'total_pages' => (int) ceil(max(0, (int) $totalItems) / $limit),
+                'has_more' => ($offset + $limit) < (int) $totalItems,
+            );
+        };
+        $buildProductRow = function($product, $compact, $includeImages, $includeCategories, $includeAttributes, $includeVariationCount) {
+            $row = array(
+                'id' => $product->get_id(),
+                'name' => $product->get_name(),
+                'slug' => $product->get_slug(),
+                'type' => $product->get_type(),
+                'status' => $product->get_status(),
+                'price' => $product->get_price(),
+                'stock_status' => $product->get_stock_status(),
+                'permalink' => $product->get_permalink(),
+            );
+
+            if (!$compact) {
+                $row['regular_price'] = $product->get_regular_price();
+                $row['sale_price'] = $product->get_sale_price();
+                $row['sku'] = $product->get_sku();
+                $row['stock_quantity'] = $product->get_stock_quantity();
+            }
+
+            if ($includeImages) {
+                $imageId = $product->get_image_id();
+                $row['image'] = $imageId ? array(
+                    'id' => $imageId,
+                    'url' => wp_get_attachment_url($imageId),
+                ) : null;
+            }
+
+            if ($includeCategories) {
+                $categories = get_the_terms($product->get_id(), 'product_cat');
+                $row['categories'] = array();
+                if (!is_wp_error($categories) && !empty($categories)) {
+                    foreach ($categories as $category) {
+                        $row['categories'][] = array(
+                            'term_id' => $category->term_id,
+                            'name' => $category->name,
+                            'slug' => $category->slug,
+                        );
+                    }
+                }
+            }
+
+            if ($includeAttributes) {
+                $row['attributes'] = array();
+                foreach ($product->get_attributes() as $attribute) {
+                    $attributeName = method_exists($attribute, 'get_name') ? $attribute->get_name() : '';
+                    if ('' === $attributeName) {
+                        continue;
+                    }
+                    if (method_exists($attribute, 'is_taxonomy') && $attribute->is_taxonomy()) {
+                        $row['attributes'][$attributeName] = wp_get_post_terms($product->get_id(), $attributeName, array('fields' => 'names'));
+                    } else {
+                        $row['attributes'][$attributeName] = method_exists($attribute, 'get_options') ? $attribute->get_options() : array();
+                    }
+                }
+            }
+
+            if ($includeVariationCount) {
+                $row['variation_count'] = $product->is_type('variable') ? count($product->get_children()) : 0;
+            }
+
+            return $row;
+        };
         
         switch ($tool) {
             case 'wc_get_products':
+                $limit = intval($utils::getArrayValue($args, 'limit', 10));
+                $limit = $limit > 0 ? $limit : 10;
+                $paged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $offset = isset($args['offset']) ? max(0, intval($args['offset'])) : (($paged - 1) * $limit);
+                $compact = $isTruthy($utils::getArrayValue($args, 'compact', false));
+                $includeImages = $isTruthy($utils::getArrayValue($args, 'include_images', false));
+                $includeCategories = $isTruthy($utils::getArrayValue($args, 'include_categories', false));
+                $includeAttributes = $isTruthy($utils::getArrayValue($args, 'include_attributes', false));
+                $includeVariationCount = $isTruthy($utils::getArrayValue($args, 'include_variation_count', false));
+                $includePagination = $isTruthy($utils::getArrayValue($args, 'include_pagination', false));
                 $query_args = array(
-                    'limit' => intval($utils::getArrayValue($args, 'limit', 10)),
-                    'offset' => intval($utils::getArrayValue($args, 'offset', 0)),
+                    'limit' => $limit,
+                    'offset' => $offset,
                     'status' => sanitize_text_field($utils::getArrayValue($args, 'status', 'any')),
                     'orderby' => sanitize_key($utils::getArrayValue($args, 'orderby', 'date')),
                     'order' => sanitize_key($utils::getArrayValue($args, 'order', 'DESC')),
                 );
+                if ($includePagination) {
+                    $query_args['paginate'] = true;
+                }
                 
                 if (!empty($args['type'])) {
                     $query_args['type'] = sanitize_text_field($args['type']);
@@ -429,25 +538,34 @@ class StifliFlexMcp_WC_Products {
                     $query_args['s'] = sanitize_text_field($args['search']);
                 }
                 
-                $products = wc_get_products($query_args);
+                $productsResponse = wc_get_products($query_args);
+                $products = $productsResponse;
+                $totalProducts = null;
+
+                if ($includePagination && is_object($productsResponse) && isset($productsResponse->products)) {
+                    $products = $productsResponse->products;
+                    $totalProducts = isset($productsResponse->total) ? (int) $productsResponse->total : null;
+                }
+                if (!is_array($products)) {
+                    $products = array();
+                }
+
                 $result = array();
                 foreach ($products as $product) {
-                    $result[] = array(
-                        'id' => $product->get_id(),
-                        'name' => $product->get_name(),
-                        'slug' => $product->get_slug(),
-                        'type' => $product->get_type(),
-                        'status' => $product->get_status(),
-                        'price' => $product->get_price(),
-                        'regular_price' => $product->get_regular_price(),
-                        'sale_price' => $product->get_sale_price(),
-                        'sku' => $product->get_sku(),
-                        'stock_quantity' => $product->get_stock_quantity(),
-                        'stock_status' => $product->get_stock_status(),
-                        'permalink' => $product->get_permalink(),
+                    $result[] = $buildProductRow($product, $compact, $includeImages, $includeCategories, $includeAttributes, $includeVariationCount);
+                }
+
+                $payload = $result;
+                if ($includePagination) {
+                    if (null === $totalProducts) {
+                        $totalProducts = count($result);
+                    }
+                    $payload = array(
+                        'items' => $result,
+                        'pagination' => $buildPaginationMeta($totalProducts, $limit, $offset, $paged),
                     );
                 }
-                $addResultText($r, 'Found ' . count($result) . ' products: ' . wp_json_encode($result, JSON_PRETTY_PRINT));
+                $addResultText($r, 'Found ' . count($result) . ' products: ' . wp_json_encode($payload, JSON_PRETTY_PRINT));
                 return true;
                 
             case 'wc_create_product':
