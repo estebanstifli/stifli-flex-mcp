@@ -2,7 +2,7 @@
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags:  mcp, ai copilot, chatgpt, claude, woocommerce ai
+Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
 Requires at least: 5.8
 Tested up to: 7.0
 Stable tag: 3.2.6
@@ -203,7 +203,7 @@ StifLi Flex MCP integrates with:
 
 **📐 MCP Spec Compliance**
 
-StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-06-18 specification](https://modelcontextprotocol.io/specification/2025-06-18/) — the latest version of the MCP standard.
+StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25/) for lifecycle and tool operations over JSON-RPC 2.0, while keeping legacy SSE compatibility for older MCP clients.
 
 **Demo & Installation Tutorial:**
 

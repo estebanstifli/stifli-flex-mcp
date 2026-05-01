@@ -8,7 +8,7 @@ class StifliFlexMcp {
 	private $namespace = 'stifli-flex-mcp/v1';
 	private $sessionID = null;
 	private $lastAction = 0;
-	private $protocolVersion = '2025-06-18';
+	private $protocolVersion = '2025-11-25';
 	private $serverVersion = '0.0.1';
 	private $queueTable = '';
 	private $queueTtl = 300; // seconds
@@ -89,6 +89,13 @@ class StifliFlexMcp {
 				return $this->canAccessMCP($request);
 			},
 		));
+		register_rest_route($this->namespace, '/messages', array(
+			'methods' => 'GET',
+			'callback' => array($this, 'handleMessagesGet'),
+			'permission_callback' => function( $request ) {
+				return $this->canAccessMCP($request);
+			},
+		));
 		StifliFlexMcpDispatcher::addFilter('sflmcp_callback', array($this, 'handleCallback'), 10, 4);
 	}
 
@@ -112,6 +119,23 @@ class StifliFlexMcp {
 			$auth_hdr ? substr( $auth_hdr, 0, 20 ) . '...' : '(none)',
 			$request->get_header( 'User-Agent' ) ?: '(none)'
 		) );
+
+		// Streamable HTTP security: reject invalid Origin headers.
+		$origin = trim( (string) $request->get_header( 'Origin' ) );
+		if ( '' !== $origin ) {
+			$origin_host = wp_parse_url( $origin, PHP_URL_HOST );
+			$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
+			$allowed_hosts = array_filter( apply_filters( 'sflmcp_allowed_origin_hosts', array( $site_host ) ) );
+			$allowed_hosts = array_map( static function( $host ) {
+				return strtolower( (string) $host );
+			}, $allowed_hosts );
+			$origin_host = strtolower( (string) $origin_host );
+
+			if ( '' === $origin_host || ! in_array( $origin_host, $allowed_hosts, true ) ) {
+				stifli_flex_mcp_log( sprintf( 'canAccessMCP: Invalid Origin header rejected (%s)', $origin ) );
+				return new WP_Error( 'invalid_origin', 'Invalid Origin header.', array( 'status' => 403 ) );
+			}
+		}
 
 		// --- Rate limiting: 30 requests/minute per IP ---
 		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '0.0.0.0';
@@ -208,6 +232,57 @@ class StifliFlexMcp {
 		return empty($last) ? str_replace('-', '', wp_generate_uuid4()) : $last;
 	}
 
+	private function getSupportedProtocolVersions(): array {
+		return array('2025-11-25', '2025-06-18', '2025-03-26');
+	}
+
+	private function isSupportedProtocolVersion( $version ): bool {
+		if (!is_string($version) || '' === $version) {
+			return false;
+		}
+		return in_array($version, $this->getSupportedProtocolVersions(), true);
+	}
+
+	private function negotiateProtocolVersion( $requestedVersion ): string {
+		if ($this->isSupportedProtocolVersion($requestedVersion)) {
+			return $requestedVersion;
+		}
+		return $this->protocolVersion;
+	}
+
+	private function getProtocolVersionHeader( $request ) {
+		$version = trim((string) $request->get_header('MCP-Protocol-Version'));
+		return '' === $version ? null : $version;
+	}
+
+	private function protocolVersionErrorResponse( $id, string $requestedVersion ) {
+		$response = new WP_REST_Response(array(
+			'jsonrpc' => '2.0',
+			'id' => $id,
+			'error' => array(
+				'code' => -32602,
+				'message' => 'Unsupported protocol version',
+				'data' => array(
+					'supported' => $this->getSupportedProtocolVersions(),
+					'requested' => $requestedVersion,
+				),
+			),
+		), 400);
+		$response->set_headers(array('Content-Type' => 'application/json'));
+		return $response;
+	}
+
+	private function withProtocolHeaders( WP_REST_Response $response, string $protocolVersion, bool $hasJsonBody = true ): WP_REST_Response {
+		$headers = array(
+			'MCP-Protocol-Version' => $protocolVersion,
+		);
+		if ($hasJsonBody) {
+			$headers['Content-Type'] = 'application/json';
+		}
+		$response->set_headers($headers);
+		return $response;
+	}
+
 	public function handleSSE( $request ) {
 		$body = $request->get_body();
 		$remote = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'n/a';
@@ -299,6 +374,7 @@ class StifliFlexMcp {
 	public function handleDirectJsonRPC( $request, $data ) {
 		$id = isset($data['id']) ? $data['id'] : null;
 		$method = isset($data['method']) ? $data['method'] : null;
+		$replyProtocolVersion = $this->protocolVersion;
 		$qp = $request->get_param('token') ? 'present' : 'none';
 		$hdr = $request->get_header('Authorization') ? 'present' : 'none';
 		stifli_flex_mcp_log(sprintf('handleDirectJsonRPC: id=%s method=%s header=%s query=%s', $id, $method, $hdr, $qp));
@@ -325,12 +401,20 @@ class StifliFlexMcp {
 				'error' => array('code' => -32600, 'message' => 'Invalid Request'),
 			), 200);
 		}
+		$headerProtocolVersion = $this->getProtocolVersionHeader($request);
+		if ('initialize' !== $method && null !== $headerProtocolVersion) {
+			if (!$this->isSupportedProtocolVersion($headerProtocolVersion)) {
+				return $this->protocolVersionErrorResponse($id, $headerProtocolVersion);
+			}
+			$replyProtocolVersion = $headerProtocolVersion;
+		}
 		try {
 			$reply = null;
 			switch ($method) {
 				case 'initialize':
 					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
 					$reqVersion = StifliFlexMcpUtils::getArrayValue($params, 'protocolVersion', null);
+					$replyProtocolVersion = $this->negotiateProtocolVersion($reqVersion);
 					$clientInfo = StifliFlexMcpUtils::getArrayValue($params, 'clientInfo', false);
 
 					// Store MCP client name for source tracking
@@ -345,7 +429,7 @@ class StifliFlexMcp {
 						'jsonrpc' => '2.0',
 						'id' => $id,
 						'result' => array(
-							'protocolVersion' => $this->protocolVersion,
+							'protocolVersion' => $replyProtocolVersion,
 							'serverInfo' => (object) array(
 								'name' => get_bloginfo('name') . ' StifliFlexMcp',
 								'version' => $this->serverVersion,
@@ -356,6 +440,13 @@ class StifliFlexMcp {
 								'resources' => array('subscribe' => false, 'listChanged' => false),
 							),
 						),
+					);
+					break;
+				case 'ping':
+					$reply = array(
+						'jsonrpc' => '2.0',
+						'id' => $id,
+						'result' => (object) array(),
 					);
 					break;
 				case 'tools/list':
@@ -380,13 +471,9 @@ class StifliFlexMcp {
 					   }
 					   $reply = $this->executeTool($tool, $arguments, $id);
 					   break;
+				case 'initialized':
 				case 'notifications/initialized':
-					$reply = array(
-						'jsonrpc' => '2.0',
-						'id' => $id,
-						'method' => 'tools/listChanged',
-					);
-					break;
+					return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 				case 'resources/list':
 					$reply = array(
 						'jsonrpc' => '2.0',
@@ -403,7 +490,7 @@ class StifliFlexMcp {
 					break;
 				default:
 					if (is_null($id) && strpos($method, 'notifications/') === 0) {
-						return new WP_REST_Response(null, 204);
+						return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 					}
 					$reply = array(
 						'jsonrpc' => '2.0',
@@ -411,19 +498,24 @@ class StifliFlexMcp {
 						'error' => array('code' => -44001, 'message' => "Method not found: {$method}"),
 					);
 			}
-			$response = new WP_REST_Response($reply, 200);
-			$response->set_headers(array('Content-Type' => 'application/json'));
-			return $response;
+			return $this->withProtocolHeaders(new WP_REST_Response($reply, 200), $replyProtocolVersion);
 		}
 		catch ( Exception $e ) {
-			$response = new WP_REST_Response(array(
+			return $this->withProtocolHeaders(new WP_REST_Response(array(
 				'jsonrpc' => '2.0',
 				'id' => $id,
 				'error' => array('code' => -44000, 'message' => 'Internal error', 'data' => $e->getMessage())
-			), 200);
-			$response->set_headers(array('Content-Type' => 'application/json'));
-			return $response;
+			), 200), $replyProtocolVersion);
 		}
+	}
+
+	public function handleMessagesGet( $request ) {
+		$response = new WP_REST_Response(null, 405);
+		$response->set_headers(array(
+			'Allow' => 'POST',
+			'MCP-Protocol-Version' => $this->protocolVersion,
+		));
+		return $response;
 	}
 
 	public function handleMessage( $request ) {
@@ -442,20 +534,34 @@ class StifliFlexMcp {
 		   stifli_flex_mcp_log('handleMessage: JSON decoded: ' . $decodedForLog);
 		   $id = isset($data['id']) ? $data['id'] : null;
 		   $method = StifliFlexMcpUtils::getArrayValue($data, 'method', null);
-		if ('initialized' === $method) {
-			return new WP_REST_Response(null, 204);
+		   $replyProtocolVersion = $this->protocolVersion;
+		   $headerProtocolVersion = $this->getProtocolVersionHeader($request);
+		if ('initialize' !== $method && null !== $headerProtocolVersion) {
+			if (!$this->isSupportedProtocolVersion($headerProtocolVersion)) {
+				return $this->protocolVersionErrorResponse($id, $headerProtocolVersion);
+			}
+			$replyProtocolVersion = $headerProtocolVersion;
+		}
+		if ('initialized' === $method || 'notifications/initialized' === $method) {
+			return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 		}
 		if ('SFLMCP/kill' === $method) {
 			$this->storeMessage($sess, array('jsonrpc' => '2.0', 'method' => 'SFLMCP/kill'));
 			usleep( 100000 );
-			return new WP_REST_Response(null, 204);
+			return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 		}
 		if (is_null($id) && !is_null($method)) {
-			return new WP_REST_Response(null, 204);
+			return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 		}
 		if (!$method) {
+			$hasRpcResponseShape = is_array($data)
+				&& array_key_exists('id', $data)
+				&& (array_key_exists('result', $data) || array_key_exists('error', $data));
+			if ($hasRpcResponseShape) {
+				return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
+			}
 			$this->queueError($sess, $id, -32900, 'Invalid Request: method missing');
-			return new WP_REST_Response(null, 204);
+			return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 		}
 
 		// Pass session_id to ChangeTracker for grouping
@@ -472,6 +578,7 @@ class StifliFlexMcp {
 				case 'initialize':
 					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
 					$requestedVersion = StifliFlexMcpUtils::getArrayValue($params, 'protocolVersion', null);
+					$replyProtocolVersion = $this->negotiateProtocolVersion($requestedVersion);
 					$clientInfo = StifliFlexMcpUtils::getArrayValue($params, 'clientInfo', null);
 
 					// Store MCP client name for source tracking (e.g. "Claude", "ChatGPT")
@@ -486,7 +593,7 @@ class StifliFlexMcp {
 						'jsonrpc' => '2.0',
 						'id' => $id,
 						'result' => array(
-							'protocolVersion' => $this->protocolVersion,
+							'protocolVersion' => $replyProtocolVersion,
 							'serverInfo' => (object) array(
 								'name' => get_bloginfo( 'name' ) . ' StifliFlexMcp',
 								'version' => $this->serverVersion,
@@ -497,6 +604,13 @@ class StifliFlexMcp {
 								'resources' => array('subscribe' => false, 'listChanged' => false),
 							),
 						),
+					);
+					break;
+				case 'ping':
+					$reply = array(
+						'jsonrpc' => '2.0',
+						'id' => $id,
+						'result' => (object) array(),
 					);
 					break;
 				case 'tools/list':
@@ -549,14 +663,14 @@ class StifliFlexMcp {
 			}
 			if ($reply) {
 				// Devolver la respuesta JSON-RPC directamente
-				return new WP_REST_Response($reply, 200);
+				return $this->withProtocolHeaders(new WP_REST_Response($reply, 200), $replyProtocolVersion);
 			}
 		}
 		catch ( Exception $e ) {
 			$error = $this->rpcError($id, -45603, 'Internal error', $e->getMessage() );
-			return new WP_REST_Response($error, 200);
+			return $this->withProtocolHeaders(new WP_REST_Response($error, 200), $replyProtocolVersion);
 		}
-		return new WP_REST_Response(null, 204);
+		return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 	}
 
 	public function getToolsList() {
