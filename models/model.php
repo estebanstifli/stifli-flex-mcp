@@ -1202,6 +1202,9 @@ class StifliFlexMcpModel {
                 'wp_generate_image' => array(
                     'name' => 'wp_generate_image',
                     'description' => 'Generate an image using AI and save it as a WordPress media attachment. Uses the configured AI provider (OpenAI/Gemini). Returns attachment ID, URL and medium-size URL. Supports size (square, landscape, portrait or aspect ratio like 16:9) and quality (low, medium, high for OpenAI).',
+                    'execution' => array(
+                        'taskSupport' => 'optional',
+                    ),
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -1220,6 +1223,9 @@ class StifliFlexMcpModel {
                 'wp_generate_video' => array(
                     'name' => 'wp_generate_video',
                     'description' => 'Generate a video using AI (Google Veo or OpenAI Sora) and save it as a WordPress media attachment. Video generation is asynchronous and may take 1-5 minutes. Returns attachment ID, URL, duration, and provider info. Configure defaults in Multimedia Settings.',
+                    'execution' => array(
+                        'taskSupport' => 'optional',
+                    ),
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -3541,6 +3547,12 @@ class StifliFlexMcpModel {
                 break;
             case 'wp_generate_image':
                 stifli_flex_mcp_log('wp_generate_image: === START ===');
+                // Keep processing even if the MCP client disconnects/retries.
+                if ( function_exists( 'ignore_user_abort' ) ) {
+                    ignore_user_abort( true );
+                }
+                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.NoSilencedErrors.Discouraged -- required for long-running media generation on unstable client transports.
+                @set_time_limit( 0 );
                 $prompt = sanitize_text_field( $utils::getArrayValue( $args, 'prompt', '' ) );
                 if ( empty( $prompt ) ) {
                     stifli_flex_mcp_log('wp_generate_image: ERROR - prompt is empty');
@@ -3909,106 +3921,66 @@ class StifliFlexMcpModel {
                 }
                 stifli_flex_mcp_log('wp_generate_image: Image binary received, size=' . strlen( $image_binary ) . ' bytes, mime=' . $mime_type);
 
-                // Save as WordPress media attachment
-                if ( ! function_exists( 'wp_upload_dir' ) ) {
+                // Save as WordPress media attachment. Avoid media_handle_sideload()
+                // here because it generates image metadata/subsizes synchronously.
+                if ( ! function_exists( 'wp_upload_bits' ) ) {
                     require_once ABSPATH . 'wp-admin/includes/file.php';
-                }
-                if ( ! function_exists( 'media_handle_sideload' ) ) {
-                    require_once ABSPATH . 'wp-admin/includes/media.php';
-                    require_once ABSPATH . 'wp-admin/includes/image.php';
                 }
 
                 $ext_map  = array( 'image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp' );
                 $ext      = isset( $ext_map[ $mime_type ] ) ? $ext_map[ $mime_type ] : 'png';
                 $filename = 'ai-generated-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 6, false ) . '.' . $ext;
 
-                $upload_dir = wp_upload_dir();
-                $temp_file  = $upload_dir['path'] . '/' . wp_unique_filename( $upload_dir['path'], $filename );
-
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- writing temp binary from AI API to create media attachment.
-                if ( file_put_contents( $temp_file, $image_binary ) === false ) {
-                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to write image file' );
+                stifli_flex_mcp_log('wp_generate_image: Writing image to uploads as ' . $filename);
+                $upload = wp_upload_bits( $filename, null, $image_binary );
+                unset( $image_binary );
+                if ( ! empty( $upload['error'] ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: Upload bits error: ' . $upload['error']);
+                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to write image file: ' . $upload['error'] );
                     break;
                 }
+                if ( empty( $upload['file'] ) || ! file_exists( $upload['file'] ) ) {
+                    stifli_flex_mcp_log('wp_generate_image: Upload bits returned no readable file');
+                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to create image file in uploads.' );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_image: Upload file ready path=' . $upload['file']);
 
-                $file_array = array(
-                    'name'     => $filename,
-                    'tmp_name' => $temp_file,
+                $filetype = wp_check_filetype( $upload['file'], null );
+                $attachment = array(
+                    'guid'           => $upload['url'],
+                    'post_mime_type' => ! empty( $filetype['type'] ) ? $filetype['type'] : $mime_type,
+                    'post_title'     => $img_title ? $img_title : preg_replace( '/\.[^.]+$/', '', basename( $filename ) ),
+                    'post_content'   => '',
+                    'post_status'    => 'inherit',
                 );
-                $att_id = media_handle_sideload( $file_array, $img_post_id );
-
+                $att_id = wp_insert_attachment( $attachment, $upload['file'], $img_post_id, true );
                 if ( is_wp_error( $att_id ) ) {
-                    stifli_flex_mcp_log('wp_generate_image: Sideload error: ' . $att_id->get_error_message());
-                    wp_delete_file( $temp_file );
+                    stifli_flex_mcp_log('wp_generate_image: Attachment insert error: ' . $att_id->get_error_message());
+                    wp_delete_file( $upload['file'] );
                     $r['error'] = array( 'code' => 'upload_error', 'message' => $att_id->get_error_message() );
                     break;
                 }
-                stifli_flex_mcp_log('wp_generate_image: Saved as attachment ID=' . $att_id);
+                $att_id = (int) $att_id;
+                update_attached_file( $att_id, $upload['file'] );
+                stifli_flex_mcp_log('wp_generate_image: Saved as attachment ID=' . $att_id . ' file=' . $upload['file']);
 
-                // ── Post-processing: resize/compress if enabled ──
                 $pp_enabled = ! empty( $mm_settings['pp_enabled'] ) && '1' === $mm_settings['pp_enabled'];
-                if ( $pp_enabled ) {
-                    $att_file = get_attached_file( $att_id );
-                    if ( $att_file && file_exists( $att_file ) ) {
-                        $pp_max_w  = isset( $mm_settings['pp_max_width'] ) ? intval( $mm_settings['pp_max_width'] ) : 0;
-                        $pp_max_h  = isset( $mm_settings['pp_max_height'] ) ? intval( $mm_settings['pp_max_height'] ) : 0;
-                        $pp_qual   = isset( $mm_settings['pp_quality'] ) ? intval( $mm_settings['pp_quality'] ) : 82;
-                        $pp_format = ! empty( $mm_settings['pp_format'] ) ? $mm_settings['pp_format'] : 'original';
-
-                        $editor = wp_get_image_editor( $att_file );
-                        if ( ! is_wp_error( $editor ) ) {
-                            $editor->set_quality( $pp_qual );
-
-                            // Resize if limits are set
-                            if ( $pp_max_w > 0 || $pp_max_h > 0 ) {
-                                $cur_size = $editor->get_size();
-                                $needs_resize = false;
-                                if ( $pp_max_w > 0 && $cur_size['width'] > $pp_max_w ) {
-                                    $needs_resize = true;
-                                }
-                                if ( $pp_max_h > 0 && $cur_size['height'] > $pp_max_h ) {
-                                    $needs_resize = true;
-                                }
-                                if ( $needs_resize ) {
-                                    $editor->resize( $pp_max_w > 0 ? $pp_max_w : null, $pp_max_h > 0 ? $pp_max_h : null );
-                                }
-                            }
-
-                            // Determine save path/format
-                            $save_mime = null;
-                            if ( 'original' !== $pp_format ) {
-                                $format_mime_map = array( 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'png' => 'image/png' );
-                                $save_mime = isset( $format_mime_map[ $pp_format ] ) ? $format_mime_map[ $pp_format ] : null;
-                            }
-
-                            if ( $save_mime && $save_mime !== $mime_type ) {
-                                // Convert format: save new file and update attachment
-                                $new_ext  = ( 'image/jpeg' === $save_mime ) ? 'jpg' : ( ( 'image/webp' === $save_mime ) ? 'webp' : 'png' );
-                                $new_name = pathinfo( $att_file, PATHINFO_FILENAME ) . '.' . $new_ext;
-                                $new_path = pathinfo( $att_file, PATHINFO_DIRNAME ) . '/' . $new_name;
-                                $saved    = $editor->save( $new_path, $save_mime );
-                                if ( ! is_wp_error( $saved ) ) {
-                                    // Remove old file and update attachment
-                                    wp_delete_file( $att_file );
-                                    update_attached_file( $att_id, $saved['path'] );
-                                    $mime_type = $save_mime;
-                                    wp_update_post( array( 'ID' => $att_id, 'post_mime_type' => $save_mime ) );
-                                    // Regenerate metadata for the new file
-                                    if ( function_exists( 'wp_generate_attachment_metadata' ) ) {
-                                        $meta = wp_generate_attachment_metadata( $att_id, $saved['path'] );
-                                        wp_update_attachment_metadata( $att_id, $meta );
-                                    }
-                                }
-                            } else {
-                                // Same format: overwrite in place
-                                $saved = $editor->save( $att_file );
-                                if ( ! is_wp_error( $saved ) && function_exists( 'wp_generate_attachment_metadata' ) ) {
-                                    $meta = wp_generate_attachment_metadata( $att_id, $saved['path'] );
-                                    wp_update_attachment_metadata( $att_id, $meta );
-                                }
-                            }
-                        }
+                $post_process_scheduled = false;
+                if ( ! wp_next_scheduled( 'sflmcp_process_generated_image_attachment', array( $att_id ) ) ) {
+                    $schedule_result = wp_schedule_single_event( time() + 1, 'sflmcp_process_generated_image_attachment', array( $att_id ) );
+                    if ( is_wp_error( $schedule_result ) ) {
+                        stifli_flex_mcp_log('wp_generate_image: Failed to schedule metadata/post-processing for ID=' . $att_id . ' message=' . $schedule_result->get_error_message());
+                    } else {
+                        $post_process_scheduled = ( false !== $schedule_result );
                     }
+                    if ( $post_process_scheduled && function_exists( 'spawn_cron' ) ) {
+                        spawn_cron( time() );
+                    }
+                    stifli_flex_mcp_log('wp_generate_image: Scheduled attachment metadata/post-processing for ID=' . $att_id . ' scheduled=' . ( $post_process_scheduled ? 'yes' : 'no' ));
+                } else {
+                    $post_process_scheduled = true;
+                    stifli_flex_mcp_log('wp_generate_image: Attachment metadata/post-processing already scheduled for ID=' . $att_id);
                 }
 
                 // Set alt text and title
@@ -4032,10 +4004,11 @@ class StifliFlexMcpModel {
                     'medium_url'     => $medium_url ? $medium_url : $att_url,
                     'provider'       => $provider,
                     'model'          => $provider === 'gemini' ? ( isset( $gemini_model ) ? $gemini_model : 'gemini' ) : ( isset( $oai_body['model'] ) ? $oai_body['model'] : 'openai' ),
-                    'post_processed' => $pp_enabled,
+                    'post_processed' => false,
+                    'post_process_scheduled' => $post_process_scheduled,
                     'prompt'         => $prompt,
                 );
-                stifli_flex_mcp_log('wp_generate_image: === SUCCESS === attachment_id=' . $att_id . ' url=' . $att_url . ' provider=' . $provider . ' post_processed=' . ( $pp_enabled ? 'yes' : 'no' ));
+                stifli_flex_mcp_log('wp_generate_image: === SUCCESS === attachment_id=' . $att_id . ' url=' . $att_url . ' provider=' . $provider . ' post_process_scheduled=' . ( $post_process_scheduled ? 'yes' : 'no' ) . ' pp_enabled=' . ( $pp_enabled ? 'yes' : 'no' ));
                 $addResultText( $r, wp_json_encode( $result_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 
                 // Also add an image content block for MCP clients that support it
@@ -4562,42 +4535,67 @@ class StifliFlexMcpModel {
                 }
                 stifli_flex_mcp_log('wp_generate_video: Video binary received, size=' . strlen( $vid_binary ) . ' bytes, mime=' . $vid_mime);
 
-                // Save as WordPress media attachment
-                if ( ! function_exists( 'wp_upload_dir' ) ) {
+                // Save as WordPress media attachment. Avoid media_handle_sideload()
+                // here because metadata extraction can stall long-running workers.
+                if ( ! function_exists( 'wp_upload_bits' ) ) {
                     require_once ABSPATH . 'wp-admin/includes/file.php';
-                }
-                if ( ! function_exists( 'media_handle_sideload' ) ) {
-                    require_once ABSPATH . 'wp-admin/includes/media.php';
-                    require_once ABSPATH . 'wp-admin/includes/image.php';
                 }
 
                 $vid_ext_map  = array( 'video/mp4' => 'mp4', 'video/webm' => 'webm' );
                 $vid_ext      = isset( $vid_ext_map[ $vid_mime ] ) ? $vid_ext_map[ $vid_mime ] : 'mp4';
                 $vid_filename = 'ai-video-' . gmdate( 'Ymd-His' ) . '-' . wp_generate_password( 6, false ) . '.' . $vid_ext;
 
-                $vid_upload_dir = wp_upload_dir();
-                $vid_temp_file  = $vid_upload_dir['path'] . '/' . wp_unique_filename( $vid_upload_dir['path'], $vid_filename );
-
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- writing temp binary from AI API to create media attachment.
-                if ( file_put_contents( $vid_temp_file, $vid_binary ) === false ) {
-                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to write video file' );
+                stifli_flex_mcp_log('wp_generate_video: Writing video to uploads as ' . $vid_filename);
+                $vid_upload = wp_upload_bits( $vid_filename, null, $vid_binary );
+                unset( $vid_binary );
+                if ( ! empty( $vid_upload['error'] ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: Upload bits error: ' . $vid_upload['error']);
+                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to write video file: ' . $vid_upload['error'] );
                     break;
                 }
+                if ( empty( $vid_upload['file'] ) || ! file_exists( $vid_upload['file'] ) ) {
+                    stifli_flex_mcp_log('wp_generate_video: Upload bits returned no readable file');
+                    $r['error'] = array( 'code' => 'write_error', 'message' => 'Failed to create video file in uploads.' );
+                    break;
+                }
+                stifli_flex_mcp_log('wp_generate_video: Upload file ready path=' . $vid_upload['file']);
 
-                $vid_file_array = array(
-                    'name'     => $vid_filename,
-                    'tmp_name' => $vid_temp_file,
-                    'type'     => $vid_mime,
+                $vid_filetype = wp_check_filetype( $vid_upload['file'], null );
+                $vid_attachment = array(
+                    'guid'           => $vid_upload['url'],
+                    'post_mime_type' => ! empty( $vid_filetype['type'] ) ? $vid_filetype['type'] : $vid_mime,
+                    'post_title'     => $vid_title ? $vid_title : preg_replace( '/\.[^.]+$/', '', basename( $vid_filename ) ),
+                    'post_content'   => '',
+                    'post_status'    => 'inherit',
                 );
-                $vid_att_id = media_handle_sideload( $vid_file_array, $vid_post_id );
+                $vid_att_id = wp_insert_attachment( $vid_attachment, $vid_upload['file'], $vid_post_id, true );
 
                 if ( is_wp_error( $vid_att_id ) ) {
-                    stifli_flex_mcp_log('wp_generate_video: Sideload error: ' . $vid_att_id->get_error_message());
-                    wp_delete_file( $vid_temp_file );
+                    stifli_flex_mcp_log('wp_generate_video: Attachment insert error: ' . $vid_att_id->get_error_message());
+                    wp_delete_file( $vid_upload['file'] );
                     $r['error'] = array( 'code' => 'upload_error', 'message' => $vid_att_id->get_error_message() );
                     break;
                 }
-                stifli_flex_mcp_log('wp_generate_video: Saved as attachment ID=' . $vid_att_id);
+                $vid_att_id = (int) $vid_att_id;
+                update_attached_file( $vid_att_id, $vid_upload['file'] );
+                stifli_flex_mcp_log('wp_generate_video: Saved as attachment ID=' . $vid_att_id . ' file=' . $vid_upload['file']);
+
+                $vid_metadata_scheduled = false;
+                if ( ! wp_next_scheduled( 'sflmcp_process_generated_video_attachment', array( $vid_att_id ) ) ) {
+                    $vid_schedule_result = wp_schedule_single_event( time() + 1, 'sflmcp_process_generated_video_attachment', array( $vid_att_id ) );
+                    if ( is_wp_error( $vid_schedule_result ) ) {
+                        stifli_flex_mcp_log('wp_generate_video: Failed to schedule metadata processing for ID=' . $vid_att_id . ' message=' . $vid_schedule_result->get_error_message());
+                    } else {
+                        $vid_metadata_scheduled = ( false !== $vid_schedule_result );
+                    }
+                    if ( $vid_metadata_scheduled && function_exists( 'spawn_cron' ) ) {
+                        spawn_cron( time() );
+                    }
+                    stifli_flex_mcp_log('wp_generate_video: Scheduled attachment metadata processing for ID=' . $vid_att_id . ' scheduled=' . ( $vid_metadata_scheduled ? 'yes' : 'no' ));
+                } else {
+                    $vid_metadata_scheduled = true;
+                    stifli_flex_mcp_log('wp_generate_video: Attachment metadata already scheduled for ID=' . $vid_att_id);
+                }
 
                 // Set title
                 if ( $vid_title ) {
@@ -4614,6 +4612,7 @@ class StifliFlexMcpModel {
                     'duration'         => $vid_duration,
                     'aspect_ratio'     => $vid_aspect,
                     'mime_type'        => $vid_mime,
+                    'metadata_scheduled' => $vid_metadata_scheduled,
                     'prompt'           => $vid_prompt,
                     'has_source_image' => ! empty( $vid_src_image ),
                     'has_end_image'    => ! empty( $vid_end_image ),

@@ -12,6 +12,9 @@ class StifliFlexMcp {
 	private $serverVersion = '0.0.1';
 	private $queueTable = '';
 	private $queueTtl = 300; // seconds
+	private $taskDefaultTtlMs = 300000; // 5 minutes
+	private $taskMaxTtlMs = 1800000; // 30 minutes
+	private $taskPollIntervalMs = 3000;
 
 	public function __construct() {
 		global $wpdb;
@@ -22,6 +25,8 @@ class StifliFlexMcp {
 
 	public function init() {
 		add_action('rest_api_init', array($this, 'restApiInit'));
+		add_action('sflmcp_process_task', array($this, 'processTaskAsync'), 10, 1);
+		$this->ensureDispatcherCallbackRegistered();
 		// Register admin menu and settings when in WP admin
 		if (is_admin()) {
 			add_action('admin_menu', array($this, 'registerAdmin'));
@@ -67,6 +72,14 @@ class StifliFlexMcp {
 		}
 	}
 
+	private function ensureDispatcherCallbackRegistered(): void {
+		if ($this->addedFilter) {
+			return;
+		}
+		StifliFlexMcpDispatcher::addFilter('sflmcp_callback', array($this, 'handleCallback'), 10, 4);
+		$this->addedFilter = true;
+	}
+
 	public function restApiInit() {
 		register_rest_route($this->namespace, '/sse', array(
 			'methods' => 'GET',
@@ -96,7 +109,7 @@ class StifliFlexMcp {
 				return $this->canAccessMCP($request);
 			},
 		));
-		StifliFlexMcpDispatcher::addFilter('sflmcp_callback', array($this, 'handleCallback'), 10, 4);
+		$this->ensureDispatcherCallbackRegistered();
 	}
 
 	/**
@@ -283,6 +296,519 @@ class StifliFlexMcp {
 		return $response;
 	}
 
+	private function getTaskManagedTools(): array {
+		return array('wp_generate_image', 'wp_generate_video');
+	}
+
+	private function toolRequiresTask( $tool ): bool {
+		return is_string($tool) && in_array($tool, $this->getTaskManagedTools(), true);
+	}
+
+	private function normalizeArgumentsForTaskKey( $value ) {
+		if (!is_array($value)) {
+			return $value;
+		}
+		$isList = array_keys($value) === range(0, count($value) - 1);
+		if (!$isList) {
+			ksort($value);
+		}
+		foreach ($value as $k => $v) {
+			$value[$k] = $this->normalizeArgumentsForTaskKey($v);
+		}
+		return $value;
+	}
+
+	private function getManagedFallbackTransientKey( int $userId, string $tool, array $arguments ): string {
+		$normalized = $this->normalizeArgumentsForTaskKey($arguments);
+		$encoded = wp_json_encode($normalized);
+		if (false === $encoded) {
+			$encoded = '';
+		}
+		return 'sflmcp_mft_' . md5($userId . '|' . $tool . '|' . $encoded);
+	}
+
+	private function buildManagedFallbackWorkingReply( $id, string $taskId, string $tool, string $status = 'working', string $message = '' ): array {
+		if ('' === $message) {
+			$message = 'Generating media in background. Please wait and repeat the same tool call to retrieve the result.';
+		}
+		return array(
+			'jsonrpc' => '2.0',
+			'id' => $id,
+			'result' => array(
+				'content' => array(
+					array(
+						'type' => 'text',
+						'text' => $message,
+					),
+				),
+				'structuredContent' => array(
+					'taskId' => $taskId,
+					'status' => $status,
+					'tool' => $tool,
+				),
+				'isError' => false,
+			),
+		);
+	}
+
+	private function withRequestIdFromPayload( array $payload, $id ): array {
+		if (isset($payload['error']) && is_array($payload['error'])) {
+			return array(
+				'jsonrpc' => '2.0',
+				'id' => $id,
+				'error' => $payload['error'],
+			);
+		}
+		if (isset($payload['result']) && is_array($payload['result'])) {
+			return array(
+				'jsonrpc' => '2.0',
+				'id' => $id,
+				'result' => $payload['result'],
+			);
+		}
+		return $this->rpcError($id, -32603, 'Task payload is invalid');
+	}
+
+	private function handleManagedToolWithoutTask( $id, string $tool, array $arguments, array $params, string $toolLog ) {
+		$userId = (int) get_current_user_id();
+		$fallbackKey = $this->getManagedFallbackTransientKey($userId, $tool, $arguments);
+		$existingTaskId = get_transient($fallbackKey);
+
+		if (is_string($existingTaskId) && '' !== $existingTaskId) {
+			$existingTask = $this->loadTaskRecord($existingTaskId, true);
+			if (is_array($existingTask)) {
+				$status = isset($existingTask['status']) ? (string) $existingTask['status'] : 'working';
+				if ($this->isTaskTerminalStatus($status)) {
+					stifli_flex_mcp_log('tools/call: returning completed fallback task result for tool=' . $toolLog . ' taskId=' . $existingTaskId);
+					delete_transient($fallbackKey);
+					$payload = isset($existingTask['payload']) && is_array($existingTask['payload']) ? $existingTask['payload'] : array();
+					return $this->withRequestIdFromPayload($payload, $id);
+				}
+				stifli_flex_mcp_log('tools/call: fallback task still working for tool=' . $toolLog . ' taskId=' . $existingTaskId);
+				return $this->buildManagedFallbackWorkingReply($id, $existingTaskId, $tool, $status);
+			}
+			delete_transient($fallbackKey);
+		}
+
+		$taskReply = $this->createToolTaskResult($id, $tool, $arguments, $params);
+		$taskId = isset($taskReply['result']['task']['taskId']) ? (string) $taskReply['result']['task']['taskId'] : '';
+		if ('' === $taskId) {
+			return $this->rpcError($id, -32603, 'Failed to create background task');
+		}
+
+		$taskTtlMs = isset($taskReply['result']['task']['ttl']) ? (int) $taskReply['result']['task']['ttl'] : (int) $this->taskDefaultTtlMs;
+		$taskTtlSeconds = max(60, (int) ceil($taskTtlMs / 1000) + 300);
+		set_transient($fallbackKey, $taskId, $taskTtlSeconds);
+
+		stifli_flex_mcp_log('tools/call: created fallback background task for tool=' . $toolLog . ' taskId=' . $taskId);
+		return $this->buildManagedFallbackWorkingReply($id, $taskId, $tool);
+	}
+
+	private function nowIso8601(): string {
+		return gmdate('c');
+	}
+
+	private function normalizeTaskTtlMs( $requestedTtl ): int {
+		if (!is_numeric($requestedTtl)) {
+			return (int) $this->taskDefaultTtlMs;
+		}
+		$ttl = (int) $requestedTtl;
+		if ($ttl <= 0) {
+			return (int) $this->taskDefaultTtlMs;
+		}
+		return min($ttl, (int) $this->taskMaxTtlMs);
+	}
+
+	private function getTaskTransientKey( string $taskId ): string {
+		return 'sflmcp_task_' . md5($taskId);
+	}
+
+	private function getTaskIndexTransientKey( int $userId ): string {
+		return 'sflmcp_task_index_' . $userId;
+	}
+
+	private function getTaskIndexForUser( int $userId ): array {
+		if ($userId <= 0) {
+			return array();
+		}
+		$index = get_transient($this->getTaskIndexTransientKey($userId));
+		if (!is_array($index)) {
+			return array();
+		}
+		return array_values(array_filter($index, 'is_string'));
+	}
+
+	private function saveTaskIndexForUser( int $userId, array $taskIds, int $ttlSeconds ): void {
+		if ($userId <= 0) {
+			return;
+		}
+		$taskIds = array_values(array_unique(array_filter($taskIds, 'is_string')));
+		if (count($taskIds) > 200) {
+			$taskIds = array_slice($taskIds, -200);
+		}
+		set_transient($this->getTaskIndexTransientKey($userId), $taskIds, max(60, $ttlSeconds));
+	}
+
+	private function addTaskToUserIndex( int $userId, string $taskId, int $ttlSeconds ): void {
+		$index = $this->getTaskIndexForUser($userId);
+		$index[] = $taskId;
+		$this->saveTaskIndexForUser($userId, $index, $ttlSeconds);
+	}
+
+	private function removeTaskFromUserIndex( int $userId, string $taskId ): void {
+		$index = $this->getTaskIndexForUser($userId);
+		if (empty($index)) {
+			return;
+		}
+		$index = array_values(array_filter($index, static function( $value ) use ( $taskId ) {
+			return $value !== $taskId;
+		}));
+		$this->saveTaskIndexForUser($userId, $index, 3600);
+	}
+
+	private function isTaskTerminalStatus( $status ): bool {
+		return in_array($status, array('completed', 'failed', 'cancelled'), true);
+	}
+
+	private function isTaskExpired( array $task ): bool {
+		if (!isset($task['ttl']) || is_null($task['ttl'])) {
+			return false;
+		}
+		$createdAt = isset($task['createdAt']) ? strtotime((string) $task['createdAt']) : false;
+		if (false === $createdAt) {
+			return false;
+		}
+		$expiresAtMs = ((int) $createdAt * 1000) + (int) $task['ttl'];
+		$nowMs = (int) round(microtime(true) * 1000);
+		return $nowMs > $expiresAtMs;
+	}
+
+	private function saveTaskRecord( array $task ): void {
+		if (empty($task['taskId'])) {
+			return;
+		}
+		$ttlMs = isset($task['ttl']) && !is_null($task['ttl']) ? (int) $task['ttl'] : (int) $this->taskDefaultTtlMs;
+		$ttlSeconds = max(60, (int) ceil($ttlMs / 1000) + 300);
+		set_transient($this->getTaskTransientKey($task['taskId']), $task, $ttlSeconds);
+		$ownerUserId = isset($task['ownerUserId']) ? (int) $task['ownerUserId'] : 0;
+		if ($ownerUserId > 0) {
+			$this->addTaskToUserIndex($ownerUserId, $task['taskId'], $ttlSeconds);
+		}
+	}
+
+	private function loadTaskRecord( string $taskId, bool $pruneExpired = true ) {
+		$task = get_transient($this->getTaskTransientKey($taskId));
+		if (!is_array($task)) {
+			return null;
+		}
+		if ($pruneExpired && $this->isTaskExpired($task)) {
+			$this->deleteTaskRecord($taskId, $task);
+			return null;
+		}
+		return $task;
+	}
+
+	private function deleteTaskRecord( string $taskId, $existingTask = null ): void {
+		$task = is_array($existingTask) ? $existingTask : $this->loadTaskRecord($taskId, false);
+		delete_transient($this->getTaskTransientKey($taskId));
+		if (is_array($task) && isset($task['ownerUserId'])) {
+			$this->removeTaskFromUserIndex((int) $task['ownerUserId'], $taskId);
+		}
+	}
+
+	private function formatTaskForResult( array $task ): array {
+		$result = array(
+			'taskId' => isset($task['taskId']) ? $task['taskId'] : '',
+			'status' => isset($task['status']) ? $task['status'] : 'working',
+			'createdAt' => isset($task['createdAt']) ? $task['createdAt'] : $this->nowIso8601(),
+			'lastUpdatedAt' => isset($task['lastUpdatedAt']) ? $task['lastUpdatedAt'] : $this->nowIso8601(),
+			'ttl' => isset($task['ttl']) ? $task['ttl'] : (int) $this->taskDefaultTtlMs,
+			'pollInterval' => isset($task['pollInterval']) ? (int) $task['pollInterval'] : (int) $this->taskPollIntervalMs,
+		);
+		if (!empty($task['statusMessage'])) {
+			$result['statusMessage'] = $task['statusMessage'];
+		}
+		return $result;
+	}
+
+	private function getScopedTaskRecord( string $taskId, $id, &$errorReply = null ) {
+		$task = $this->loadTaskRecord($taskId, true);
+		if (!is_array($task)) {
+			$errorReply = $this->rpcError($id, -32602, 'Failed to retrieve task: Task not found');
+			return null;
+		}
+		$currentUserId = get_current_user_id();
+		$ownerUserId = isset($task['ownerUserId']) ? (int) $task['ownerUserId'] : 0;
+		if ($ownerUserId > 0 && $currentUserId > 0 && $ownerUserId !== $currentUserId) {
+			$errorReply = $this->rpcError($id, -32602, 'Failed to retrieve task: Task not found');
+			return null;
+		}
+		return $task;
+	}
+
+	private function createToolTaskResult( $id, string $tool, array $arguments, array $params ): array {
+		$taskParams = isset($params['task']) && is_array($params['task']) ? $params['task'] : array();
+		$ttlMs = $this->normalizeTaskTtlMs(isset($taskParams['ttl']) ? $taskParams['ttl'] : null);
+		$taskId = wp_generate_uuid4();
+		$now = $this->nowIso8601();
+
+		$task = array(
+			'taskId' => $taskId,
+			'status' => 'working',
+			'statusMessage' => 'The operation is now in progress.',
+			'createdAt' => $now,
+			'lastUpdatedAt' => $now,
+			'ttl' => $ttlMs,
+			'pollInterval' => (int) $this->taskPollIntervalMs,
+			'ownerUserId' => (int) get_current_user_id(),
+			'toolName' => $tool,
+			'toolArguments' => $arguments,
+			'requestId' => $id,
+			'payload' => null,
+		);
+
+		$this->saveTaskRecord($task);
+
+		if (!wp_next_scheduled('sflmcp_process_task', array($taskId))) {
+			wp_schedule_single_event(time() + 1, 'sflmcp_process_task', array($taskId));
+			if (function_exists('spawn_cron')) {
+				spawn_cron(time());
+			}
+		}
+
+		return array(
+			'jsonrpc' => '2.0',
+			'id' => $id,
+			'result' => array(
+				'task' => $this->formatTaskForResult($task),
+				'_meta' => array(
+					'io.modelcontextprotocol/model-immediate-response' => 'Generating media. Please wait and poll the task status.',
+				),
+			),
+		);
+	}
+
+	public function processTaskAsync( $taskId ): void {
+		$taskId = is_scalar($taskId) ? (string) $taskId : '';
+		if ('' === $taskId) {
+			return;
+		}
+
+		$task = $this->loadTaskRecord($taskId, true);
+		if (!is_array($task)) {
+			return;
+		}
+		if ($this->isTaskTerminalStatus(isset($task['status']) ? $task['status'] : '')) {
+			return;
+		}
+		stifli_flex_mcp_log('task/process: start taskId=' . $taskId . ' tool=' . (isset($task['toolName']) ? $task['toolName'] : 'n/a'));
+
+		if ( function_exists( 'ignore_user_abort' ) ) {
+			ignore_user_abort(true);
+		}
+		// phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.NoSilencedErrors.Discouraged -- required to avoid execution cut during long-running task processing.
+		@set_time_limit(0);
+
+		$originalUserId = get_current_user_id();
+		$ownerUserId = isset($task['ownerUserId']) ? (int) $task['ownerUserId'] : 0;
+		if ($ownerUserId > 0 && $ownerUserId !== $originalUserId) {
+			wp_set_current_user($ownerUserId);
+		}
+		$this->ensureDispatcherCallbackRegistered();
+
+		try {
+			$toolName = isset($task['toolName']) ? (string) $task['toolName'] : '';
+			$toolArgs = isset($task['toolArguments']) && is_array($task['toolArguments']) ? $task['toolArguments'] : array();
+			$requestId = isset($task['requestId']) ? $task['requestId'] : null;
+			$payload = $this->executeTool($toolName, $toolArgs, $requestId);
+
+			$status = 'completed';
+			$statusMessage = 'Task completed successfully.';
+			if (is_array($payload) && isset($payload['error'])) {
+				$status = 'failed';
+				$errorMessage = isset($payload['error']['message']) ? (string) $payload['error']['message'] : 'Unknown error';
+				$statusMessage = 'Task failed: ' . $errorMessage;
+			} elseif (is_array($payload) && isset($payload['result']['isError']) && true === $payload['result']['isError']) {
+				$status = 'failed';
+				$statusMessage = 'Task failed during tool execution.';
+			}
+
+			$task['payload'] = $payload;
+			$task['status'] = $status;
+			$task['statusMessage'] = $statusMessage;
+			$task['lastUpdatedAt'] = $this->nowIso8601();
+			$this->saveTaskRecord($task);
+			stifli_flex_mcp_log('task/process: done taskId=' . $taskId . ' status=' . $status);
+		} catch ( Throwable $e ) {
+			$task['payload'] = $this->rpcError(isset($task['requestId']) ? $task['requestId'] : null, -32603, 'Internal task error', $e->getMessage());
+			$task['status'] = 'failed';
+			$task['statusMessage'] = 'Task failed: ' . $e->getMessage();
+			$task['lastUpdatedAt'] = $this->nowIso8601();
+			$this->saveTaskRecord($task);
+			stifli_flex_mcp_log('task/process: failed taskId=' . $taskId . ' message=' . $e->getMessage());
+		}
+
+		if ($ownerUserId !== $originalUserId) {
+			wp_set_current_user($originalUserId);
+		}
+	}
+
+	private function handleTasksMethod( string $method, array $params, $id ) {
+		$taskId = isset($params['taskId']) && is_scalar($params['taskId']) ? trim((string) $params['taskId']) : '';
+
+		switch ($method) {
+			case 'tasks/get':
+				if ('' === $taskId) {
+					return $this->rpcError($id, -32602, 'Failed to retrieve task: taskId is required');
+				}
+				$errorReply = null;
+				$task = $this->getScopedTaskRecord($taskId, $id, $errorReply);
+				if (!is_array($task)) {
+					return $errorReply;
+				}
+				return array('jsonrpc' => '2.0', 'id' => $id, 'result' => $this->formatTaskForResult($task));
+
+			case 'tasks/result':
+				if ('' === $taskId) {
+					return $this->rpcError($id, -32602, 'Failed to retrieve task: taskId is required');
+				}
+				$errorReply = null;
+				$task = $this->getScopedTaskRecord($taskId, $id, $errorReply);
+				if (!is_array($task)) {
+					return $errorReply;
+				}
+				if (!$this->isTaskTerminalStatus(isset($task['status']) ? $task['status'] : '')) {
+					$this->processTaskAsync($taskId);
+					$task = $this->loadTaskRecord($taskId, true);
+				}
+				if (!is_array($task)) {
+					return $this->rpcError($id, -32602, 'Failed to retrieve task: Task not found');
+				}
+				if (!$this->isTaskTerminalStatus(isset($task['status']) ? $task['status'] : '')) {
+					return $this->rpcError($id, -32603, 'Task is still in progress');
+				}
+
+				$payload = isset($task['payload']) ? $task['payload'] : null;
+				if (!is_array($payload)) {
+					return $this->rpcError($id, -32603, 'Task has no result payload');
+				}
+
+				if (isset($payload['error']) && is_array($payload['error'])) {
+					return array('jsonrpc' => '2.0', 'id' => $id, 'error' => $payload['error']);
+				}
+				if (!isset($payload['result']) || !is_array($payload['result'])) {
+					return $this->rpcError($id, -32603, 'Task payload is invalid');
+				}
+
+				$result = $payload['result'];
+				if (!isset($result['_meta']) || !is_array($result['_meta'])) {
+					$result['_meta'] = array();
+				}
+				$result['_meta']['io.modelcontextprotocol/related-task'] = array('taskId' => $taskId);
+
+				return array('jsonrpc' => '2.0', 'id' => $id, 'result' => $result);
+
+			case 'tasks/cancel':
+				if ('' === $taskId) {
+					return $this->rpcError($id, -32602, 'Cannot cancel task: taskId is required');
+				}
+				$errorReply = null;
+				$task = $this->getScopedTaskRecord($taskId, $id, $errorReply);
+				if (!is_array($task)) {
+					return $errorReply;
+				}
+				if ($this->isTaskTerminalStatus(isset($task['status']) ? $task['status'] : '')) {
+					return $this->rpcError($id, -32602, "Cannot cancel task: already in terminal status '" . $task['status'] . "'");
+				}
+				$task['status'] = 'cancelled';
+				$task['statusMessage'] = 'The task was cancelled by request.';
+				$task['lastUpdatedAt'] = $this->nowIso8601();
+				$this->saveTaskRecord($task);
+				return array('jsonrpc' => '2.0', 'id' => $id, 'result' => $this->formatTaskForResult($task));
+
+			case 'tasks/list':
+				$cursor = isset($params['cursor']) ? (string) $params['cursor'] : '';
+				if ('' !== $cursor && !ctype_digit($cursor)) {
+					return $this->rpcError($id, -32602, 'Invalid cursor');
+				}
+				$offset = '' === $cursor ? 0 : (int) $cursor;
+				$limit = 20;
+
+				$userId = (int) get_current_user_id();
+				$index = $this->getTaskIndexForUser($userId);
+				$tasks = array();
+				$validTaskIds = array();
+				foreach ($index as $taskIdFromIndex) {
+					$task = $this->loadTaskRecord($taskIdFromIndex, true);
+					if (!is_array($task)) {
+						continue;
+					}
+					$validTaskIds[] = $taskIdFromIndex;
+					$tasks[] = $task;
+				}
+				$this->saveTaskIndexForUser($userId, $validTaskIds, 3600);
+
+				usort($tasks, static function( $a, $b ) {
+					$ta = isset($a['createdAt']) ? strtotime((string) $a['createdAt']) : 0;
+					$tb = isset($b['createdAt']) ? strtotime((string) $b['createdAt']) : 0;
+					return $tb <=> $ta;
+				});
+
+				$total = count($tasks);
+				$slice = array_slice($tasks, $offset, $limit);
+				$result = array(
+					'tasks' => array_map(array($this, 'formatTaskForResult'), $slice),
+				);
+				if (($offset + $limit) < $total) {
+					$result['nextCursor'] = (string) ($offset + $limit);
+				}
+				return array('jsonrpc' => '2.0', 'id' => $id, 'result' => $result);
+
+			default:
+				return $this->rpcError($id, -32601, 'Method not found: ' . $method);
+		}
+	}
+
+	private function handleToolsCallMethod( $id, array $params ) {
+		$tool = null;
+		$arguments = array();
+		if (isset($params['name'])) {
+			$tool = $params['name'];
+			$arguments = isset($params['arguments']) && is_array($params['arguments']) ? $params['arguments'] : array();
+		} elseif (isset($params['tool'])) {
+			$tool = $params['tool'];
+			$arguments = isset($params['args']) && is_array($params['args']) ? $params['args'] : array();
+		}
+
+		$isTaskAugmented = isset($params['task']) && is_array($params['task']);
+		$toolLog = wp_json_encode($tool);
+		if (false === $toolLog) {
+			$toolLog = is_scalar($tool) ? (string) $tool : '[unserializable]';
+		}
+		$argsLog = wp_json_encode($arguments);
+		if (false === $argsLog) {
+			$argsLog = '[unserializable]';
+		}
+		stifli_flex_mcp_log(sprintf('tools/call: tool=%s arguments=%s task_augmented=%s', $toolLog, $argsLog, $isTaskAugmented ? 'yes' : 'no'));
+
+		if ($this->toolRequiresTask($tool)) {
+			if ($isTaskAugmented) {
+				stifli_flex_mcp_log('tools/call: creating async task for tool=' . $toolLog);
+				return $this->createToolTaskResult($id, $tool, $arguments, $params);
+			}
+			// Compatibility fallback for clients that still don't support task augmentation.
+			stifli_flex_mcp_log('tools/call: task missing for managed tool, using async compatibility fallback for tool=' . $toolLog);
+			return $this->handleManagedToolWithoutTask($id, $tool, $arguments, $params, $toolLog);
+		}
+
+		if ($isTaskAugmented) {
+			stifli_flex_mcp_log('tools/call: task augmentation rejected for unsupported tool=' . $toolLog);
+			return $this->rpcError($id, -32601, 'Task augmentation is not supported for tool: ' . $tool);
+		}
+
+		return $this->executeTool($tool, $arguments, $id);
+	}
+
 	public function handleSSE( $request ) {
 		$body = $request->get_body();
 		$remote = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'n/a';
@@ -438,6 +964,15 @@ class StifliFlexMcp {
 								'tools' => array('listChanged' => true),
 								'prompts' => array('subscribe' => false, 'listChanged' => false),
 								'resources' => array('subscribe' => false, 'listChanged' => false),
+								'tasks' => array(
+									'list' => (object) array(),
+									'cancel' => (object) array(),
+									'requests' => array(
+										'tools' => array(
+											'call' => (object) array(),
+										),
+									),
+								),
 							),
 						),
 					);
@@ -457,20 +992,17 @@ class StifliFlexMcp {
 						'result' => array('tools' => $tools),
 					);
 					break;
-				   case 'tools/call':
-					   $params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
-					   // Compatibilidad: acepta tanto 'name'/'arguments' como 'tool'/'args'
-					   $tool = null;
-					   $arguments = array();
-					   if (isset($params['name'])) {
-						   $tool = $params['name'];
-						   $arguments = isset($params['arguments']) ? $params['arguments'] : array();
-					   } elseif (isset($params['tool'])) {
-						   $tool = $params['tool'];
-						   $arguments = isset($params['args']) ? $params['args'] : array();
-					   }
-					   $reply = $this->executeTool($tool, $arguments, $id);
-					   break;
+				case 'tools/call':
+					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+					$reply = $this->handleToolsCallMethod($id, $params);
+					break;
+				case 'tasks/get':
+				case 'tasks/result':
+				case 'tasks/list':
+				case 'tasks/cancel':
+					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+					$reply = $this->handleTasksMethod($method, $params, $id);
+					break;
 				case 'initialized':
 				case 'notifications/initialized':
 					return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
@@ -602,6 +1134,15 @@ class StifliFlexMcp {
 								'tools' => array('listChanged' => true),
 								'prompts' => array('subscribe' => false, 'listChanged' => false),
 								'resources' => array('subscribe' => false, 'listChanged' => false),
+								'tasks' => array(
+									'list' => (object) array(),
+									'cancel' => (object) array(),
+									'requests' => array(
+										'tools' => array(
+											'call' => (object) array(),
+										),
+									),
+								),
 							),
 						),
 					);
@@ -636,28 +1177,16 @@ class StifliFlexMcp {
 					);
 					break;
 				case 'tools/call':
-					   $params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
-					   // Compatibilidad: acepta tanto 'name'/'arguments' como 'tool'/'args'
-					   $tool = null;
-					   $arguments = array();
-					   if (isset($params['name'])) {
-						   $tool = $params['name'];
-						   $arguments = isset($params['arguments']) ? $params['arguments'] : array();
-					   } elseif (isset($params['tool'])) {
-						   $tool = $params['tool'];
-						   $arguments = isset($params['args']) ? $params['args'] : array();
-						}
-						   $toolLog = wp_json_encode($tool);
-						   if (false === $toolLog) {
-							   $toolLog = is_scalar($tool) ? (string) $tool : '[unserializable]';
-						   }
-						   $argsLog = wp_json_encode($arguments);
-						   if (false === $argsLog) {
-							   $argsLog = '[unserializable]';
-						   }
-						   stifli_flex_mcp_log(sprintf('tools/call: tool=%s arguments=%s', $toolLog, $argsLog));
-					   $reply = $this->executeTool($tool, $arguments, $id);
-					   break;
+					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+					$reply = $this->handleToolsCallMethod($id, $params);
+					break;
+				case 'tasks/get':
+				case 'tasks/result':
+				case 'tasks/list':
+				case 'tasks/cancel':
+					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+					$reply = $this->handleTasksMethod($method, $params, $id);
+					break;
 				default:
 					$reply = $this->rpcError($id, -45601, "Method not found: {$method}");
 			}

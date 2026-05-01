@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with Undo
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.2.6
+Version: 3.2.7
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -201,6 +201,153 @@ add_action( 'init', 'stifli_flex_mcp_check_automation_cron', 99 );
 function stifli_flex_mcp_check_automation_cron() {
 	if ( ! wp_next_scheduled( 'sflmcp_process_automation_tasks' ) ) {
 		wp_schedule_event( time(), 'every_minute', 'sflmcp_process_automation_tasks' );
+	}
+}
+
+add_action( 'sflmcp_process_generated_image_attachment', 'stifli_flex_mcp_process_generated_image_attachment', 10, 1 );
+function stifli_flex_mcp_process_generated_image_attachment( $attachment_id ) {
+	$attachment_id = absint( $attachment_id );
+	if ( ! $attachment_id ) {
+		return;
+	}
+
+	stifli_flex_mcp_log( 'generated-image/postprocess: start attachment_id=' . $attachment_id );
+	if ( function_exists( 'ignore_user_abort' ) ) {
+		ignore_user_abort( true );
+	}
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,Squiz.PHP.DiscouragedFunctions.Discouraged -- background media processing can take longer than a normal request.
+	@set_time_limit( 0 );
+
+	try {
+		if ( ! function_exists( 'wp_generate_attachment_metadata' ) || ! function_exists( 'wp_get_image_editor' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+		}
+
+		$file = get_attached_file( $attachment_id );
+		if ( ! $file || ! file_exists( $file ) ) {
+			stifli_flex_mcp_log( 'generated-image/postprocess: file missing attachment_id=' . $attachment_id );
+			return;
+		}
+
+		$mm_settings = get_option( 'sflmcp_multimedia_settings', array() );
+		$pp_enabled  = ! empty( $mm_settings['pp_enabled'] ) && '1' === $mm_settings['pp_enabled'];
+
+		if ( $pp_enabled ) {
+			stifli_flex_mcp_log( 'generated-image/postprocess: applying post-processing attachment_id=' . $attachment_id );
+			$pp_max_w  = isset( $mm_settings['pp_max_width'] ) ? intval( $mm_settings['pp_max_width'] ) : 0;
+			$pp_max_h  = isset( $mm_settings['pp_max_height'] ) ? intval( $mm_settings['pp_max_height'] ) : 0;
+			$pp_qual   = isset( $mm_settings['pp_quality'] ) ? intval( $mm_settings['pp_quality'] ) : 82;
+			$pp_format = ! empty( $mm_settings['pp_format'] ) ? $mm_settings['pp_format'] : 'original';
+
+			$editor = wp_get_image_editor( $file );
+			if ( is_wp_error( $editor ) ) {
+				stifli_flex_mcp_log( 'generated-image/postprocess: editor error attachment_id=' . $attachment_id . ' message=' . $editor->get_error_message() );
+			} else {
+				$editor->set_quality( $pp_qual );
+				if ( $pp_max_w > 0 || $pp_max_h > 0 ) {
+					$cur_size = $editor->get_size();
+					$needs_resize = false;
+					if ( $pp_max_w > 0 && isset( $cur_size['width'] ) && $cur_size['width'] > $pp_max_w ) {
+						$needs_resize = true;
+					}
+					if ( $pp_max_h > 0 && isset( $cur_size['height'] ) && $cur_size['height'] > $pp_max_h ) {
+						$needs_resize = true;
+					}
+					if ( $needs_resize ) {
+						$resize = $editor->resize( $pp_max_w > 0 ? $pp_max_w : null, $pp_max_h > 0 ? $pp_max_h : null );
+						if ( is_wp_error( $resize ) ) {
+							stifli_flex_mcp_log( 'generated-image/postprocess: resize error attachment_id=' . $attachment_id . ' message=' . $resize->get_error_message() );
+						}
+					}
+				}
+
+				$save_mime = null;
+				if ( 'original' !== $pp_format ) {
+					$format_mime_map = array( 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'png' => 'image/png' );
+					$save_mime = isset( $format_mime_map[ $pp_format ] ) ? $format_mime_map[ $pp_format ] : null;
+				}
+
+				$current_mime = get_post_mime_type( $attachment_id );
+				if ( $save_mime && $save_mime !== $current_mime ) {
+					$new_ext  = ( 'image/jpeg' === $save_mime ) ? 'jpg' : ( ( 'image/webp' === $save_mime ) ? 'webp' : 'png' );
+					$new_name = pathinfo( $file, PATHINFO_FILENAME ) . '.' . $new_ext;
+					$new_path = pathinfo( $file, PATHINFO_DIRNAME ) . '/' . $new_name;
+					$saved   = $editor->save( $new_path, $save_mime );
+					if ( is_wp_error( $saved ) ) {
+						stifli_flex_mcp_log( 'generated-image/postprocess: convert save error attachment_id=' . $attachment_id . ' message=' . $saved->get_error_message() );
+					} else {
+						wp_delete_file( $file );
+						$file = $saved['path'];
+						update_attached_file( $attachment_id, $file );
+						wp_update_post( array( 'ID' => $attachment_id, 'post_mime_type' => $save_mime ) );
+						stifli_flex_mcp_log( 'generated-image/postprocess: converted attachment_id=' . $attachment_id . ' mime=' . $save_mime );
+					}
+				} else {
+					$saved = $editor->save( $file );
+					if ( is_wp_error( $saved ) ) {
+						stifli_flex_mcp_log( 'generated-image/postprocess: save error attachment_id=' . $attachment_id . ' message=' . $saved->get_error_message() );
+					} elseif ( ! empty( $saved['path'] ) ) {
+						$file = $saved['path'];
+					}
+				}
+			}
+		}
+
+		stifli_flex_mcp_log( 'generated-image/postprocess: generating metadata attachment_id=' . $attachment_id );
+		$metadata = wp_generate_attachment_metadata( $attachment_id, $file );
+		if ( is_wp_error( $metadata ) ) {
+			stifli_flex_mcp_log( 'generated-image/postprocess: metadata error attachment_id=' . $attachment_id . ' message=' . $metadata->get_error_message() );
+			return;
+		}
+		if ( is_array( $metadata ) ) {
+			wp_update_attachment_metadata( $attachment_id, $metadata );
+		}
+		stifli_flex_mcp_log( 'generated-image/postprocess: done attachment_id=' . $attachment_id );
+	} catch ( Throwable $e ) {
+		stifli_flex_mcp_log( 'generated-image/postprocess: exception attachment_id=' . $attachment_id . ' message=' . $e->getMessage() );
+	}
+}
+
+add_action( 'sflmcp_process_generated_video_attachment', 'stifli_flex_mcp_process_generated_video_attachment', 10, 1 );
+function stifli_flex_mcp_process_generated_video_attachment( $attachment_id ) {
+	$attachment_id = absint( $attachment_id );
+	if ( ! $attachment_id ) {
+		return;
+	}
+
+	stifli_flex_mcp_log( 'generated-video/metadata: start attachment_id=' . $attachment_id );
+	if ( function_exists( 'ignore_user_abort' ) ) {
+		ignore_user_abort( true );
+	}
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,Squiz.PHP.DiscouragedFunctions.Discouraged -- background video metadata extraction can take longer than a normal request.
+	@set_time_limit( 0 );
+
+	try {
+		if ( ! function_exists( 'wp_generate_attachment_metadata' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+		}
+		if ( ! function_exists( 'wp_read_video_metadata' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+		}
+
+		$file = get_attached_file( $attachment_id );
+		if ( ! $file || ! file_exists( $file ) ) {
+			stifli_flex_mcp_log( 'generated-video/metadata: file missing attachment_id=' . $attachment_id );
+			return;
+		}
+
+		$metadata = wp_generate_attachment_metadata( $attachment_id, $file );
+		if ( is_wp_error( $metadata ) ) {
+			stifli_flex_mcp_log( 'generated-video/metadata: metadata error attachment_id=' . $attachment_id . ' message=' . $metadata->get_error_message() );
+			return;
+		}
+		if ( is_array( $metadata ) ) {
+			wp_update_attachment_metadata( $attachment_id, $metadata );
+		}
+
+		stifli_flex_mcp_log( 'generated-video/metadata: done attachment_id=' . $attachment_id );
+	} catch ( Throwable $e ) {
+		stifli_flex_mcp_log( 'generated-video/metadata: exception attachment_id=' . $attachment_id . ' message=' . $e->getMessage() );
 	}
 }
 
