@@ -1,9 +1,9 @@
 <?php
 /*
-Plugin Name: StifLi Flex MCP - MCP Server with Undo
+Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.2.7
+Version: 3.2.8
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -161,6 +161,7 @@ require_once __DIR__ . '/client/providers/class-provider-base.php';
 require_once __DIR__ . '/client/providers/class-provider-openai.php';
 require_once __DIR__ . '/client/providers/class-provider-claude.php';
 require_once __DIR__ . '/client/providers/class-provider-gemini.php';
+require_once __DIR__ . '/client/providers/class-provider-ai-client.php';
 require_once __DIR__ . '/client/class-client-admin.php';
 require_once __DIR__ . '/client/class-automation-admin.php';
 

@@ -37,11 +37,11 @@ class StifliFlexMcpUtils {
 			$schema['type'] = 'object';
 		}
 
-		if ( ! isset( $schema['required'] ) || ! is_array( $schema['required'] ) ) {
-			$schema['required'] = array();
-		}
-
 		if ( 'object' === $schema['type'] || ! isset( $schema['type'] ) ) {
+			if ( isset( $schema['required'] ) && ! is_array( $schema['required'] ) ) {
+				unset( $schema['required'] );
+			}
+
 			$properties = isset( $schema['properties'] ) ? $schema['properties'] : array();
 			if ( is_object( $properties ) ) {
 				$properties = (array) $properties;
@@ -81,6 +81,8 @@ class StifliFlexMcpUtils {
 			}
 
 			$schema['properties'] = empty( $properties ) ? new stdClass() : $properties;
+		} elseif ( isset( $schema['required'] ) ) {
+			unset( $schema['required'] );
 		}
 
 		if ( isset( $schema['items'] ) && is_array( $schema['items'] ) ) {

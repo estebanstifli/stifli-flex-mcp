@@ -141,14 +141,14 @@ class StifliFlexMcp_Client_Admin {
 			'sflmcp-client',
 			plugin_dir_url( __FILE__ ) . 'assets/client.css',
 			array(),
-			'1.0.7'
+			'1.0.8'
 		);
 
 		wp_enqueue_script(
 			'sflmcp-client',
 			plugin_dir_url( __FILE__ ) . 'assets/client.js',
 			array( 'jquery' ),
-			'1.0.9',
+			'1.0.10',
 			true
 		);
 
@@ -165,6 +165,7 @@ class StifliFlexMcp_Client_Admin {
 			),
 			'advanced' => $advanced,
 			'models'   => $this->get_available_models(),
+			'aiClientProviders' => $this->get_ai_client_provider_ids(),
 			'tools'    => $this->get_tools_info(), // Tools with name and description for display
 			'i18n'     => array(
 				'send'              => __( 'Send', 'stifli-flex-mcp' ),
@@ -183,7 +184,7 @@ class StifliFlexMcp_Client_Admin {
 				'settingsSaved'     => __( 'Settings saved', 'stifli-flex-mcp' ),
 				'clearChat'         => __( 'Clear Chat', 'stifli-flex-mcp' ),
 				'welcome'           => __( 'Welcome to AI Chat Agent', 'stifli-flex-mcp' ),
-				'welcomeDesc'       => __( 'Configure your API key above and start chatting!', 'stifli-flex-mcp' ),
+				'welcomeDesc'       => __( 'Configure your API key above (or leave it blank if your AI Client connector already has credentials) and start chatting!', 'stifli-flex-mcp' ),
 				'historyRestored'   => __( 'Previous conversation restored', 'stifli-flex-mcp' ),
 				'historyCleared'    => __( 'Chat history cleared', 'stifli-flex-mcp' ),
 				'autoSaved'         => __( 'Auto-saved', 'stifli-flex-mcp' ),
@@ -244,7 +245,7 @@ class StifliFlexMcp_Client_Admin {
 	 * @return array
 	 */
 	public function get_available_models() {
-		return array(
+		$models = array(
 			'openai' => array(
 				// GPT-5.4 Series (Latest Flagship — Mar 2026)
 				'gpt-5.4'             => 'GPT-5.4 (Frontier, 1M context, Computer Use) [RECOMMENDED]',
@@ -288,6 +289,54 @@ class StifliFlexMcp_Client_Admin {
 				'gemini-2.5-flash-lite'         => 'Gemini 2.5 Flash-Lite (Instant Responses) [EFFICIENT]',
 			),
 		);
+
+		if ( class_exists( 'StifliFlexMcp_Client_AI_Client' ) ) {
+			foreach ( StifliFlexMcp_Client_AI_Client::get_available_providers() as $provider_id => $provider_label ) {
+				$provider_models = StifliFlexMcp_Client_AI_Client::get_provider_models( $provider_id );
+				if ( ! empty( $provider_models ) ) {
+					$models[ $provider_id ] = $provider_models;
+				}
+			}
+		}
+
+		return $models;
+	}
+
+	/**
+	 * Get available providers for select controls.
+	 *
+	 * @param string $selected_provider Selected provider from settings.
+	 * @return array Provider ID => label.
+	 */
+	private function get_available_providers( $selected_provider = '' ) {
+		$providers = array(
+			'openai' => __( 'OpenAI', 'stifli-flex-mcp' ),
+			'claude' => __( 'Claude (Anthropic)', 'stifli-flex-mcp' ),
+			'gemini' => __( 'Gemini (Google)', 'stifli-flex-mcp' ),
+		);
+
+		if ( class_exists( 'StifliFlexMcp_Client_AI_Client' ) ) {
+			$providers = array_merge( $providers, StifliFlexMcp_Client_AI_Client::get_available_providers() );
+		}
+
+		if ( '' !== $selected_provider && ! isset( $providers[ $selected_provider ] ) ) {
+			$providers[ $selected_provider ] = ucwords( str_replace( array( '-', '_' ), ' ', $selected_provider ) );
+		}
+
+		return $providers;
+	}
+
+	/**
+	 * Get detected AI Client provider IDs.
+	 *
+	 * @return array
+	 */
+	private function get_ai_client_provider_ids() {
+		if ( ! class_exists( 'StifliFlexMcp_Client_AI_Client' ) ) {
+			return array();
+		}
+
+		return array_keys( StifliFlexMcp_Client_AI_Client::get_available_providers() );
 	}
 
 	/**
@@ -358,6 +407,7 @@ class StifliFlexMcp_Client_Admin {
 	 * @param array $models   Available models.
 	 */
 	private function render_chat_tab( $settings, $models ) {
+		$providers = $this->get_available_providers( $settings['provider'] );
 		$enabled_tool_names = array();
 		global $stifliFlexMcp;
 		if ( isset( $stifliFlexMcp ) && isset( $stifliFlexMcp->model ) ) {
@@ -379,16 +429,16 @@ class StifliFlexMcp_Client_Admin {
 		<!-- Settings Panel -->
 		<div class="sflmcp-client-settings">
 			<div class="sflmcp-settings-row">
-				<div class="sflmcp-setting-group">
+				<div class="sflmcp-setting-group sflmcp-provider-setting">
 					<label for="sflmcp-provider"><?php esc_html_e( 'AI Provider', 'stifli-flex-mcp' ); ?></label>
 					<select id="sflmcp-provider" name="provider">
-						<option value="openai" <?php selected( $settings['provider'], 'openai' ); ?>>OpenAI</option>
-						<option value="claude" <?php selected( $settings['provider'], 'claude' ); ?>>Claude (Anthropic)</option>
-						<option value="gemini" <?php selected( $settings['provider'], 'gemini' ); ?>>Gemini (Google)</option>
+						<?php foreach ( $providers as $provider_id => $provider_label ) : ?>
+							<option value="<?php echo esc_attr( $provider_id ); ?>" <?php selected( $settings['provider'], $provider_id ); ?>><?php echo esc_html( $provider_label ); ?></option>
+						<?php endforeach; ?>
 					</select>
 				</div>
 				
-				<div class="sflmcp-setting-group">
+				<div class="sflmcp-setting-group sflmcp-api-key-setting">
 					<label for="sflmcp-api-key"><?php esc_html_e( 'API Key', 'stifli-flex-mcp' ); ?></label>
 					<div class="sflmcp-api-key-wrapper">
 						<input type="password" id="sflmcp-api-key" name="api_key" value="<?php echo esc_attr( $settings['api_key'] ); ?>" placeholder="sk-..." />
@@ -398,7 +448,7 @@ class StifliFlexMcp_Client_Admin {
 					</div>
 				</div>
 				
-				<div class="sflmcp-setting-group">
+				<div class="sflmcp-setting-group sflmcp-model-setting">
 					<label for="sflmcp-model"><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></label>
 					<select id="sflmcp-model" name="model">
 						<?php foreach ( $models as $provider => $provider_models ) : ?>
@@ -414,7 +464,7 @@ class StifliFlexMcp_Client_Admin {
 					</select>
 				</div>
 				
-				<div class="sflmcp-setting-group">
+				<div class="sflmcp-setting-group sflmcp-permission-setting">
 					<label for="sflmcp-permission"><?php esc_html_e( 'Tool Permissions', 'stifli-flex-mcp' ); ?></label>
 					<select id="sflmcp-permission" name="permission">
 						<option value="always" <?php selected( $settings['permission'], 'always' ); ?>><?php esc_html_e( 'Always Allow', 'stifli-flex-mcp' ); ?></option>
@@ -429,6 +479,7 @@ class StifliFlexMcp_Client_Admin {
 					</span>
 				</div>
 			</div>
+			<p class="sflmcp-ai-client-key-note"><?php esc_html_e( 'Leave the API key blank when the selected WordPress AI Client connector already has credentials configured.', 'stifli-flex-mcp' ); ?></p>
 		</div>
 		
 		<!-- Chat Container -->
@@ -499,7 +550,7 @@ class StifliFlexMcp_Client_Admin {
 				<div class="sflmcp-welcome-message">
 					<div class="sflmcp-welcome-icon">🤖</div>
 					<h3><?php esc_html_e( 'Welcome to AI Chat Agent', 'stifli-flex-mcp' ); ?></h3>
-					<p><?php esc_html_e( 'This chat can execute MCP tools on your WordPress site. Configure your API key above and start chatting!', 'stifli-flex-mcp' ); ?></p>
+					<p><?php esc_html_e( 'This chat can execute MCP tools on your WordPress site. Configure your API key above (or leave it blank if your AI Client connector already has credentials) and start chatting!', 'stifli-flex-mcp' ); ?></p>
 					<p class="sflmcp-welcome-hint"><?php esc_html_e( 'Try: "List my recent posts" or "Show WooCommerce orders"', 'stifli-flex-mcp' ); ?></p>
 				</div>
 			</div>
@@ -525,6 +576,8 @@ class StifliFlexMcp_Client_Admin {
 	 */
 	private function render_advanced_tab( $advanced, $models ) {
 		$settings = $this->get_settings();
+		$providers = $this->get_available_providers( $settings['provider'] );
+		$standard_param_providers = implode( ',', array_keys( $models ) );
 		?>
 		<div class="sflmcp-advanced-settings">
 			<p class="description">
@@ -543,9 +596,9 @@ class StifliFlexMcp_Client_Admin {
 					</th>
 					<td>
 						<select id="sflmcp-adv-provider" name="adv_provider" class="sflmcp-adv-provider-select">
-							<option value="openai" <?php selected( $settings['provider'], 'openai' ); ?>>OpenAI</option>
-							<option value="claude" <?php selected( $settings['provider'], 'claude' ); ?>>Claude (Anthropic)</option>
-							<option value="gemini" <?php selected( $settings['provider'], 'gemini' ); ?>>Gemini (Google)</option>
+							<?php foreach ( $providers as $provider_id => $provider_label ) : ?>
+								<option value="<?php echo esc_attr( $provider_id ); ?>" <?php selected( $settings['provider'], $provider_id ); ?>><?php echo esc_html( $provider_label ); ?></option>
+							<?php endforeach; ?>
 						</select>
 						<select id="sflmcp-adv-model" name="adv_model" class="sflmcp-adv-model-select">
 							<?php foreach ( $models as $provider => $provider_models ) : ?>
@@ -674,7 +727,7 @@ class StifliFlexMcp_Client_Admin {
 				</tr>
 
 				<!-- Temperature -->
-				<tr class="sflmcp-model-param" data-providers="openai,claude,gemini">
+				<tr class="sflmcp-model-param" data-providers="<?php echo esc_attr( $standard_param_providers ); ?>">
 					<th scope="row">
 						<label for="sflmcp-temperature"><?php esc_html_e( 'Temperature', 'stifli-flex-mcp' ); ?></label>
 					</th>
@@ -686,7 +739,7 @@ class StifliFlexMcp_Client_Admin {
 				</tr>
 
 				<!-- Max Tokens -->
-				<tr class="sflmcp-model-param" data-providers="openai,claude,gemini">
+				<tr class="sflmcp-model-param" data-providers="<?php echo esc_attr( $standard_param_providers ); ?>">
 					<th scope="row">
 						<label for="sflmcp-max-tokens"><?php esc_html_e( 'Max Tokens', 'stifli-flex-mcp' ); ?></label>
 					</th>
@@ -697,7 +750,7 @@ class StifliFlexMcp_Client_Admin {
 				</tr>
 
 				<!-- Top P -->
-				<tr class="sflmcp-model-param" data-providers="openai,claude,gemini">
+				<tr class="sflmcp-model-param" data-providers="<?php echo esc_attr( $standard_param_providers ); ?>">
 					<th scope="row">
 						<label for="sflmcp-top-p"><?php esc_html_e( 'Top P (Nucleus Sampling)', 'stifli-flex-mcp' ); ?></label>
 					</th>
@@ -890,7 +943,7 @@ class StifliFlexMcp_Client_Admin {
 		// Get advanced settings for model parameters
 		$advanced = $this->get_advanced_settings();
 
-		if ( empty( $api_key ) ) {
+		if ( empty( $api_key ) && ! $this->is_ai_client_provider( $provider ) ) {
 			wp_send_json_error( array( 'message' => __( 'API Key is required', 'stifli-flex-mcp' ) ) );
 		}
 
@@ -1261,16 +1314,28 @@ Keep each suggestion under 50 characters. Only include the suggestions at the ve
 			'gemini' => 'StifliFlexMcp_Client_Gemini',
 		);
 
-		if ( ! isset( $handlers[ $provider ] ) ) {
-			return null;
+		if ( isset( $handlers[ $provider ] ) ) {
+			$class = $handlers[ $provider ];
+			if ( class_exists( $class ) ) {
+				return new $class();
+			}
 		}
 
-		$class = $handlers[ $provider ];
-		if ( ! class_exists( $class ) ) {
-			return null;
+		if ( $this->is_ai_client_provider( $provider ) ) {
+			return new StifliFlexMcp_Client_AI_Client( $provider );
 		}
 
-		return new $class();
+		return null;
+	}
+
+	/**
+	 * Check whether a provider is supplied by WordPress AI Client.
+	 *
+	 * @param string $provider Provider ID.
+	 * @return bool
+	 */
+	private function is_ai_client_provider( $provider ) {
+		return class_exists( 'StifliFlexMcp_Client_AI_Client' ) && StifliFlexMcp_Client_AI_Client::is_provider_available( $provider );
 	}
 
 	/**

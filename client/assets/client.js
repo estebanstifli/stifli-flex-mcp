@@ -541,7 +541,7 @@
         const message = $chatInput.val().trim();
         const apiKey = $apiKeyInput.val().trim();
 
-        if (!apiKey) {
+        if (!apiKey && !selectedProviderUsesAiClient()) {
             showError(sflmcpClient.i18n.apiKeyRequired);
             return;
         }
@@ -1054,27 +1054,38 @@
      * Build tool result object for the AI
      */
     function buildToolResult(toolCall, result) {
-        const provider = $providerSelect.val();
-
-        switch (provider) {
-            case 'openai':
-                return {
-                    call_id: toolCall.call_id,
-                    output: result
-                };
-            case 'claude':
-                return {
-                    tool_use_id: toolCall.tool_use_id || toolCall.id,
-                    output: result
-                };
-            case 'gemini':
-                return {
-                    name: toolCall.name,
-                    output: result
-                };
-            default:
-                return { output: result };
+        if (toolCall.call_id) {
+            return {
+                call_id: toolCall.call_id,
+                name: toolCall.name,
+                output: result
+            };
         }
+
+        if (toolCall.tool_use_id || toolCall.id) {
+            return {
+                tool_use_id: toolCall.tool_use_id || toolCall.id,
+                name: toolCall.name,
+                output: result
+            };
+        }
+
+        if (toolCall.name) {
+            return {
+                name: toolCall.name,
+                output: result
+            };
+        }
+
+        return { output: result };
+    }
+
+    /**
+     * Whether the current provider can use credentials stored by a WP AI Client connector.
+     */
+    function selectedProviderUsesAiClient() {
+        const providers = Array.isArray(sflmcpClient.aiClientProviders) ? sflmcpClient.aiClientProviders : [];
+        return providers.includes($providerSelect.val());
     }
 
     /**

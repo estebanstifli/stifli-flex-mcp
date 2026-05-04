@@ -926,8 +926,14 @@ class StifliFlexMcp_Automation_Engine {
 		}
 
 		// Gemini format
+		if ( isset( $tool_call['name'] ) ) {
+			return array(
+				'name'   => $tool_call['name'],
+				'output' => $result,
+			);
+		}
+
 		return array(
-			'name'   => $tool_call['name'],
 			'output' => $result,
 		);
 	}
@@ -1056,6 +1062,11 @@ class StifliFlexMcp_Automation_Engine {
 				return new StifliFlexMcp_Client_Gemini();
 
 			default:
+				require_once $provider_dir . 'class-provider-ai-client.php';
+				if ( class_exists( 'StifliFlexMcp_Client_AI_Client' ) && StifliFlexMcp_Client_AI_Client::is_provider_available( $provider ) ) {
+					return new StifliFlexMcp_Client_AI_Client( $provider );
+				}
+
 				return new WP_Error( 'invalid_provider', __( 'Invalid AI provider', 'stifli-flex-mcp' ) );
 		}
 	}

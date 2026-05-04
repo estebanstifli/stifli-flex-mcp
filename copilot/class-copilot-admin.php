@@ -341,7 +341,7 @@ class StifliFlexMcp_Copilot_Admin {
 		$settings = $this->get_chat_settings();
 		$advanced = $this->get_advanced_settings();
 
-		if ( empty( $settings['api_key'] ) ) {
+		if ( empty( $settings['api_key'] ) && ! $this->is_ai_client_provider( $settings['provider'] ) ) {
 			wp_send_json_error( array( 'message' => __( 'API Key is required. Configure it in AI Chat Agent settings.', 'stifli-flex-mcp' ) ) );
 		}
 
@@ -686,11 +686,25 @@ class StifliFlexMcp_Copilot_Admin {
 			'gemini' => 'StifliFlexMcp_Client_Gemini',
 		);
 
-		if ( ! isset( $map[ $provider ] ) || ! class_exists( $map[ $provider ] ) ) {
-			return null;
+		if ( isset( $map[ $provider ] ) && class_exists( $map[ $provider ] ) ) {
+			return new $map[ $provider ]();
 		}
 
-		return new $map[ $provider ]();
+		if ( $this->is_ai_client_provider( $provider ) ) {
+			return new StifliFlexMcp_Client_AI_Client( $provider );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Check whether a provider is supplied by WordPress AI Client.
+	 *
+	 * @param string $provider Provider ID.
+	 * @return bool
+	 */
+	private function is_ai_client_provider( $provider ) {
+		return class_exists( 'StifliFlexMcp_Client_AI_Client' ) && StifliFlexMcp_Client_AI_Client::is_provider_available( $provider );
 	}
 
 	/**

@@ -21,16 +21,17 @@
 }
 
 .sflmcp-settings-row {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 1.25fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr) auto;
     gap: 15px;
-    align-items: flex-end;
+    align-items: end;
 }
 
 .sflmcp-setting-group {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    min-width: 0;
 }
 
 .sflmcp-setting-group label {
@@ -42,13 +43,21 @@
 .sflmcp-setting-group select,
 .sflmcp-setting-group input[type="password"],
 .sflmcp-setting-group input[type="text"] {
-    min-width: 180px;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
     height: 32px;
+    box-sizing: border-box;
 }
 
-.sflmcp-setting-group input[type="password"],
-.sflmcp-setting-group input[type="text"] {
-    min-width: 280px;
+.sflmcp-api-key-setting {
+    min-width: 240px;
+}
+
+.sflmcp-ai-client-key-note {
+    margin: 10px 0 0;
+    color: #646970;
+    font-size: 12px;
 }
 
 /* API Key toggle */
@@ -86,9 +95,9 @@
 }
 
 .sflmcp-setting-actions {
-    margin-left: auto;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
 }
 
 /* Notice */
@@ -966,9 +975,19 @@
 }
 
 /* Responsive */
+@media (max-width: 1100px) {
+    .sflmcp-settings-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sflmcp-setting-actions {
+        justify-content: flex-start;
+    }
+}
+
 @media (max-width: 782px) {
     .sflmcp-settings-row {
-        flex-direction: column;
+        grid-template-columns: 1fr;
     }
     
     .sflmcp-setting-group select,

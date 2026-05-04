@@ -1,28 +1,26 @@
-=== StifLi Flex MCP - MCP Server with Undo === 
+=== StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini === 
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags: ai copilot, mcp, chatgpt, claude, woocommerce ai
+Tags:  mcp, chatgpt, claude, woocommerce ai, ai copilot
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.2.7
+Stable tag: 3.2.8
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent. OpenAI, Claude & Gemini.
+The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent. ChatGPT, Claude, Gemini, OpenRouter & Mistral.
 
 == Description ==
 
-**StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect AI clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
+**StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect AI clients safely (ChatGPT, Claude, Gemini, etc), roll back changes when needed, and manage your site through natural conversation without losing control.
 
 Three powerful tools in one plugin:
 
-1. **AI Copilot** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time
-2. **AI Chat Agent** — A full conversational interface to manage posts, WooCommerce, settings, and more
-3. **MCP Server** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site
-
-Choose between OpenAI (GPT-5.4), Anthropic (Claude 4.6 Opus/Sonnet), or Google (Gemini 3.1 Pro/Flash). No external tools, no complex setup — just your API key.
+1. **MCP Server** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site
+2. **AI Copilot** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time
+3. **AI Chat Agent** — A full conversational interface to manage posts, WooCommerce, settings, and more
 
 **✍️ AI Copilot — Your Writing Assistant Inside the Editor**
 
@@ -38,6 +36,8 @@ The AI Copilot lives as a floating widget right inside the WordPress post and pa
 * **Works with Gutenberg and Classic Editor** — Full support for both editors
 * **Context-aware** — The Copilot reads your current post content, blocks, metadata, and editor state to give relevant suggestions
 * **WooCommerce-aware** — When editing a product, the Copilot sees prices, stock, SKU, attributes, and product type
+
+Choose OpenAI (GPT-5.4), Anthropic (Claude 4.6 Opus/Sonnet), or Google (Gemini 3.1 Pro/Flash), and optionally use WordPress AI Client connectors like OpenRouter and Mistral when installed. No complex setup — just your API key or connector credentials.
 
 **💡 What Can You Do With the Copilot?**
 
@@ -63,7 +63,7 @@ The Copilot reads your full content, understands context, and applies changes di
 The built-in AI Chat Agent gives you a powerful conversational interface to manage your entire WordPress site:
 
 * **Talk to your site** — "Show me the last 5 orders", "Create a blog post about SEO tips", "What plugins are installed?"
-* **Multi-provider** — Choose between OpenAI (GPT-5.4, GPT-5.3), Anthropic (Claude 4.6 Opus/Sonnet, Claude 4.5 Haiku), or Google (Gemini 3.1 Pro, Gemini 3 Flash)
+* **Multi-provider** — Built-in OpenAI (GPT-5.4, GPT-5.3), Anthropic (Claude 4.6 Opus/Sonnet, Claude 4.5 Haiku), Google (Gemini 3.1 Pro, Gemini 3 Flash) + optional WordPress AI Client connectors (OpenRouter, Mistral)
 * **117+ tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, update settings, and much more
 * **Smart suggestions** — After each response, get contextual follow-up suggestions
 * **Conversation history** — Auto-saved across sessions with multi-tab support
@@ -187,14 +187,14 @@ StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard se
 
 StifLi Flex MCP integrates with:
 
-**Built-in AI Chat Agent:**
+**Built-in AI Chat Agent + WordPress AI Client connectors:**
 * OpenAI — GPT-5.4, GPT-5.3, GPT-5.4 Mini
 * Anthropic Claude — Opus, Sonnet, Haiku
 * Google Gemini — Pro, Flash, Flash-Lite
+* OpenRouter and Mistral — via WordPress AI Client connectors (when installed)
 
 **MCP Server (External Clients via OAuth 2.1):**
-* Claude Desktop, ChatGPT, LibreChat
-* Cursor, Cline, Roo Code, Windsurf, Claude Code
+* Claude Desktop, ChatGPT, LibreChat, Cursor, Cline, Roo Code, Windsurf, Claude Code
 
 **Cloud & Local Providers (via MCP clients):**
 * Groq, Azure OpenAI, AWS Bedrock
@@ -223,7 +223,7 @@ https://youtu.be/KHr1zt2R8Ew
 = Quick Start (AI Chat Agent) =
 
 1. Go to **StifLi Flex MCP → AI Chat Agent**
-2. Open the **Settings** tab and select your AI provider (OpenAI, Claude, or Gemini)
+2. Open the **Settings** tab and select your AI provider (OpenAI, Claude, Gemini, or installed WordPress AI Client connectors like OpenRouter/Mistral)
 3. Enter your API key
 4. Start chatting!
 
@@ -260,13 +260,13 @@ Both use the same AI provider and API key.
 = How do I set up the AI Chat Agent? =
 
 1. Go to StifLi Flex MCP → AI Chat Agent → Settings
-2. Choose your AI provider (OpenAI, Claude, or Gemini)
+2. Choose your AI provider (OpenAI, Claude, Gemini, or installed WordPress AI Client connectors like OpenRouter/Mistral)
 3. Enter your API key (you get this from your AI provider's website)
 4. Go to the Chat tab and start talking!
 
 = Which AI provider should I use? =
 
-All three providers work great. Here's a quick comparison:
+OpenAI, Claude, and Gemini all work great, and you can also use OpenRouter or Mistral via WordPress AI Client connectors. Here's a quick comparison:
 
 * **OpenAI (GPT-4o / GPT-4.5)** — Best overall balance of speed and quality
 * **Claude (Opus / Sonnet)** — Excellent at understanding complex instructions and writing
@@ -409,6 +409,10 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.8 =
+* Improvement: Official compatibility update for WordPress 7.0 with WordPress AI Client integration in AI Chat Agent.
+* Improvement: Improved compatibility with external AI Client connectors such as OpenRouter and Mistral (plus any installed AI Client provider).
+
 = 3.2.7 =
 * Improvement: Updated MCP protocol reference and compatibility to the 2025-11-25 specification.
 * Improvement: Improved `wp_generate_image` reliability with async task handling plus safer media persistence/post-processing.
