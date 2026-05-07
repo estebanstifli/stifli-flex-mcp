@@ -433,7 +433,7 @@ Prompt: "Delete media item ID 981 because it was uploaded by mistake."
 
 ### `wp_get_taxonomies` — READ
 
-Definition: lists registered taxonomies.
+Definition: lists registered taxonomies and returns `slug`, `name`, and `label` for each item.
 
 What it is for:
 
@@ -443,7 +443,7 @@ What it is for:
 Example Use Cases & Sample Prompts
 
 Example: plugin schema discovery.
-Prompt: "List all registered taxonomies so I can see which custom content structures are available."
+Prompt: "List all registered taxonomies and include slug, name, and label so I can see which custom content structures are available."
 
 ### `wp_get_terms` — READ
 
@@ -499,7 +499,7 @@ Prompt: "Delete term ID 77 from the category taxonomy because we no longer use i
 
 ### `wp_get_term_meta` — SENSITIVE READ
 
-Definition: gets term metadata and redacts values that look like secrets.
+Definition: gets term metadata and redacts values that look like secrets. Output is structured as `{term_id, key, value}` when `meta_key` is provided, or `{term_id, meta}` when it is not.
 
 What it is for:
 
@@ -508,7 +508,7 @@ What it is for:
 Example Use Cases & Sample Prompts
 
 Example: debugging custom term fields.
-Prompt: "Get the meta for term ID 77 in the category taxonomy so I can inspect the plugin data attached to it."
+Prompt: "Get term meta for term ID 77 and return both the structured output and redacted values so I can inspect plugin data safely."
 
 ### `wp_update_term_meta` — WRITE
 
@@ -1433,16 +1433,31 @@ Prompt: "Batch update these product IDs to set their sale price and mark them as
 
 ### `wc_get_product_variations` — READ
 
-Definition: gets variations for a variable product.
+Definition: gets variations for a variable product and returns normalized rows with `id`, `product_id`, SKU, pricing, stock, stock status, and attributes.
 
 What it is for:
 
 - Reviewing sizes, colors, SKUs, or prices per variation.
+- Verifying variation-to-parent product mapping.
 
 Example Use Cases & Sample Prompts
 
 Example: variation review.
 Prompt: "Get all variations for product ID 410 and show each SKU, attribute set, price, and stock level."
+
+### `wc_get_variation` — READ
+
+Definition: gets one variation by `product_id` and `variation_id` with ownership validation.
+
+What it is for:
+
+- Inspecting one variation quickly without listing all variations.
+- Verifying that a variation belongs to the expected variable product.
+
+Example Use Cases & Sample Prompts
+
+Example: single variation validation.
+Prompt: "Get variation ID 9901 for product ID 410 and confirm its parent, attributes, price, and stock status."
 
 ### `wc_create_product_variation` — WRITE
 
@@ -1459,29 +1474,101 @@ Prompt: "Create a new variation for product ID 410 with size XL, SKU LAMP-XL, an
 
 ### `wc_update_product_variation` — WRITE
 
-Definition: updates a variation.
+Definition: updates a variation using `product_id` and `variation_id`, with ownership validation before saving changes.
 
 What it is for:
 
 - Changing variation price, attributes, or stock.
+- Preventing accidental cross-product variation updates.
 
 Example Use Cases & Sample Prompts
 
 Example: correcting variation inventory.
-Prompt: "Update variation ID 9901 and set its stock quantity to 12 and sale price to 24.99."
+Prompt: "Update variation ID 9901 for product ID 410 and set stock quantity to 12 with sale price 24.99."
+
+### `wc_batch_update_variations` — WRITE
+
+Definition: batch updates multiple variations of one variable product in a single operation.
+
+What it is for:
+
+- Applying bulk price or stock changes across many variations.
+- Running controlled updates and later rollback with a second batch payload.
+
+Example Use Cases & Sample Prompts
+
+Example: seasonal size update.
+Prompt: "Batch update these variation IDs for product ID 410 to adjust sale prices and stock quantities for the campaign."
 
 ### `wc_delete_product_variation` — WRITE
 
-Definition: deletes a variation.
+Definition: deletes a variation using `product_id` and `variation_id`, with ownership validation.
 
 What it is for:
 
 - Cleaning obsolete variations.
+- Avoiding deletion of variations linked to a different parent product.
 
 Example Use Cases & Sample Prompts
 
 Example: removing a discontinued option.
-Prompt: "Delete variation ID 9901 because that color-size combination is discontinued."
+Prompt: "Delete variation ID 9901 for product ID 410 because that color-size combination is discontinued."
+
+### `wc_get_product_attributes` — READ
+
+Definition: lists global WooCommerce product attributes (attribute taxonomies).
+
+What it is for:
+
+- Auditing global attribute definitions such as color, size, or material.
+- Discovering attribute IDs before assigning them to products.
+
+Example Use Cases & Sample Prompts
+
+Example: attribute catalog audit.
+Prompt: "List global WooCommerce product attributes with their taxonomy names and IDs."
+
+### `wc_get_attribute_terms` — READ
+
+Definition: lists terms for a WooCommerce product attribute taxonomy using `attribute_id` or `attribute_slug`.
+
+What it is for:
+
+- Reviewing existing values for a global attribute.
+- Preparing product attribute assignment workflows.
+
+Example Use Cases & Sample Prompts
+
+Example: size term review.
+Prompt: "List terms for the size attribute using attribute_slug pa_size so I can review available options."
+
+### `wc_create_product_attribute` — WRITE
+
+Definition: creates a global WooCommerce product attribute taxonomy.
+
+What it is for:
+
+- Adding new global attributes for catalog structure.
+- Standardizing product data before creating many variations.
+
+Example Use Cases & Sample Prompts
+
+Example: creating a new attribute family.
+Prompt: "Create a global product attribute called Finish with slug finish, type select, and archives enabled."
+
+### `wc_set_product_attributes` — WRITE
+
+Definition: sets product attributes on a product, supporting both global taxonomy attributes and local/custom attributes.
+
+What it is for:
+
+- Assigning variation-ready attribute sets to variable products.
+- Updating attribute visibility and variation flags in one action.
+
+Example Use Cases & Sample Prompts
+
+Example: assigning color options.
+Prompt: "Set product ID 410 attributes to include global Color options Red and Blue as variation-enabled and visible."
 
 ## WooCommerce: categories, tags, and reviews
 
@@ -1834,16 +1921,45 @@ Prompt: "Delete refund ID 211 because it was created on the wrong order."
 
 ### `wc_get_coupons` — READ
 
-Definition: lists coupons with filters for code, limit, offset, and order.
+Definition: lists coupons with filters for code, status, limit, offset, and order.
 
 What it is for:
 
 - Auditing active promotions.
+- Auditing draft, scheduled, private, or trashed coupons.
 
 Example Use Cases & Sample Prompts
 
 Example: promotion inventory.
-Prompt: "List all coupons ordered by date so I can review active and recently created promotions."
+Prompt: "List coupons with status any ordered by date so I can review active, draft, and trashed promotions."
+
+### `wc_get_coupon` — READ
+
+Definition: gets one WooCommerce coupon by ID.
+
+What it is for:
+
+- Inspecting one coupon before updating or deleting it.
+- Validating discount type, amount, expiry, and status.
+
+Example Use Cases & Sample Prompts
+
+Example: coupon inspection.
+Prompt: "Get coupon ID 73 and show its code, discount type, amount, expiry date, and status."
+
+### `wc_get_coupon_count` — READ
+
+Definition: counts coupons by status (`publish`, `draft`, `pending`, `private`, `future`, `trash`) or returns totals for all statuses.
+
+What it is for:
+
+- Monitoring promotion inventory by lifecycle state.
+- Verifying trash behavior after logical deletes.
+
+Example Use Cases & Sample Prompts
+
+Example: trash verification.
+Prompt: "Count coupons with status trash so I can confirm whether a logical delete moved the coupon to trash."
 
 ### `wc_create_coupon` — WRITE
 
@@ -1873,16 +1989,31 @@ Prompt: "Update coupon ID 73 and extend its expiration date by two more weeks."
 
 ### `wc_delete_coupon` — WRITE
 
-Definition: deletes a coupon by ID.
+Definition: deletes a coupon by ID. With `force=false`, it attempts to move the coupon to trash first; with `force=true`, it permanently deletes it.
 
 What it is for:
 
-- Cleaning expired promotions.
+- Retiring promotions with optional trash-first behavior.
+- Permanently deleting coupons when required.
 
 Example Use Cases & Sample Prompts
 
 Example: retiring an old coupon.
-Prompt: "Delete coupon ID 73 because the campaign has ended and it should no longer be visible."
+Prompt: "Delete coupon ID 73 with force=false so it is moved to trash when available."
+
+### `wc_empty_coupon_trash` — WRITE
+
+Definition: permanently deletes all coupons currently in trash.
+
+What it is for:
+
+- Performing final cleanup after review or retention periods.
+- Keeping the coupon table free of obsolete trashed entries.
+
+Example Use Cases & Sample Prompts
+
+Example: coupon trash cleanup.
+Prompt: "Empty WooCommerce coupon trash and return how many trashed coupons were permanently removed."
 
 Compliance note:
 
@@ -2424,9 +2555,11 @@ Main tools:
 Main tools:
 
 - `wc_get_products`, `wc_create_product`, `wc_update_product`.
+- `wc_get_product_variations`, `wc_get_variation`, `wc_batch_update_variations`.
+- `wc_get_product_attributes`, `wc_get_attribute_terms`, `wc_set_product_attributes`.
 - `wc_get_orders`, `wc_update_order`, `wc_create_order_note`.
 - `wc_update_stock`, `wc_get_low_stock_products`.
-- `wc_create_coupon`, `wc_get_sales_report`.
+- `wc_get_coupons`, `wc_get_coupon_count`, `wc_create_coupon`, `wc_empty_coupon_trash`, `wc_get_sales_report`.
 
 ### Support and maintenance
 

@@ -183,6 +183,81 @@ class StifliFlexMcp_WC_Products {
                     'required' => array('product_id', 'variation_id'),
                 ),
             ),
+            'wc_get_variation' => array(
+                'name' => 'wc_get_variation',
+                'description' => 'Get one variation by product_id and variation_id with ownership validation.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'product_id' => array('type' => 'integer'),
+                        'variation_id' => array('type' => 'integer'),
+                    ),
+                    'required' => array('product_id', 'variation_id'),
+                ),
+            ),
+            'wc_batch_update_variations' => array(
+                'name' => 'wc_batch_update_variations',
+                'description' => 'Batch update multiple variations of a variable product.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'product_id' => array('type' => 'integer'),
+                        'updates' => array('type' => 'array', 'items' => array('type' => 'object')),
+                    ),
+                    'required' => array('product_id', 'updates'),
+                ),
+            ),
+            'wc_get_product_attributes' => array(
+                'name' => 'wc_get_product_attributes',
+                'description' => 'List global WooCommerce product attributes (taxonomy attributes).',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => (object) array(),
+                    'required' => array(),
+                ),
+            ),
+            'wc_get_attribute_terms' => array(
+                'name' => 'wc_get_attribute_terms',
+                'description' => 'List terms for a WooCommerce product attribute taxonomy by attribute_id or attribute_slug.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'attribute_id' => array('type' => 'integer'),
+                        'attribute_slug' => array('type' => 'string'),
+                        'limit' => array('type' => 'integer'),
+                        'offset' => array('type' => 'integer'),
+                        'search' => array('type' => 'string'),
+                    ),
+                    'required' => array(),
+                ),
+            ),
+            'wc_create_product_attribute' => array(
+                'name' => 'wc_create_product_attribute',
+                'description' => 'Create a global WooCommerce product attribute taxonomy.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'name' => array('type' => 'string'),
+                        'slug' => array('type' => 'string'),
+                        'type' => array('type' => 'string'),
+                        'order_by' => array('type' => 'string'),
+                        'has_archives' => array('type' => 'boolean'),
+                    ),
+                    'required' => array('name'),
+                ),
+            ),
+            'wc_set_product_attributes' => array(
+                'name' => 'wc_set_product_attributes',
+                'description' => 'Set product attributes on a product (global taxonomy attributes or custom/local attributes).',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'product_id' => array('type' => 'integer'),
+                        'attributes' => array('type' => 'array', 'items' => array('type' => 'object')),
+                    ),
+                    'required' => array('product_id', 'attributes'),
+                ),
+            ),
             
             // Product Categories
             'wc_get_product_categories' => array(
@@ -402,6 +477,9 @@ class StifliFlexMcp_WC_Products {
             'wc_create_product_variation' => 'edit_products',
             'wc_update_product_variation' => 'edit_products',
             'wc_delete_product_variation' => 'delete_products',
+            'wc_batch_update_variations' => 'edit_products',
+            'wc_create_product_attribute' => 'manage_product_terms',
+            'wc_set_product_attributes' => 'edit_products',
             'wc_create_product_category' => 'manage_product_terms',
             'wc_update_product_category' => 'manage_product_terms',
             'wc_delete_product_category' => 'manage_product_terms',
@@ -512,6 +590,33 @@ class StifliFlexMcp_WC_Products {
             }
 
             return $row;
+        };
+
+        $buildVariationRow = function($variation) {
+            return array(
+                'id' => $variation->get_id(),
+                'product_id' => (int) $variation->get_parent_id(),
+                'sku' => $variation->get_sku(),
+                'price' => $variation->get_price(),
+                'regular_price' => $variation->get_regular_price(),
+                'sale_price' => $variation->get_sale_price(),
+                'stock_quantity' => $variation->get_stock_quantity(),
+                'stock_status' => $variation->get_stock_status(),
+                'attributes' => $variation->get_attributes(),
+            );
+        };
+
+        $syncVariableParent = function($productId) {
+            $productId = (int) $productId;
+            if ($productId <= 0) {
+                return;
+            }
+            if (class_exists('WC_Product_Variable')) {
+                WC_Product_Variable::sync($productId);
+            }
+            if (function_exists('wc_delete_product_transients')) {
+                call_user_func('wc_delete_product_transients', $productId);
+            }
         };
         
         switch ($tool) {
@@ -779,25 +884,45 @@ class StifliFlexMcp_WC_Products {
                     $r['error'] = array('code' => -50002, 'message' => 'Product is not a variable product');
                     return true;
                 }
-                
-                $variations = $product->get_available_variations();
+
+                $variationIds = $product->get_children();
                 $result = array();
-                foreach ($variations as $variation_data) {
-                    $variation = wc_get_product($variation_data['variation_id']);
-                    if ($variation) {
-                        $result[] = array(
-                            'id' => $variation->get_id(),
-                            'sku' => $variation->get_sku(),
-                            'price' => $variation->get_price(),
-                            'regular_price' => $variation->get_regular_price(),
-                            'sale_price' => $variation->get_sale_price(),
-                            'stock_quantity' => $variation->get_stock_quantity(),
-                            'attributes' => $variation->get_attributes(),
-                        );
+                foreach ($variationIds as $variationId) {
+                    $variation = wc_get_product((int) $variationId);
+                    if ($variation && $variation->is_type('variation')) {
+                        $result[] = $buildVariationRow($variation);
                     }
                 }
                 
                 $addResultText($r, 'Found ' . count($result) . ' variations: ' . wp_json_encode($result, JSON_PRETTY_PRINT));
+                return true;
+
+            case 'wc_get_variation':
+                $product_id = intval($utils::getArrayValue($args, 'product_id', 0));
+                $variation_id = intval($utils::getArrayValue($args, 'variation_id', 0));
+                if (empty($product_id) || empty($variation_id)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_id and variation_id are required');
+                    return true;
+                }
+
+                $product = wc_get_product($product_id);
+                if (!$product || !$product->is_type('variable')) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Product is not a variable product');
+                    return true;
+                }
+
+                $variation = wc_get_product($variation_id);
+                if (!$variation || !$variation->is_type('variation')) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Variation not found');
+                    return true;
+                }
+
+                if ((int) $variation->get_parent_id() !== $product_id) {
+                    $r['error'] = array('code' => -50008, 'message' => 'Variation does not belong to the provided product_id');
+                    return true;
+                }
+
+                $addResultText($r, 'Variation: ' . wp_json_encode($buildVariationRow($variation), JSON_PRETTY_PRINT));
                 return true;
                 
             case 'wc_create_product_variation':
@@ -834,19 +959,30 @@ class StifliFlexMcp_WC_Products {
                 }
                 
                 $variation_id = $variation->save();
+                if (!$variation_id) {
+                    $r['error'] = array('code' => -50003, 'message' => 'Failed to create variation');
+                    return true;
+                }
+                $syncVariableParent($product_id);
                 $addResultText($r, 'Variation created with ID: ' . $variation_id);
                 return true;
                 
             case 'wc_update_product_variation':
+                $product_id = intval($utils::getArrayValue($args, 'product_id', 0));
                 $variation_id = intval($utils::getArrayValue($args, 'variation_id', 0));
-                if (empty($variation_id)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'variation_id is required');
+                if (empty($product_id) || empty($variation_id)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_id and variation_id are required');
                     return true;
                 }
                 
                 $variation = wc_get_product($variation_id);
                 if (!$variation || !$variation->is_type('variation')) {
                     $r['error'] = array('code' => -50002, 'message' => 'Variation not found');
+                    return true;
+                }
+
+                if ((int) $variation->get_parent_id() !== $product_id) {
+                    $r['error'] = array('code' => -50008, 'message' => 'Variation does not belong to the provided product_id');
                     return true;
                 }
                 
@@ -867,13 +1003,93 @@ class StifliFlexMcp_WC_Products {
                 }
                 
                 $variation->save();
+                $syncVariableParent($product_id);
                 $addResultText($r, 'Variation updated: ' . $variation_id);
+                return true;
+
+            case 'wc_batch_update_variations':
+                $product_id = intval($utils::getArrayValue($args, 'product_id', 0));
+                $updates = $utils::getArrayValue($args, 'updates', array());
+                if (empty($product_id) || empty($updates) || !is_array($updates)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_id and updates array are required');
+                    return true;
+                }
+
+                $product = wc_get_product($product_id);
+                if (!$product || !$product->is_type('variable')) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Product is not a variable product');
+                    return true;
+                }
+
+                $updated = array();
+                $skipped = array();
+                foreach ($updates as $update) {
+                    $variation_id = isset($update['variation_id']) ? intval($update['variation_id']) : 0;
+                    if ($variation_id <= 0) {
+                        $skipped[] = array('variation_id' => 0, 'reason' => 'variation_id is required');
+                        continue;
+                    }
+
+                    $variation = wc_get_product($variation_id);
+                    if (!$variation || !$variation->is_type('variation')) {
+                        $skipped[] = array('variation_id' => $variation_id, 'reason' => 'Variation not found');
+                        continue;
+                    }
+
+                    if ((int) $variation->get_parent_id() !== $product_id) {
+                        $skipped[] = array('variation_id' => $variation_id, 'reason' => 'Variation does not belong to product_id');
+                        continue;
+                    }
+
+                    if (isset($update['regular_price'])) {
+                        $variation->set_regular_price(sanitize_text_field($update['regular_price']));
+                    }
+                    if (isset($update['sale_price'])) {
+                        $variation->set_sale_price(sanitize_text_field($update['sale_price']));
+                    }
+                    if (isset($update['sku'])) {
+                        $variation->set_sku(sanitize_text_field($update['sku']));
+                    }
+                    if (isset($update['stock_quantity'])) {
+                        $variation->set_stock_quantity(intval($update['stock_quantity']));
+                        $variation->set_manage_stock(true);
+                    }
+                    if (isset($update['attributes']) && is_array($update['attributes'])) {
+                        $variation->set_attributes($update['attributes']);
+                    }
+
+                    $variation->save();
+                    $updated[] = $variation_id;
+                }
+
+                if (!empty($updated)) {
+                    $syncVariableParent($product_id);
+                }
+
+                $payload = array(
+                    'product_id' => $product_id,
+                    'updated' => $updated,
+                    'skipped' => $skipped,
+                );
+                $addResultText($r, 'Batch variation update result: ' . wp_json_encode($payload, JSON_PRETTY_PRINT));
                 return true;
                 
             case 'wc_delete_product_variation':
+                $product_id = intval($utils::getArrayValue($args, 'product_id', 0));
                 $variation_id = intval($utils::getArrayValue($args, 'variation_id', 0));
-                if (empty($variation_id)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'variation_id is required');
+                if (empty($product_id) || empty($variation_id)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_id and variation_id are required');
+                    return true;
+                }
+
+                $variation = wc_get_product($variation_id);
+                if (!$variation || !$variation->is_type('variation')) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Variation not found');
+                    return true;
+                }
+
+                if ((int) $variation->get_parent_id() !== $product_id) {
+                    $r['error'] = array('code' => -50008, 'message' => 'Variation does not belong to the provided product_id');
                     return true;
                 }
                 
@@ -881,10 +1097,221 @@ class StifliFlexMcp_WC_Products {
                 $result = wp_delete_post($variation_id, $force);
                 
                 if ($result) {
+                    $syncVariableParent($product_id);
                     $addResultText($r, 'Variation deleted: ' . $variation_id);
                 } else {
                     $r['error'] = array('code' => -50003, 'message' => 'Failed to delete variation');
                 }
+                return true;
+
+            case 'wc_get_product_attributes':
+                if (!function_exists('wc_get_attribute_taxonomies')) {
+                    $r['error'] = array('code' => -50000, 'message' => 'WooCommerce attribute API is unavailable');
+                    return true;
+                }
+
+                $attributeTaxonomies = wc_get_attribute_taxonomies();
+                $result = array();
+                foreach ((array) $attributeTaxonomies as $attributeTaxonomy) {
+                    $taxonomy = wc_attribute_taxonomy_name($attributeTaxonomy->attribute_name);
+                    $result[] = array(
+                        'id' => (int) $attributeTaxonomy->attribute_id,
+                        'name' => $attributeTaxonomy->attribute_label,
+                        'slug' => $attributeTaxonomy->attribute_name,
+                        'taxonomy' => $taxonomy,
+                        'type' => $attributeTaxonomy->attribute_type,
+                        'order_by' => $attributeTaxonomy->attribute_orderby,
+                        'has_archives' => !empty($attributeTaxonomy->attribute_public),
+                    );
+                }
+
+                $addResultText($r, 'Found ' . count($result) . ' product attributes: ' . wp_json_encode($result, JSON_PRETTY_PRINT));
+                return true;
+
+            case 'wc_get_attribute_terms':
+                $attribute_id = intval($utils::getArrayValue($args, 'attribute_id', 0));
+                $attribute_slug = sanitize_title($utils::getArrayValue($args, 'attribute_slug', ''));
+                if ($attribute_id <= 0 && '' === $attribute_slug) {
+                    $r['error'] = array('code' => -50001, 'message' => 'attribute_id or attribute_slug is required');
+                    return true;
+                }
+
+                $taxonomy = '';
+                if ($attribute_id > 0 && function_exists('wc_attribute_taxonomy_name_by_id')) {
+                    $taxonomy = (string) wc_attribute_taxonomy_name_by_id($attribute_id);
+                }
+                if ('' === $taxonomy && '' !== $attribute_slug) {
+                    $taxonomy = 0 === strpos($attribute_slug, 'pa_') ? $attribute_slug : wc_attribute_taxonomy_name($attribute_slug);
+                }
+
+                if ('' === $taxonomy || !taxonomy_exists($taxonomy)) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Attribute taxonomy not found');
+                    return true;
+                }
+
+                $termsArgs = array(
+                    'taxonomy' => $taxonomy,
+                    'hide_empty' => false,
+                    'number' => intval($utils::getArrayValue($args, 'limit', 100)),
+                    'offset' => intval($utils::getArrayValue($args, 'offset', 0)),
+                );
+                if (!empty($args['search'])) {
+                    $termsArgs['search'] = sanitize_text_field($args['search']);
+                }
+
+                $terms = get_terms($termsArgs);
+                if (is_wp_error($terms)) {
+                    $r['error'] = array('code' => -50004, 'message' => $terms->get_error_message());
+                    return true;
+                }
+
+                $result = array();
+                foreach ($terms as $term) {
+                    $result[] = array(
+                        'term_id' => (int) $term->term_id,
+                        'name' => $term->name,
+                        'slug' => $term->slug,
+                        'count' => (int) $term->count,
+                    );
+                }
+
+                $addResultText($r, 'Found ' . count($result) . ' attribute terms for ' . $taxonomy . ': ' . wp_json_encode($result, JSON_PRETTY_PRINT));
+                return true;
+
+            case 'wc_create_product_attribute':
+                if (!function_exists('wc_create_attribute')) {
+                    $r['error'] = array('code' => -50000, 'message' => 'WooCommerce attribute API is unavailable');
+                    return true;
+                }
+
+                $name = sanitize_text_field($utils::getArrayValue($args, 'name', ''));
+                if ('' === $name) {
+                    $r['error'] = array('code' => -50001, 'message' => 'name is required');
+                    return true;
+                }
+
+                $attributeData = array(
+                    'name' => $name,
+                    'slug' => sanitize_title($utils::getArrayValue($args, 'slug', '')),
+                    'type' => sanitize_key($utils::getArrayValue($args, 'type', 'select')),
+                    'order_by' => sanitize_key($utils::getArrayValue($args, 'order_by', 'menu_order')),
+                    'has_archives' => !empty($args['has_archives']) ? 1 : 0,
+                );
+
+                if (!in_array($attributeData['type'], array('select', 'text'), true)) {
+                    $attributeData['type'] = 'select';
+                }
+                if (!in_array($attributeData['order_by'], array('menu_order', 'name', 'name_num', 'id'), true)) {
+                    $attributeData['order_by'] = 'menu_order';
+                }
+
+                $attributeId = wc_create_attribute($attributeData);
+                if (is_wp_error($attributeId)) {
+                    $r['error'] = array('code' => -50004, 'message' => $attributeId->get_error_message());
+                    return true;
+                }
+
+                delete_transient('wc_attribute_taxonomies');
+                $addResultText($r, 'Product attribute created with ID: ' . intval($attributeId));
+                return true;
+
+            case 'wc_set_product_attributes':
+                $product_id = intval($utils::getArrayValue($args, 'product_id', 0));
+                $attributesInput = $utils::getArrayValue($args, 'attributes', array());
+                if ($product_id <= 0 || !is_array($attributesInput)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_id and attributes array are required');
+                    return true;
+                }
+
+                $product = wc_get_product($product_id);
+                if (!$product) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Product not found');
+                    return true;
+                }
+
+                $attributes = array();
+                $position = 0;
+                foreach ($attributesInput as $attrData) {
+                    if (!is_array($attrData)) {
+                        continue;
+                    }
+
+                    $attribute = new WC_Product_Attribute();
+                    $attributeId = isset($attrData['id']) ? intval($attrData['id']) : 0;
+                    $visible = isset($attrData['visible']) ? (bool) $attrData['visible'] : true;
+                    $variation = isset($attrData['variation']) ? (bool) $attrData['variation'] : false;
+                    $rawOptions = isset($attrData['options']) && is_array($attrData['options']) ? $attrData['options'] : array();
+
+                    if ($attributeId > 0 && function_exists('wc_attribute_taxonomy_name_by_id')) {
+                        $taxonomy = (string) wc_attribute_taxonomy_name_by_id($attributeId);
+                        if ('' === $taxonomy || !taxonomy_exists($taxonomy)) {
+                            continue;
+                        }
+
+                        $termIds = array();
+                        foreach ($rawOptions as $optionValue) {
+                            if (is_numeric($optionValue)) {
+                                $termIds[] = intval($optionValue);
+                                continue;
+                            }
+
+                            $termName = sanitize_text_field((string) $optionValue);
+                            if ('' === $termName) {
+                                continue;
+                            }
+
+                            $existing = term_exists($termName, $taxonomy);
+                            if (empty($existing)) {
+                                $created = wp_insert_term($termName, $taxonomy);
+                                if (is_wp_error($created) || empty($created['term_id'])) {
+                                    continue;
+                                }
+                                $termIds[] = (int) $created['term_id'];
+                            } else {
+                                $termIds[] = is_array($existing) ? (int) $existing['term_id'] : (int) $existing;
+                            }
+                        }
+
+                        $attribute->set_id($attributeId);
+                        $attribute->set_name($taxonomy);
+                        $attribute->set_options(array_values(array_unique(array_filter($termIds))));
+                    } else {
+                        $name = sanitize_text_field(isset($attrData['name']) ? $attrData['name'] : '');
+                        if ('' === $name) {
+                            continue;
+                        }
+
+                        $options = array();
+                        foreach ($rawOptions as $optionValue) {
+                            $optionValue = sanitize_text_field((string) $optionValue);
+                            if ('' !== $optionValue) {
+                                $options[] = $optionValue;
+                            }
+                        }
+
+                        $attribute->set_id(0);
+                        $attribute->set_name($name);
+                        $attribute->set_options($options);
+                    }
+
+                    $attribute->set_visible($visible);
+                    $attribute->set_variation($variation);
+                    $attribute->set_position($position++);
+                    $attributes[] = $attribute;
+                }
+
+                if (empty($attributes)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'No valid attributes were provided');
+                    return true;
+                }
+
+                $product->set_attributes($attributes);
+                $product->save();
+                if ($product->is_type('variable')) {
+                    $syncVariableParent($product_id);
+                }
+
+                $addResultText($r, 'Updated attributes for product #' . $product_id . ' (' . count($attributes) . ' attributes)');
                 return true;
                 
             case 'wc_get_product_categories':

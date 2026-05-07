@@ -112,6 +112,7 @@ class StifliFlexMcp_OAuth_Server {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- route selector only; no state mutation on read.
 		$oauth_route = isset( $_GET['sflmcp_oauth'] ) ? sanitize_key( wp_unslash( $_GET['sflmcp_oauth'] ) ) : '';
 		if ( 'authorize' === $oauth_route ) {
+			$this->send_no_cache_headers();
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
 				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- diagnostic logging of query keys only.
 				stifli_flex_mcp_log( sprintf( 'OAuth: Authorize page %s, params: %s', $method, wp_json_encode( array_keys( $_GET ) ) ) );
@@ -168,11 +169,35 @@ class StifliFlexMcp_OAuth_Server {
 	private function send_json_and_exit( $data, $code = 200 ) {
 		status_header( $code );
 		header( 'Content-Type: application/json; charset=utf-8' );
-		header( 'Cache-Control: no-store' );
+		$this->send_no_cache_headers();
 		header( 'Access-Control-Allow-Origin: *' );
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON output, not HTML context.
 		echo wp_json_encode( $data );
 		exit;
+	}
+
+	/**
+	 * Send strict no-cache headers for OAuth-sensitive responses.
+	 */
+	private function send_no_cache_headers() {
+		header( 'Cache-Control: no-store, no-cache, must-revalidate' );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+	}
+
+	/**
+	 * Apply strict no-cache headers to REST responses.
+	 *
+	 * @param WP_REST_Response $response Response instance.
+	 * @return WP_REST_Response
+	 */
+	private function with_no_cache_headers( $response ) {
+		if ( is_object( $response ) && method_exists( $response, 'header' ) ) {
+			$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate' );
+			$response->header( 'Pragma', 'no-cache' );
+			$response->header( 'Expires', '0' );
+		}
+		return $response;
 	}
 
 	// =========================================================================
@@ -515,13 +540,13 @@ class StifliFlexMcp_OAuth_Server {
 		$this->log_rest_request( 'POST /oauth/register', $request );
 		$auto_approve = get_option( 'sflmcp_oauth_auto_approve', '1' );
 		if ( '1' !== $auto_approve ) {
-			return new WP_REST_Response(
+			return $this->with_no_cache_headers( new WP_REST_Response(
 				array(
 					'error'             => 'registration_not_supported',
 					'error_description' => 'Dynamic client registration is disabled. An administrator must register clients manually.',
 				),
 				403
-			);
+			) );
 		}
 
 		$body = $request->get_json_params();
@@ -536,15 +561,14 @@ class StifliFlexMcp_OAuth_Server {
 			$err_code = $result->get_error_code();
 			// Database failures are server errors, not client errors.
 			$status   = ( 'server_error_db' === $err_code || 'server_error' === $err_code ) ? 500 : 400;
-			return new WP_REST_Response(
+			return $this->with_no_cache_headers( new WP_REST_Response(
 				array( 'error' => $err_code, 'error_description' => $result->get_error_message() ),
 				$status
-			);
+			) );
 		}
 
 		$response = new WP_REST_Response( $result, 201 );
-		$response->header( 'Cache-Control', 'no-store' );
-		return $response;
+		return $this->with_no_cache_headers( $response );
 	}
 
 	// =========================================================================
@@ -637,9 +661,7 @@ class StifliFlexMcp_OAuth_Server {
 		);
 
 		$response = new WP_REST_Response( $tokens, 200 );
-		$response->header( 'Cache-Control', 'no-store' );
-		$response->header( 'Pragma', 'no-cache' );
-		return $response;
+		return $this->with_no_cache_headers( $response );
 	}
 
 	/**
@@ -679,9 +701,7 @@ class StifliFlexMcp_OAuth_Server {
 		}
 
 		$response = new WP_REST_Response( $tokens, 200 );
-		$response->header( 'Cache-Control', 'no-store' );
-		$response->header( 'Pragma', 'no-cache' );
-		return $response;
+		return $this->with_no_cache_headers( $response );
 	}
 
 	// =========================================================================
@@ -705,7 +725,7 @@ class StifliFlexMcp_OAuth_Server {
 		}
 
 		// RFC 7009: always 200.
-		return new WP_REST_Response( null, 200 );
+		return $this->with_no_cache_headers( new WP_REST_Response( null, 200 ) );
 	}
 
 	// =========================================================================
@@ -746,8 +766,12 @@ class StifliFlexMcp_OAuth_Server {
 	 * @return WP_REST_Response
 	 */
 	public function add_www_authenticate_header( $response, $server, $request ) {
+		$route = $request->get_route();
+		if ( strpos( $route, '/' . $this->namespace . '/oauth/' ) === 0 ) {
+			$response = $this->with_no_cache_headers( $response );
+		}
+
 		if ( 401 === $response->get_status() ) {
-			$route = $request->get_route();
 			if ( strpos( $route, '/' . $this->namespace ) === 0 ) {
 				$resource_metadata = home_url( '/.well-known/oauth-protected-resource' );
 				$www_auth = 'Bearer resource_metadata="' . $resource_metadata . '"';
@@ -793,8 +817,7 @@ class StifliFlexMcp_OAuth_Server {
 			),
 			$status
 		);
-		$response->header( 'Cache-Control', 'no-store' );
-		return $response;
+		return $this->with_no_cache_headers( $response );
 	}
 
 	/**
@@ -805,14 +828,14 @@ class StifliFlexMcp_OAuth_Server {
 	 */
 	public function handle_register_info( $request ) {
 		$this->log_rest_request( 'GET /oauth/register (discovery probe)', $request );
-		return new WP_REST_Response(
+		return $this->with_no_cache_headers( new WP_REST_Response(
 			array(
 				'endpoint'    => 'Dynamic Client Registration (RFC 7591)',
 				'method'      => 'POST',
 				'description' => 'Submit a POST request with JSON body to register a new OAuth client.',
 			),
 			200
-		);
+		) );
 	}
 
 	/**
@@ -824,14 +847,14 @@ class StifliFlexMcp_OAuth_Server {
 	public function handle_endpoint_info( $request ) {
 		$route = $request->get_route();
 		$this->log_rest_request( 'GET ' . $route . ' (discovery probe)', $request );
-		return new WP_REST_Response(
+		return $this->with_no_cache_headers( new WP_REST_Response(
 			array(
 				'endpoint' => $route,
 				'method'   => 'POST',
 				'message'  => 'This endpoint only accepts POST requests.',
 			),
 			200
-		);
+		) );
 	}
 
 	/**

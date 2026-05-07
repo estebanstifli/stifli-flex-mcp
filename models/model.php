@@ -197,14 +197,15 @@ class StifliFlexMcpModel {
             'wp_restore_post_revision',
             // WooCommerce write operations
             'wc_create_product','wc_update_product','wc_delete_product','wc_batch_update_products',
-            'wc_create_product_variation','wc_update_product_variation','wc_delete_product_variation',
+            'wc_create_product_variation','wc_update_product_variation','wc_delete_product_variation','wc_batch_update_variations',
+            'wc_create_product_attribute','wc_set_product_attributes',
             'wc_create_product_category','wc_update_product_category','wc_delete_product_category',
             'wc_create_product_tag','wc_update_product_tag','wc_delete_product_tag',
             'wc_create_product_review','wc_update_product_review','wc_delete_product_review',
             'wc_create_order','wc_update_order','wc_delete_order','wc_batch_update_orders',
             'wc_create_order_note','wc_delete_order_note',
             // Removed for WordPress.org compliance: wc_create_customer, wc_update_customer, wc_delete_customer
-            'wc_create_coupon','wc_update_coupon','wc_delete_coupon',
+            'wc_create_coupon','wc_update_coupon','wc_delete_coupon','wc_empty_coupon_trash',
             'wc_create_tax_rate','wc_update_tax_rate','wc_delete_tax_rate',
             'wc_create_shipping_zone','wc_update_shipping_zone','wc_delete_shipping_zone',
             'wc_update_payment_gateway',
@@ -3221,7 +3222,13 @@ class StifliFlexMcpModel {
             case 'wp_get_taxonomies':
                 $tax = get_taxonomies(array(), 'objects');
                 $out = array();
-                foreach ($tax as $k => $o) { $out[] = array('name' => $k, 'label' => $o->label); }
+                foreach ($tax as $k => $o) {
+                    $out[] = array(
+                        'slug' => $k,
+                        'name' => $k,
+                        'label' => $o->label,
+                    );
+                }
                 $addResultText($r, wp_json_encode($out, JSON_PRETTY_PRINT));
                 break;
             case 'wp_get_terms':
@@ -3279,9 +3286,23 @@ class StifliFlexMcpModel {
                 if (!$term_id) { $r['error'] = array('code' => -42602, 'message' => 'term_id required'); break; }
                 $meta_key = isset($args['meta_key']) ? sanitize_key($args['meta_key']) : '';
                 $single   = !empty($args['single']);
-                $value    = $meta_key ? get_term_meta($term_id, $meta_key, $single) : get_term_meta($term_id);
-                $value    = $utils::redactSecrets($value, $meta_key);
-                $addResultText($r, wp_json_encode($value, JSON_PRETTY_PRINT));
+                if ($meta_key) {
+                    $value = get_term_meta($term_id, $meta_key, $single);
+                    $value = $utils::redactSecrets($value, $meta_key);
+                    $payload = array(
+                        'term_id' => $term_id,
+                        'key' => $meta_key,
+                        'value' => $value,
+                    );
+                } else {
+                    $meta = get_term_meta($term_id);
+                    $meta = $utils::redactSecrets($meta, '');
+                    $payload = array(
+                        'term_id' => $term_id,
+                        'meta' => $meta,
+                    );
+                }
+                $addResultText($r, wp_json_encode($payload, JSON_PRETTY_PRINT));
                 break;
             case 'wp_update_term_meta':
                 $term_id  = intval($utils::getArrayValue($args, 'term_id'));

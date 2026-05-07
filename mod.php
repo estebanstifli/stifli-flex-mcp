@@ -15,6 +15,7 @@ class StifliFlexMcp {
 	private $taskDefaultTtlMs = 300000; // 5 minutes
 	private $taskMaxTtlMs = 1800000; // 30 minutes
 	private $taskPollIntervalMs = 3000;
+	private $oauthWellKnownProbeTtl = 43200; // 12 hours
 
 	public function __construct() {
 		global $wpdb;
@@ -33,6 +34,8 @@ class StifliFlexMcp {
 			add_action('admin_menu', array($this, 'registerMcpServerSubmenu'), 15);
 			add_action('admin_menu', array($this, 'registerMultimediaSubmenu'), 25);
 			add_action('admin_init', array($this, 'registerSettings'));
+			add_action('admin_init', array($this, 'handleOAuthWellKnownNoticeDismiss'));
+			add_action('admin_notices', array($this, 'renderOAuthWellKnownNotice'));
 			add_action('admin_enqueue_scripts', array($this, 'enqueueAdminScripts'));
 			// AJAX handlers for profiles management
 			add_action('wp_ajax_sflmcp_create_profile', array($this, 'ajax_create_profile'));
@@ -1776,6 +1779,210 @@ class StifliFlexMcp {
 	 */
 	public function registerSettings() {
 		// No custom settings needed - uses WordPress Application Passwords
+	}
+
+	private function getOAuthWellKnownProbeTransientKey() {
+		$host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+		if ('' === $host) {
+			$host = 'site';
+		}
+		return 'sflmcp_oauth_wk_probe_' . md5($host);
+	}
+
+	private function getOAuthWellKnownDismissOptionKey() {
+		$host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+		if ('' === $host) {
+			$host = 'site';
+		}
+		return 'sflmcp_oauth_wk_notice_dismissed_' . md5($host);
+	}
+
+	private function invalidateOAuthWellKnownProbeCache() {
+		delete_transient($this->getOAuthWellKnownProbeTransientKey());
+		delete_option($this->getOAuthWellKnownDismissOptionKey());
+	}
+
+	private function shouldSkipOAuthWellKnownSelfCheck() {
+		if (is_multisite() && !is_main_site()) {
+			return true;
+		}
+
+		if (function_exists('wp_get_environment_type')) {
+			$env = (string) wp_get_environment_type();
+			if (in_array($env, array('local', 'development'), true)) {
+				return true;
+			}
+		}
+
+		$host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+		if ('' === $host) {
+			return true;
+		}
+
+		if (in_array($host, array('localhost', '127.0.0.1', '::1'), true)) {
+			return true;
+		}
+
+		$devSuffixes = array('.local', '.test', '.example', '.invalid', '.localhost');
+		foreach ($devSuffixes as $suffix) {
+			if (strlen($host) > strlen($suffix) && substr($host, -strlen($suffix)) === $suffix) {
+				return true;
+			}
+		}
+
+		if (filter_var($host, FILTER_VALIDATE_IP)) {
+			$publicIp = filter_var(
+				$host,
+				FILTER_VALIDATE_IP,
+				FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+			);
+			if (false === $publicIp) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private function getOAuthWellKnownSelfCheckResult() {
+		if ($this->shouldSkipOAuthWellKnownSelfCheck()) {
+			return array(
+				'status' => 'skipped',
+				'blocked' => false,
+				'checked_at' => time(),
+			);
+		}
+
+		$transientKey = $this->getOAuthWellKnownProbeTransientKey();
+		$cached = get_transient($transientKey);
+		if (is_array($cached) && isset($cached['status'])) {
+			return $cached;
+		}
+
+		$url = home_url('/.well-known/oauth-authorization-server');
+		$result = array(
+			'status' => 'unknown',
+			'blocked' => false,
+			'checked_at' => time(),
+			'url' => $url,
+			'code' => 0,
+			'message' => '',
+		);
+
+		$response = wp_remote_get($url, array(
+			'timeout' => 8,
+			'redirection' => 2,
+		));
+
+		if (is_wp_error($response)) {
+			$result['status'] = 'unknown';
+			$result['message'] = $response->get_error_message();
+			set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
+			return $result;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code($response);
+		$body = (string) wp_remote_retrieve_body($response);
+		$result['code'] = $code;
+
+		if (200 === $code) {
+			$decoded = json_decode($body, true);
+			if (is_array($decoded) && !empty($decoded['authorization_endpoint']) && !empty($decoded['token_endpoint'])) {
+				$result['status'] = 'ok';
+			} else {
+				$result['status'] = 'unexpected';
+				$result['message'] = 'Unexpected payload at oauth-authorization-server endpoint.';
+			}
+		} elseif (in_array($code, array(403, 404), true)) {
+			$result['status'] = 'blocked';
+			$result['blocked'] = true;
+			$result['message'] = 'Host likely blocks /.well-known/* before WordPress routing.';
+		} else {
+			$result['status'] = 'error';
+			$result['message'] = 'Unexpected HTTP status from oauth-authorization-server endpoint.';
+		}
+
+		set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
+		return $result;
+	}
+
+	public function handleOAuthWellKnownNoticeDismiss() {
+		if (!current_user_can('manage_options')) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified below.
+		$dismiss = isset($_GET['sflmcp_dismiss_oauth_well_known_notice']) ? sanitize_text_field(wp_unslash($_GET['sflmcp_dismiss_oauth_well_known_notice'])) : '';
+		if ('1' !== $dismiss) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce is explicitly validated.
+		$nonce = isset($_GET['_sflmcpnonce']) ? sanitize_text_field(wp_unslash($_GET['_sflmcpnonce'])) : '';
+		if (!wp_verify_nonce($nonce, 'sflmcp_dismiss_oauth_well_known_notice')) {
+			return;
+		}
+
+		update_option($this->getOAuthWellKnownDismissOptionKey(), time(), false);
+		$redirect = remove_query_arg(array('sflmcp_dismiss_oauth_well_known_notice', '_sflmcpnonce'));
+		wp_safe_redirect($redirect);
+		exit;
+	}
+
+	public function renderOAuthWellKnownNotice() {
+		if (!current_user_can('manage_options')) {
+			return;
+		}
+
+		if (!function_exists('get_current_screen')) {
+			return;
+		}
+
+		$screen = get_current_screen();
+		if (!$screen || empty($screen->id)) {
+			return;
+		}
+
+		$allowedScreens = array('stifli-flex-mcp_page_sflmcp-server', 'plugins');
+		if (!in_array((string) $screen->id, $allowedScreens, true)) {
+			return;
+		}
+
+		$check = $this->getOAuthWellKnownSelfCheckResult();
+		if (empty($check['blocked'])) {
+			return;
+		}
+
+		$dismissedAt = (int) get_option($this->getOAuthWellKnownDismissOptionKey(), 0);
+		$checkedAt = isset($check['checked_at']) ? (int) $check['checked_at'] : 0;
+		if ($dismissedAt > 0 && $dismissedAt >= $checkedAt) {
+			return;
+		}
+
+		$dismissUrl = wp_nonce_url(
+			add_query_arg(array('sflmcp_dismiss_oauth_well_known_notice' => '1')),
+			'sflmcp_dismiss_oauth_well_known_notice',
+			'_sflmcpnonce'
+		);
+		$helpUrl = admin_url('admin.php?page=sflmcp-server&tab=help#troubleshooting');
+		$endpoint = isset($check['url']) ? (string) $check['url'] : home_url('/.well-known/oauth-authorization-server');
+		$code = isset($check['code']) ? (int) $check['code'] : 0;
+		?>
+		<div class="notice notice-warning is-dismissible">
+			<p><strong><?php echo esc_html__('OAuth discovery endpoint may be blocked by hosting.', 'stifli-flex-mcp'); ?></strong></p>
+			<p>
+				<?php echo esc_html__('External MCP connectors (Claude/ChatGPT) may fail to open the authorization window if this endpoint is unreachable:', 'stifli-flex-mcp'); ?>
+				<code><?php echo esc_html($endpoint); ?></code>
+				<?php if ($code > 0) : ?>
+					(HTTP <?php echo esc_html((string) $code); ?>)
+				<?php endif; ?>
+			</p>
+			<p>
+				<a class="button button-secondary" href="<?php echo esc_url($helpUrl); ?>"><?php echo esc_html__('View manual fix', 'stifli-flex-mcp'); ?></a>
+				<a class="button button-link" href="<?php echo esc_url($dismissUrl); ?>"><?php echo esc_html__('Dismiss', 'stifli-flex-mcp'); ?></a>
+			</p>
+		</div>
+		<?php
 	}
 
 	/**
@@ -4958,6 +5165,7 @@ class StifliFlexMcp {
 
 		$auto_approve = isset( $_POST['auto_approve'] ) ? sanitize_text_field( wp_unslash( $_POST['auto_approve'] ) ) : '0';
 		update_option( 'sflmcp_oauth_auto_approve', $auto_approve === '1' ? '1' : '0' );
+		$this->invalidateOAuthWellKnownProbeCache();
 
 		wp_send_json_success();
 	}

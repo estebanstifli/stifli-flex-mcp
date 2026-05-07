@@ -733,6 +733,12 @@ function stifli_flex_mcp_seed_initial_tools() {
 	$tools[] = array('wc_create_product_variation', 'Create a product variation.', 'WooCommerce - Products', 1);
 	$tools[] = array('wc_update_product_variation', 'Update a product variation.', 'WooCommerce - Products', 1);
 	$tools[] = array('wc_delete_product_variation', 'Delete a product variation.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_get_variation', 'Get a single variation with product ownership validation.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_batch_update_variations', 'Batch update multiple variations for a variable product.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_get_product_attributes', 'List global WooCommerce product attributes.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_get_attribute_terms', 'List terms for a WooCommerce product attribute taxonomy.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_create_product_attribute', 'Create a global WooCommerce product attribute taxonomy.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_set_product_attributes', 'Set product attributes on a WooCommerce product.', 'WooCommerce - Products', 1);
 	
 	// WooCommerce Product Categories
 	$tools[] = array('wc_get_product_categories', 'List product categories.', 'WooCommerce - Categories', 1);
@@ -779,9 +785,12 @@ function stifli_flex_mcp_seed_initial_tools() {
 	
 	// WooCommerce Coupons
 	$tools[] = array('wc_get_coupons', 'List WooCommerce coupons.', 'WooCommerce - Coupons', 1);
+	$tools[] = array('wc_get_coupon', 'Get a WooCommerce coupon by ID.', 'WooCommerce - Coupons', 1);
+	$tools[] = array('wc_get_coupon_count', 'Count WooCommerce coupons by status.', 'WooCommerce - Coupons', 1);
 	$tools[] = array('wc_create_coupon', 'Create a new coupon.', 'WooCommerce - Coupons', 1);
 	$tools[] = array('wc_update_coupon', 'Update a coupon by ID.', 'WooCommerce - Coupons', 1);
 	$tools[] = array('wc_delete_coupon', 'Delete a coupon by ID.', 'WooCommerce - Coupons', 1);
+	$tools[] = array('wc_empty_coupon_trash', 'Permanently delete all trashed coupons.', 'WooCommerce - Coupons', 1);
 	
 	// WooCommerce Reports
 	$tools[] = array('wc_get_sales_report', 'Get sales report data.', 'WooCommerce - Reports', 1);
@@ -907,7 +916,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.05.12' );
+	define( 'SFLMCP_DB_VERSION', '2026.05.13' );
 }
 
 /**
@@ -923,6 +932,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_remove_wp_delete_option();
 	stifli_flex_mcp_upgrade_323_seed_new_tools();
 	stifli_flex_mcp_upgrade_324_seed_plugin_settings_tool();
+	stifli_flex_mcp_upgrade_329_seed_wc_variation_attribute_coupon_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
 }
@@ -1106,6 +1116,129 @@ function stifli_flex_mcp_upgrade_324_seed_plugin_settings_tool() {
 					array( 'profile_id' => (int) $profile_id, 'tool_name' => $tool[0] ),
 					array( '%d', '%s' )
 				);
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.2.9): seed new WooCommerce variation/attribute/coupon tools
+ * and attach them to relevant system profiles for existing installs.
+ */
+function stifli_flex_mcp_upgrade_329_seed_wc_variation_attribute_coupon_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_329_seed_wc_variation_attribute_coupon_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+
+	$tools_like = $wpdb->esc_like( $tools_table );
+	$profiles_like = $wpdb->esc_like( $profiles_table );
+	$profile_tools_like = $wpdb->esc_like( $profile_tools_table );
+
+	$tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $tools_like ) ) === $tools_table;
+	$profiles_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_like ) ) === $profiles_table;
+	$profile_tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profile_tools_like ) ) === $profile_tools_table;
+
+	if ( ! $tools_exists ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'wc_get_variation', 'Get a single variation with product ownership validation.', 'WooCommerce - Products', 1 ),
+		array( 'wc_batch_update_variations', 'Batch update multiple variations for a variable product.', 'WooCommerce - Products', 1 ),
+		array( 'wc_get_product_attributes', 'List global WooCommerce product attributes.', 'WooCommerce - Products', 1 ),
+		array( 'wc_get_attribute_terms', 'List terms for a WooCommerce product attribute taxonomy.', 'WooCommerce - Products', 1 ),
+		array( 'wc_create_product_attribute', 'Create a global WooCommerce product attribute taxonomy.', 'WooCommerce - Products', 1 ),
+		array( 'wc_set_product_attributes', 'Set product attributes on a WooCommerce product.', 'WooCommerce - Products', 1 ),
+		array( 'wc_get_coupon', 'Get a WooCommerce coupon by ID.', 'WooCommerce - Coupons', 1 ),
+		array( 'wc_get_coupon_count', 'Count WooCommerce coupons by status.', 'WooCommerce - Coupons', 1 ),
+		array( 'wc_empty_coupon_trash', 'Permanently delete all trashed coupons.', 'WooCommerce - Coupons', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	if ( $profiles_exists && $profile_tools_exists ) {
+		$read_tools = array(
+			'wc_get_variation',
+			'wc_get_product_attributes',
+			'wc_get_attribute_terms',
+			'wc_get_coupon',
+			'wc_get_coupon_count',
+		);
+		$all_tools = array(
+			'wc_get_variation',
+			'wc_batch_update_variations',
+			'wc_get_product_attributes',
+			'wc_get_attribute_terms',
+			'wc_create_product_attribute',
+			'wc_set_product_attributes',
+			'wc_get_coupon',
+			'wc_get_coupon_count',
+			'wc_empty_coupon_trash',
+		);
+
+		$profile_map = array(
+			'WooCommerce Read Only' => $read_tools,
+			'WooCommerce Store Management' => $all_tools,
+			'Complete E-commerce' => $all_tools,
+			'Safe Mode' => $read_tools,
+			'Complete Site' => $all_tools,
+		);
+
+		foreach ( $profile_map as $profile_name => $tool_names ) {
+			$profile_id = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+					$profile_name
+				)
+			);
+			if ( ! $profile_id ) {
+				continue;
+			}
+
+			foreach ( $tool_names as $tool_name ) {
+				$linked = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+						$profile_id,
+						$tool_name
+					)
+				);
+				if ( ! $linked ) {
+					$wpdb->insert(
+						$profile_tools_table,
+						array(
+							'profile_id' => (int) $profile_id,
+							'tool_name' => $tool_name,
+							'created_at' => $now,
+						),
+						array( '%d', '%s', '%s' )
+					);
+				}
 			}
 		}
 	}
@@ -1377,10 +1510,11 @@ function stifli_flex_mcp_seed_system_profiles() {
 			'description' => 'Read-only WooCommerce tools for products, orders, customers, and coupons',
 			'tools' => array(
 				'mcp_ping',
-				'wc_get_products', 'wc_get_product_variations', 'wc_get_product_categories', 'wc_get_product_tags', 'wc_get_product_reviews',
+				'wc_get_products', 'wc_get_product_variations', 'wc_get_variation', 'wc_get_product_categories', 'wc_get_product_tags', 'wc_get_product_reviews',
+				'wc_get_product_attributes', 'wc_get_attribute_terms',
 				'wc_get_orders', 'wc_get_order_notes',
 				// Removed for WordPress.org compliance: wc_get_customers
-				'wc_get_coupons',
+				'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count',
 				'wc_get_low_stock_products',
 				'wc_get_refunds',
 				'wc_get_sales_report', 'wc_get_top_sellers_report',
@@ -1394,7 +1528,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Products & Stock
 				'wc_get_products', 'wc_create_product', 'wc_update_product', 'wc_delete_product', 'wc_batch_update_products',
 				'wc_update_stock', 'wc_get_low_stock_products', 'wc_set_stock_status',
-				'wc_get_product_variations', 'wc_create_product_variation', 'wc_update_product_variation', 'wc_delete_product_variation',
+				'wc_get_product_variations', 'wc_get_variation', 'wc_create_product_variation', 'wc_update_product_variation', 'wc_delete_product_variation', 'wc_batch_update_variations',
+				'wc_get_product_attributes', 'wc_get_attribute_terms', 'wc_create_product_attribute', 'wc_set_product_attributes',
 				'wc_get_product_categories', 'wc_create_product_category', 'wc_update_product_category', 'wc_delete_product_category',
 				'wc_get_product_tags', 'wc_create_product_tag', 'wc_update_product_tag', 'wc_delete_product_tag',
 				'wc_get_product_reviews', 'wc_create_product_review', 'wc_update_product_review', 'wc_delete_product_review',
@@ -1403,7 +1538,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_order_notes', 'wc_create_order_note', 'wc_delete_order_note',
 				'wc_create_refund', 'wc_get_refunds', 'wc_delete_refund',
 				// Coupons (Customers removed for WordPress.org compliance)
-				'wc_get_coupons', 'wc_create_coupon', 'wc_update_coupon', 'wc_delete_coupon',
+				'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count', 'wc_create_coupon', 'wc_update_coupon', 'wc_delete_coupon', 'wc_empty_coupon_trash',
 				// Reports
 				'wc_get_sales_report', 'wc_get_top_sellers_report',
 			),
@@ -1415,7 +1550,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				// All WooCommerce tools (65 total)
 				'wc_get_products', 'wc_create_product', 'wc_update_product', 'wc_delete_product', 'wc_batch_update_products',
-				'wc_get_product_variations', 'wc_create_product_variation', 'wc_update_product_variation', 'wc_delete_product_variation',
+				'wc_get_product_variations', 'wc_get_variation', 'wc_create_product_variation', 'wc_update_product_variation', 'wc_delete_product_variation', 'wc_batch_update_variations',
+				'wc_get_product_attributes', 'wc_get_attribute_terms', 'wc_create_product_attribute', 'wc_set_product_attributes',
 				'wc_get_product_categories', 'wc_create_product_category', 'wc_update_product_category', 'wc_delete_product_category',
 				'wc_get_product_tags', 'wc_create_product_tag', 'wc_update_product_tag', 'wc_delete_product_tag',
 				'wc_get_product_reviews', 'wc_create_product_review', 'wc_update_product_review', 'wc_delete_product_review',
@@ -1424,7 +1560,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_order_notes', 'wc_create_order_note', 'wc_delete_order_note',
 				'wc_create_refund', 'wc_get_refunds', 'wc_delete_refund',
 				// Customers removed for WordPress.org compliance
-				'wc_get_coupons', 'wc_create_coupon', 'wc_update_coupon', 'wc_delete_coupon',
+				'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count', 'wc_create_coupon', 'wc_update_coupon', 'wc_delete_coupon', 'wc_empty_coupon_trash',
 				'wc_get_sales_report', 'wc_get_top_sellers_report',
 				'wc_get_tax_classes', 'wc_get_tax_rates', 'wc_create_tax_rate', 'wc_update_tax_rate', 'wc_delete_tax_rate',
 				'wc_get_shipping_zones', 'wc_get_shipping_zone_methods', 'wc_create_shipping_zone', 'wc_update_shipping_zone', 'wc_delete_shipping_zone',
@@ -1459,12 +1595,13 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_list_plugins',
 				'wp_get_themes',
 				// WooCommerce READ operations (sin sensitive)
-				'wc_get_products', 'wc_get_product_variations',
+				'wc_get_products', 'wc_get_product_variations', 'wc_get_variation',
+				'wc_get_product_attributes', 'wc_get_attribute_terms',
 				'wc_get_product_categories', 'wc_get_product_tags',
 				'wc_get_product_reviews',
 				'wc_get_orders', 'wc_get_order_notes',
 				// Removed for WordPress.org compliance: wc_get_customers
-				'wc_get_coupons',
+				'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count',
 				'wc_get_low_stock_products',
 				'wc_get_refunds',
 				'wc_get_sales_report', 'wc_get_top_sellers_report',

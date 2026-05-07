@@ -412,6 +412,8 @@ When using the MCP server with external AI clients (ChatGPT, Claude Desktop, Lib
 = 3.2.9 =
 * Improvement: Updated image generation model catalog in Multimedia Settings. Added new OpenAI and Gemini image models while keeping previous models available for user selection.
 * Improvement: Set default image models to cost-effective options (`gpt-image-1` and `gemini-2.5-flash-image`) and refreshed pricing guidance in the UI.
+* New tools: `wc_get_variation`, `wc_batch_update_variations`, `wc_get_product_attributes`, `wc_get_attribute_terms`, `wc_create_product_attribute`, `wc_set_product_attributes`, `wc_get_coupon`, `wc_get_coupon_count`, `wc_empty_coupon_trash`.
+* Tool improvements: `wp_get_taxonomies` (slug/name/label output), `wp_get_term_meta` (structured payload with secret redaction), `wc_get_product_variations` (normalized variation rows), `wc_update_product_variation` (ownership validation), `wc_delete_product_variation` (ownership validation), `wc_get_coupons` (status filtering, including trash), `wc_delete_coupon` (clear trash vs permanent outcome), `wc_get_coupon_count` (status-based counting, including trash).
 
 = 3.2.8 =
 * Improvement: Official compatibility update for WordPress 7.0 with WordPress AI Client integration in AI Chat Agent.
