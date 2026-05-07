@@ -746,19 +746,24 @@ OpenAI Image Settings:
 
 - **API Key**: clave OpenAI compartida para imagen/vídeo, independiente del Chat Agent.
 - **Model**:
+  - `gpt-image-2`.
+  - `gpt-image-1.5`.
   - `gpt-image-1`.
+  - `gpt-image-1-mini`.
   - `dall-e-3`.
   - `dall-e-2`.
 - **Default Quality**: low, medium, high.
 - **Default Size**: square, landscape, portrait.
 - **Style**: natural o vivid, aplica a DALL-E 3.
-- **Background**: auto, transparent, opaque; aplica a `gpt-image-1`.
-- **Output Format**: png, jpeg, webp; aplica a `gpt-image-1`.
+- **Background**: auto, transparent, opaque; aplica a modelos `gpt-image-*` (nota: `gpt-image-2` no soporta transparent).
+- **Output Format**: png, jpeg, webp; aplica a modelos `gpt-image-*`.
 
 Gemini Image Settings:
 
 - **API Key**: clave Gemini compartida para imagen/vídeo.
 - **Model**:
+  - `gemini-3.1-flash-image-preview`.
+  - `gemini-3-pro-image-preview`.
   - `gemini-2.5-flash-image`.
   - `imagen-4.0-generate-001`.
   - `imagen-4.0-fast-generate-001`.

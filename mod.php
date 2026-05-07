@@ -3949,7 +3949,7 @@ class StifliFlexMcp {
 			</div>
 			<p class="description sflmcp-pricing-notice">
 				<span class="dashicons dashicons-info" class="sflmcp-pricing-icon"></span>
-				<?php esc_html_e( 'Approximate cost per image: OpenAI GPT Image 1: $0.01–$0.25 (varies by quality: low/medium/high and size). DALL·E 3: $0.04–$0.12. DALL·E 2: ~$0.02. Google Imagen 4: $0.02 (fast), $0.04 (standard), $0.06 (ultra). Prices may change — please consult each provider\'s pricing page for up-to-date rates.', 'stifli-flex-mcp' ); ?>
+				<?php esc_html_e( 'Approximate price per image (may change): OpenAI GPT Image 2: ~$0.005-$0.211, GPT Image 1.5: ~$0.009-$0.200, GPT Image 1: ~$0.011-$0.250, GPT Image 1 Mini: ~$0.005-$0.052. Gemini 2.5 Flash Image: ~$0.039 (1K), Gemini 3.1 Flash Image Preview: ~$0.045 (0.5K), $0.067 (1K), $0.101 (2K), $0.151 (4K), Gemini 3 Pro Image Preview: ~$0.134 (1K/2K), $0.24 (4K). Imagen 4: Fast $0.02, Standard $0.04, Ultra $0.06.', 'stifli-flex-mcp' ); ?>
 			</p>
 
 			<h2><?php esc_html_e( 'Image Generation Settings', 'stifli-flex-mcp' ); ?></h2>
@@ -3999,9 +3999,12 @@ class StifliFlexMcp {
 							<th><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></th>
 							<td>
 								<select id="sflmcp_mm_openai_model">
-									<option value="gpt-image-1" <?php selected( $s['openai_model'], 'gpt-image-1' ); ?>>gpt-image-1 (<?php esc_html_e( 'Latest, best quality', 'stifli-flex-mcp' ); ?>)</option>
-									<option value="dall-e-3" <?php selected( $s['openai_model'], 'dall-e-3' ); ?>>DALL·E 3 (<?php esc_html_e( 'Stable, no verification needed', 'stifli-flex-mcp' ); ?>)</option>
-									<option value="dall-e-2" <?php selected( $s['openai_model'], 'dall-e-2' ); ?>>DALL·E 2 (<?php esc_html_e( 'Legacy, cheapest', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gpt-image-1" <?php selected( $s['openai_model'], 'gpt-image-1' ); ?>>gpt-image-1 (<?php esc_html_e( 'Default, balanced quality/cost', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gpt-image-1.5" <?php selected( $s['openai_model'], 'gpt-image-1.5' ); ?>>gpt-image-1.5 (<?php esc_html_e( 'Improved quality/cost', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gpt-image-2" <?php selected( $s['openai_model'], 'gpt-image-2' ); ?>>gpt-image-2 (<?php esc_html_e( 'Latest, state-of-the-art', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gpt-image-1-mini" <?php selected( $s['openai_model'], 'gpt-image-1-mini' ); ?>>gpt-image-1-mini (<?php esc_html_e( 'Lower cost', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="dall-e-3" <?php selected( $s['openai_model'], 'dall-e-3' ); ?>>DALL·E 3 (<?php esc_html_e( 'Legacy fallback', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="dall-e-2" <?php selected( $s['openai_model'], 'dall-e-2' ); ?>>DALL·E 2 (<?php esc_html_e( 'Legacy', 'stifli-flex-mcp' ); ?>)</option>
 								</select>
 							</td>
 						</tr>
@@ -4044,7 +4047,7 @@ class StifliFlexMcp {
 									<option value="transparent" <?php selected( $s['openai_background'], 'transparent' ); ?>><?php esc_html_e( 'Transparent', 'stifli-flex-mcp' ); ?></option>
 									<option value="opaque" <?php selected( $s['openai_background'], 'opaque' ); ?>><?php esc_html_e( 'Opaque', 'stifli-flex-mcp' ); ?></option>
 								</select>
-								<p class="sflmcp-field-desc"><?php esc_html_e( 'Only for gpt-image-1. Use Transparent for logos/icons with PNG output.', 'stifli-flex-mcp' ); ?></p>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Applies to GPT Image models. Note: gpt-image-2 does not support transparent background.', 'stifli-flex-mcp' ); ?></p>
 							</td>
 						</tr>
 						<tr>
@@ -4055,7 +4058,7 @@ class StifliFlexMcp {
 									<option value="jpeg" <?php selected( $s['openai_output_format'], 'jpeg' ); ?>>JPEG (<?php esc_html_e( 'smaller file, no transparency', 'stifli-flex-mcp' ); ?>)</option>
 									<option value="webp" <?php selected( $s['openai_output_format'], 'webp' ); ?>>WebP (<?php esc_html_e( 'modern, best compression', 'stifli-flex-mcp' ); ?>)</option>
 								</select>
-								<p class="sflmcp-field-desc"><?php esc_html_e( 'Only for gpt-image-1. DALL·E models always return PNG.', 'stifli-flex-mcp' ); ?></p>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Applies to GPT Image models. DALL·E models always return PNG.', 'stifli-flex-mcp' ); ?></p>
 							</td>
 						</tr>
 					</table>
@@ -4082,7 +4085,9 @@ class StifliFlexMcp {
 							<th><?php esc_html_e( 'Model', 'stifli-flex-mcp' ); ?></th>
 							<td>
 								<select id="sflmcp_mm_gemini_model">
-									<option value="gemini-2.5-flash-image" <?php selected( $s['gemini_model'], 'gemini-2.5-flash-image' ); ?>>gemini-2.5-flash-image (<?php esc_html_e( 'Fast, native generation', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gemini-2.5-flash-image" <?php selected( $s['gemini_model'], 'gemini-2.5-flash-image' ); ?>>gemini-2.5-flash-image (<?php esc_html_e( 'Default, best value for speed/cost', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gemini-3.1-flash-image-preview" <?php selected( $s['gemini_model'], 'gemini-3.1-flash-image-preview' ); ?>>gemini-3.1-flash-image-preview (<?php esc_html_e( 'Latest image model (preview)', 'stifli-flex-mcp' ); ?>)</option>
+									<option value="gemini-3-pro-image-preview" <?php selected( $s['gemini_model'], 'gemini-3-pro-image-preview' ); ?>>gemini-3-pro-image-preview (<?php esc_html_e( 'Highest quality (preview)', 'stifli-flex-mcp' ); ?>)</option>
 									<option value="imagen-4.0-generate-001" <?php selected( $s['gemini_model'], 'imagen-4.0-generate-001' ); ?>>Imagen 4 Standard (<?php esc_html_e( 'High fidelity', 'stifli-flex-mcp' ); ?>)</option>
 									<option value="imagen-4.0-fast-generate-001" <?php selected( $s['gemini_model'], 'imagen-4.0-fast-generate-001' ); ?>>Imagen 4 Fast (<?php esc_html_e( 'Fastest', 'stifli-flex-mcp' ); ?>)</option>
 									<option value="imagen-4.0-ultra-generate-001" <?php selected( $s['gemini_model'], 'imagen-4.0-ultra-generate-001' ); ?>>Imagen 4 Ultra (<?php esc_html_e( 'Best quality', 'stifli-flex-mcp' ); ?>)</option>
@@ -4381,13 +4386,13 @@ class StifliFlexMcp {
 		// Allowed values for enum fields
 		$allowed_enums = array(
 			'image_provider'       => array( 'openai', 'gemini' ),
-			'openai_model'         => array( 'gpt-image-1', 'dall-e-3', 'dall-e-2' ),
+			'openai_model'         => array( 'gpt-image-2', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini', 'dall-e-3', 'dall-e-2' ),
 			'openai_quality'       => array( 'low', 'medium', 'high' ),
 			'openai_size'          => array( 'square', 'landscape', 'portrait' ),
 			'openai_style'         => array( 'natural', 'vivid' ),
 			'openai_background'    => array( 'auto', 'transparent', 'opaque' ),
 			'openai_output_format' => array( 'png', 'jpeg', 'webp' ),
-			'gemini_model'         => array( 'gemini-2.5-flash-image', 'imagen-4.0-generate-001', 'imagen-4.0-fast-generate-001', 'imagen-4.0-ultra-generate-001' ),
+			'gemini_model'         => array( 'gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview', 'gemini-2.5-flash-image', 'imagen-4.0-generate-001', 'imagen-4.0-fast-generate-001', 'imagen-4.0-ultra-generate-001' ),
 			'gemini_aspect_ratio'  => array( '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3' ),
 			'pp_format'            => array( 'original', 'jpeg', 'webp', 'png' ),
 			'video_provider'       => array( 'gemini', 'openai' ),

@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, ai copilot
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.2.8
+Stable tag: 3.2.9
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -91,7 +91,7 @@ The AI agent understands context, chains multiple operations, and works with you
 
 Generate stunning images and videos directly from your AI agent or the dedicated Multimedia Settings page:
 
-* **Image Generation** — "Generate a hero image for my blog post about AI" using OpenAI (gpt-image-1, DALL·E 2/3) or Google Gemini (Imagen 4)
+* **Image Generation** — "Generate a hero image for my blog post about AI" using OpenAI (GPT Image family + DALL·E 2/3) or Google Gemini (Gemini Image + Imagen 4)
 * **Video Generation** — "Create a 5-second product showcase video" using OpenAI Sora or Google Veo 2/3
 
 
@@ -318,8 +318,8 @@ No worries — StifLi Flex MCP is the only MCP server with a built-in **Roll Bac
 
 Yes! The `wp_generate_image` tool supports multiple providers:
 
-* **OpenAI** — gpt-image-1 (recommended), DALL·E 3, DALL·E 2
-* **Google Gemini** — Imagen 4
+* **OpenAI** — gpt-image-1 (default), gpt-image-1.5, gpt-image-2, gpt-image-1-mini, DALL·E 3, DALL·E 2
+* **Google Gemini** — gemini-2.5-flash-image (default), gemini-3.1-flash-image-preview, gemini-3-pro-image-preview, Imagen 4
 
 Just ask your AI agent "Generate an image of..." or configure defaults in **StifLi Flex MCP → Multimedia Settings → Images**.
 
@@ -397,18 +397,22 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 
 **Supported services and their policies:**
 
-* **OpenAI** — Used for GPT models (AI Chat Agent, AI Copilot), DALL·E / gpt-image-1 (image generation), and Sora (video generation)
+* **OpenAI** — Used for GPT models (AI Chat Agent, AI Copilot), GPT Image / DALL·E (image generation), and Sora (video generation)
   [Terms of Use](https://openai.com/policies/terms-of-use) | [Privacy Policy](https://openai.com/policies/privacy-policy)
 
 * **Anthropic Claude** — Used for Claude AI models (AI Chat Agent, AI Copilot)
   [Terms of Service](https://www.anthropic.com/legal/consumer-terms) | [Privacy Policy](https://www.anthropic.com/legal/privacy)
 
-* **Google Gemini** — Used for Gemini AI models (AI Chat Agent, AI Copilot), Imagen 4 (image generation), and Veo 2/3 (video generation)
+* **Google Gemini** — Used for Gemini AI models (AI Chat Agent, AI Copilot), Gemini Image + Imagen 4 (image generation), and Veo 2/3 (video generation)
   [Terms of Service](https://ai.google.dev/terms) | [Privacy Policy](https://policies.google.com/privacy)
 
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.2.9 =
+* Improvement: Updated image generation model catalog in Multimedia Settings. Added new OpenAI and Gemini image models while keeping previous models available for user selection.
+* Improvement: Set default image models to cost-effective options (`gpt-image-1` and `gemini-2.5-flash-image`) and refreshed pricing guidance in the UI.
+
 = 3.2.8 =
 * Improvement: Official compatibility update for WordPress 7.0 with WordPress AI Client integration in AI Chat Agent.
 * Improvement: Improved compatibility with external AI Client connectors such as OpenRouter and Mistral (plus any installed AI Client provider).

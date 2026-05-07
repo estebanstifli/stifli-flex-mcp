@@ -3763,7 +3763,7 @@ class StifliFlexMcpModel {
                     }
                     } // end Gemini flash else
                 } else {
-                    // --- OpenAI image generation (configurable model with dall-e-3 fallback) ---
+                    // --- OpenAI image generation (configurable model with DALL-E fallback) ---
                     stifli_flex_mcp_log('wp_generate_image: Using OpenAI provider');
                     $oai_model      = ! empty( $mm_settings['openai_model'] ) ? $mm_settings['openai_model'] : 'gpt-image-1';
                     $default_size   = ! empty( $mm_settings['openai_size'] ) ? $mm_settings['openai_size'] : 'square';
@@ -3801,10 +3801,16 @@ class StifliFlexMcpModel {
                     );
 
                     // Add model-specific parameters
-                    if ( $oai_model === 'gpt-image-1' ) {
+                    $is_gpt_image_model = ( strpos( $oai_model, 'gpt-image-' ) === 0 );
+                    if ( $is_gpt_image_model ) {
                         $oai_body['output_format'] = $oai_out_format;
                         if ( $oai_bg !== 'auto' ) {
-                            $oai_body['background'] = $oai_bg;
+                            // gpt-image-2 does not support transparent background.
+                            if ( $oai_model === 'gpt-image-2' && $oai_bg === 'transparent' ) {
+                                stifli_flex_mcp_log('wp_generate_image: transparent background is not supported by gpt-image-2, using auto');
+                            } else {
+                                $oai_body['background'] = $oai_bg;
+                            }
                         }
                     } elseif ( $oai_model === 'dall-e-3' ) {
                         $oai_body['style'] = $oai_style;
@@ -3837,7 +3843,7 @@ class StifliFlexMcpModel {
                         $oai_http = wp_remote_retrieve_response_code( $oai_resp );
                         $oai_json = json_decode( wp_remote_retrieve_body( $oai_resp ), true );
 
-                        // Fallback to DALL-E 3 if gpt-image-1 requires verification
+                        // Fallback to DALL-E 3 if GPT Image requires verification
                         $must_verify = ( 403 === $oai_http )
                             && isset( $oai_json['error']['message'] )
                             && stripos( $oai_json['error']['message'], 'must be verified' ) !== false;
@@ -3890,7 +3896,13 @@ class StifliFlexMcpModel {
                         if ( ! empty( $oai_data['b64_json'] ) ) {
                             // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding AI-generated image binary.
                             $image_binary = base64_decode( $oai_data['b64_json'] );
-                            $mime_type    = 'image/png';
+                            $mime_map = array(
+                                'png'  => 'image/png',
+                                'jpeg' => 'image/jpeg',
+                                'webp' => 'image/webp',
+                            );
+                            $fmt = isset( $oai_body['output_format'] ) ? $oai_body['output_format'] : 'png';
+                            $mime_type = isset( $mime_map[ $fmt ] ) ? $mime_map[ $fmt ] : 'image/png';
                         } elseif ( ! empty( $oai_data['url'] ) ) {
                             // DALL-E 3 returns a URL — download it
                             $dl = wp_remote_get( $oai_data['url'], array( 'timeout' => 60 ) );
