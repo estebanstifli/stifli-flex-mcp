@@ -26,6 +26,7 @@ class StifliFlexMcp {
 
 	public function init() {
 		add_action('rest_api_init', array($this, 'restApiInit'));
+		add_filter('rest_post_dispatch', array($this, 'addNoCacheHeadersForNamespace'), 9, 3);
 		add_action('sflmcp_process_task', array($this, 'processTaskAsync'), 10, 1);
 		$this->ensureDispatcherCallbackRegistered();
 		// Register admin menu and settings when in WP admin
@@ -285,6 +286,44 @@ class StifliFlexMcp {
 			),
 		), 400);
 		$response->set_headers(array('Content-Type' => 'application/json'));
+		return $this->withNoCacheHeaders($response);
+	}
+
+	private function getNoCacheHeaders(): array {
+		return array(
+			'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+			'Pragma' => 'no-cache',
+			'Expires' => '0',
+		);
+	}
+
+	private function withNoCacheHeaders( WP_REST_Response $response ): WP_REST_Response {
+		foreach ($this->getNoCacheHeaders() as $name => $value) {
+			$response->header($name, $value);
+		}
+		return $response;
+	}
+
+	public function addNoCacheHeadersForNamespace( $response, $server, $request ) {
+		if (!is_object($response) || !method_exists($response, 'header')) {
+			return $response;
+		}
+
+		$route = (is_object($request) && method_exists($request, 'get_route'))
+			? (string) $request->get_route()
+			: '';
+		if ('' === $route) {
+			return $response;
+		}
+
+		$prefix = '/' . $this->namespace;
+		if (0 !== strpos($route, $prefix)) {
+			return $response;
+		}
+
+		foreach ($this->getNoCacheHeaders() as $name => $value) {
+			$response->header($name, $value);
+		}
 		return $response;
 	}
 
@@ -292,6 +331,7 @@ class StifliFlexMcp {
 		$headers = array(
 			'MCP-Protocol-Version' => $protocolVersion,
 		);
+		$headers = array_merge($headers, $this->getNoCacheHeaders());
 		if ($hasJsonBody) {
 			$headers['Content-Type'] = 'application/json';
 		}
@@ -835,7 +875,9 @@ class StifliFlexMcp {
 			ob_implicit_flush( true );
 		}
 		header('Content-Type: text/event-stream');
-		header('Cache-Control: no-cache');
+		header('Cache-Control: no-store, no-cache, must-revalidate, private');
+		header('Pragma: no-cache');
+		header('Expires: 0');
 		header('X-Accel-Buffering: no');
 		header('Connection: keep-alive');
 		header('Access-Control-Allow-Origin: *');
@@ -1046,10 +1088,10 @@ class StifliFlexMcp {
 
 	public function handleMessagesGet( $request ) {
 		$response = new WP_REST_Response(null, 405);
-		$response->set_headers(array(
+		$response->set_headers(array_merge($this->getNoCacheHeaders(), array(
 			'Allow' => 'POST',
 			'MCP-Protocol-Version' => $this->protocolVersion,
-		));
+		)));
 		return $response;
 	}
 
