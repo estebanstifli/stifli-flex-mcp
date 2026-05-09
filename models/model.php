@@ -166,6 +166,7 @@ class StifliFlexMcpModel {
         $WRITE = array(
             'wp_create_post','wp_update_post','wp_delete_post',
             'wp_set_featured_image',
+            'wp_tec_save_event','wp_tec_save_entity','wp_tec_trash_event',
             'wp_create_comment','wp_update_comment','wp_delete_comment',
             'wp_rm_update_post_seo',
             // Yoast SEO write
@@ -1657,6 +1658,11 @@ class StifliFlexMcpModel {
                 $tools = array_merge( $tools, StifliFlexMcp_Snippets::getTools() );
             }
 
+            // Merge The Events Calendar tools only when the plugin integration is enabled.
+            if ( $this->maybeLoadTecIntegrationModule() && class_exists( 'StifliFlexMcp_TheEventsCalendar' ) ) {
+                $tools = array_merge( $tools, StifliFlexMcp_TheEventsCalendar::getTools() );
+            }
+
             // Merge WooCommerce tools if available
             // Lazy load modules ensures compatibility with all load orders
             if ( class_exists( 'WooCommerce' ) ) {
@@ -1705,6 +1711,84 @@ class StifliFlexMcpModel {
         }
         
         return $this->tools;
+    }
+
+    private function maybeLoadTecIntegrationModule() {
+        if ( class_exists( 'StifliFlexMcp_TheEventsCalendar' ) ) {
+            return true;
+        }
+
+        if ( ! $this->isTecIntegrationEnabled() ) {
+            return false;
+        }
+
+        if ( ! class_exists( 'Tribe__Events__Main' ) ) {
+            return false;
+        }
+
+        if ( ! post_type_exists( 'tribe_events' ) || ! post_type_exists( 'tribe_venue' ) || ! post_type_exists( 'tribe_organizer' ) ) {
+            return false;
+        }
+
+        $module_file = dirname( __FILE__ ) . '/integrations/class-the-events-calendar.php';
+        if ( ! file_exists( $module_file ) ) {
+            return false;
+        }
+
+        require_once $module_file;
+
+        return class_exists( 'StifliFlexMcp_TheEventsCalendar' );
+    }
+
+    private function maybeLoadOptionalModuleForTool( $tool ) {
+        if ( 0 === strpos( (string) $tool, 'wp_tec_' ) ) {
+            return $this->maybeLoadTecIntegrationModule();
+        }
+
+        return false;
+    }
+
+    private function isTecIntegrationEnabled() {
+        $state = $this->getPluginIntegrationState();
+        return in_array( 'the_events_calendar', $state['enabled_groups'], true );
+    }
+
+    private function getPluginIntegrationState() {
+        global $wpdb;
+
+        $raw = array();
+        $profiles_table = StifliFlexMcpUtils::getPrefixedTable( 'sflmcp_profiles', false );
+        $profiles_like  = $wpdb->esc_like( $profiles_table );
+        $profiles_exist = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_like ) ) === $profiles_table;
+
+        if ( $profiles_exist ) {
+            $active_profile_id = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT id FROM {$profiles_table} WHERE is_active = %d LIMIT 1",
+                    1
+                )
+            );
+
+            if ( $active_profile_id ) {
+                $profile_raw = get_option( 'sflmcp_plugin_integrations_state_profile_' . intval( $active_profile_id ), null );
+                if ( is_array( $profile_raw ) ) {
+                    $raw = $profile_raw;
+                }
+            }
+        }
+
+        if ( empty( $raw ) ) {
+            $raw = get_option( 'sflmcp_plugin_integrations_state', array() );
+        }
+
+        return array(
+            'enabled_groups' => isset( $raw['enabled_groups'] ) && is_array( $raw['enabled_groups'] )
+                ? array_values( array_map( 'sanitize_key', $raw['enabled_groups'] ) )
+                : array(),
+            'disabled_tools' => isset( $raw['disabled_tools'] ) && is_array( $raw['disabled_tools'] )
+                ? array_values( array_map( 'sanitize_key', $raw['disabled_tools'] ) )
+                : array(),
+        );
     }
 
     /**
@@ -1998,6 +2082,10 @@ class StifliFlexMcpModel {
             $map = array_merge( $map, StifliFlexMcp_Snippets::getCapabilities() );
         }
 
+        if ( $this->maybeLoadTecIntegrationModule() && class_exists( 'StifliFlexMcp_TheEventsCalendar' ) ) {
+            $map = array_merge( $map, StifliFlexMcp_TheEventsCalendar::getCapabilities() );
+        }
+
         return isset($map[$tool]) ? $map[$tool] : null;
     }
 
@@ -2163,6 +2251,8 @@ class StifliFlexMcpModel {
             return false;
         };
 
+        $this->maybeLoadOptionalModuleForTool( $tool );
+
         // Validate args against tool schema (basic) before dispatching
         $tools_map = $this->getTools();
         if (isset($tools_map[$tool]) && !empty($tools_map[$tool]['inputSchema'])) {
@@ -2204,7 +2294,21 @@ class StifliFlexMcpModel {
             if ( null !== $changeSnapshot && ! isset( $r['error'] ) && class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
                 try {
                     $tracker = StifliFlexMcp_ChangeTracker::getInstance();
-                    $tracker->recordChange( $tool, is_array( $args ) ? $args : array(), $changeSnapshot, $r );
+                    $change_id = $tracker->recordChange( $tool, is_array( $args ) ? $args : array(), $changeSnapshot, $r );
+                    if ( $change_id && isset( $r['result']['structuredContent'] ) && is_array( $r['result']['structuredContent'] ) ) {
+                        $undo = isset( $r['result']['structuredContent']['undo'] ) && is_array( $r['result']['structuredContent']['undo'] )
+                            ? $r['result']['structuredContent']['undo']
+                            : array();
+                        $undo['action_id'] = (int) $change_id;
+                        $undo['snapshot_id'] = (int) $change_id;
+                        $r['result']['structuredContent']['undo'] = $undo;
+                        $r['result']['content'] = array(
+                            array(
+                                'type' => 'text',
+                                'text' => wp_json_encode( $r['result']['structuredContent'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
+                            ),
+                        );
+                    }
                 } catch ( \Exception $e ) {
                     stifli_flex_mcp_log( 'ChangeTracker error: ' . $e->getMessage() );
                 }
@@ -5901,6 +6005,27 @@ class StifliFlexMcpModel {
                     require_once dirname(__FILE__) . '/snippets/snippets.php';
                     if ( class_exists( 'StifliFlexMcp_Snippets' ) ) {
                         $result = StifliFlexMcp_Snippets::dispatch( $tool, $args, $r, $addResultText, $utils );
+                        if ( $result !== null ) {
+                            $recordChangeIfNeeded();
+                            return $r;
+                        }
+                    }
+                }
+
+                // Try The Events Calendar module (wp_tec_* tools)
+                if ( strpos( $tool, 'wp_tec_' ) === 0 ) {
+                    if ( ! $this->maybeLoadTecIntegrationModule() ) {
+                        $r['error'] = array(
+                            'code' => -32603,
+                            'message' => class_exists( 'Tribe__Events__Main' )
+                                ? 'The Events Calendar REST API is not available.'
+                                : 'The Events Calendar plugin is not active.',
+                        );
+                        return $r;
+                    }
+
+                    if ( class_exists( 'StifliFlexMcp_TheEventsCalendar' ) ) {
+                        $result = StifliFlexMcp_TheEventsCalendar::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
                             $recordChangeIfNeeded();
                             return $r;

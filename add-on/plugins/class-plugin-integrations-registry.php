@@ -151,6 +151,32 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 ),
                 'catalog_tools' => array( 'forminator_list_forms', 'forminator_get_entries' ),
             ),
+            array(
+                'id' => 'the_events_calendar',
+                'name' => 'The Events Calendar',
+                'description' => 'Manage events, venues, and organizers through the native The Events Calendar REST API.',
+                'plugin_files' => array( 'the-events-calendar/the-events-calendar.php' ),
+                'match_classes' => array( 'Tribe__Events__Main' ),
+                'install_slug' => 'the-events-calendar',
+                'match' => array(
+                    'tools' => array(
+                        'wp_tec_list_events',
+                        'wp_tec_get_event',
+                        'wp_tec_save_event',
+                        'wp_tec_list_entities',
+                        'wp_tec_save_entity',
+                        'wp_tec_trash_event',
+                    ),
+                ),
+                'catalog_tools' => array(
+                    'wp_tec_list_events',
+                    'wp_tec_get_event',
+                    'wp_tec_save_event',
+                    'wp_tec_list_entities',
+                    'wp_tec_save_entity',
+                    'wp_tec_trash_event',
+                ),
+            ),
         );
     }
 

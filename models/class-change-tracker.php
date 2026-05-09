@@ -233,6 +233,13 @@ class StifliFlexMcp_ChangeTracker {
 			return $this->snapshotBefore( $meta[0], $meta[1], $meta[2], $args );
 		}
 
+		if ( class_exists( 'StifliFlexMcp_TheEventsCalendar' ) && method_exists( 'StifliFlexMcp_TheEventsCalendar', 'getChangeTrackerSnapshot' ) ) {
+			$snapshot = StifliFlexMcp_TheEventsCalendar::getChangeTrackerSnapshot( $tool, $args );
+			if ( is_array( $snapshot ) ) {
+				return $snapshot;
+			}
+		}
+
 		// Unknown tool (custom_, ability_, or any future tool) — track generically
 		if ( $this->isLikelyMutating( $tool ) ) {
 			return array(
@@ -292,6 +299,8 @@ class StifliFlexMcp_ChangeTracker {
 			),
 			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
+
+		return $wpdb->insert_id ? (int) $wpdb->insert_id : 0;
 	}
 
 	/**

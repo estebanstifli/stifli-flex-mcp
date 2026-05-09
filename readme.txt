@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, ai copilot
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.2.9
+Stable tag: 3.3.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -409,6 +409,9 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.0 =
+* New: Compatibility with The Events Calendar plugin, including integrated event tools for listing, reading, creating/updating, and trashing events and related entities.
+
 = 3.2.9 =
 * Improvement: Updated image generation model catalog in Multimedia Settings. Added new OpenAI and Gemini image models while keeping previous models available for user selection.
 * Improvement: Set default image models to cost-effective options (`gpt-image-1` and `gemini-2.5-flash-image`) and refreshed pricing guidance in the UI.

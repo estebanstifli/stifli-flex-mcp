@@ -253,10 +253,6 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             }
         }
 
-        if ( ! empty( $implemented_tools ) ) {
-            $disabled_tools = array_values( array_intersect( $disabled_tools, $implemented_tools ) );
-        }
-
         if ( ! empty( $disabled_tools ) ) {
             $disabled_tools = array_values(
                 array_filter(
@@ -794,7 +790,23 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                 $matches[] = $tool_name;
             }
         }
-        return $matches;
+
+        if ( ! empty( $matches ) ) {
+            return array_values( array_unique( $matches ) );
+        }
+
+        $catalog_tools = isset( $integration['catalog_tools'] ) && is_array( $integration['catalog_tools'] )
+            ? $integration['catalog_tools']
+            : array();
+
+        foreach ( $catalog_tools as $catalog_tool ) {
+            if ( ! is_string( $catalog_tool ) || '' === $catalog_tool || '*' === substr( $catalog_tool, -1 ) ) {
+                continue;
+            }
+            $matches[] = $catalog_tool;
+        }
+
+        return array_values( array_unique( $matches ) );
     }
 
     private function get_catalog_coverage( $catalog_tools, $implemented_tools ) {

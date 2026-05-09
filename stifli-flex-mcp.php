@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.2.9
+Version: 3.3.0
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -700,6 +700,13 @@ function stifli_flex_mcp_seed_initial_tools() {
 		// Forminator
 		array('forminator_list_forms', 'List all Forminator forms (custom forms, polls, quizzes). Requires Forminator.', 'Plugins - Forms', 1),
 		array('forminator_get_entries', 'Get submission entries for a Forminator form. Requires Forminator.', 'Plugins - Forms', 1),
+		// The Events Calendar
+		array('wp_tec_list_events', 'List The Events Calendar events with filters for date, status, venue, organizer, categories and tags.', 'Plugins - The Events Calendar', 1),
+		array('wp_tec_get_event', 'Get full details for a single The Events Calendar event.', 'Plugins - The Events Calendar', 1),
+		array('wp_tec_save_event', 'Create or update a The Events Calendar event. Uses undo snapshots before AI changes.', 'Plugins - The Events Calendar', 1),
+		array('wp_tec_list_entities', 'List or get The Events Calendar venues and organizers.', 'Plugins - The Events Calendar', 1),
+		array('wp_tec_save_entity', 'Create or update a The Events Calendar venue or organizer. Uses undo snapshots before AI changes.', 'Plugins - The Events Calendar', 1),
+		array('wp_tec_trash_event', 'Safely move a The Events Calendar event to trash with undo support.', 'Plugins - The Events Calendar', 1),
 		array('wp_generate_image', 'Generate an image using AI and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
 		array('wp_generate_video', 'Generate a video using AI (Google Veo or OpenAI Sora) and save it as a WordPress media attachment.', 'WordPress - Utilities', 1),
 		
@@ -916,7 +923,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.05.13' );
+	define( 'SFLMCP_DB_VERSION', '2026.05.14' );
 }
 
 /**
@@ -933,6 +940,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_323_seed_new_tools();
 	stifli_flex_mcp_upgrade_324_seed_plugin_settings_tool();
 	stifli_flex_mcp_upgrade_329_seed_wc_variation_attribute_coupon_tools();
+	stifli_flex_mcp_upgrade_tec_seed_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
 }
@@ -1240,6 +1248,55 @@ function stifli_flex_mcp_upgrade_329_seed_wc_variation_attribute_coupon_tools() 
 					);
 				}
 			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine: seed The Events Calendar tools into existing installs.
+ * Tool exposure still depends on the plugin integration being enabled.
+ */
+function stifli_flex_mcp_upgrade_tec_seed_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_tec_seed_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$tools_like = $wpdb->esc_like( $tools_table );
+	$tools_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $tools_like ) ) === $tools_table;
+	if ( ! $tools_exists ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'wp_tec_list_events', 'List The Events Calendar events with filters for date, status, venue, organizer, categories and tags.', 'Plugins - The Events Calendar', 1 ),
+		array( 'wp_tec_get_event', 'Get full details for a single The Events Calendar event.', 'Plugins - The Events Calendar', 1 ),
+		array( 'wp_tec_save_event', 'Create or update a The Events Calendar event. Uses undo snapshots before AI changes.', 'Plugins - The Events Calendar', 1 ),
+		array( 'wp_tec_list_entities', 'List or get The Events Calendar venues and organizers.', 'Plugins - The Events Calendar', 1 ),
+		array( 'wp_tec_save_entity', 'Create or update a The Events Calendar venue or organizer. Uses undo snapshots before AI changes.', 'Plugins - The Events Calendar', 1 ),
+		array( 'wp_tec_trash_event', 'Safely move a The Events Calendar event to trash with undo support.', 'Plugins - The Events Calendar', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
 		}
 	}
 
