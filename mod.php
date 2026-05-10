@@ -73,6 +73,7 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_oauth_delete_client', array($this, 'ajax_oauth_delete_client'));
 			add_action('wp_ajax_sflmcp_oauth_revoke_token', array($this, 'ajax_oauth_revoke_token'));
 			add_action('wp_ajax_sflmcp_oauth_save_settings', array($this, 'ajax_oauth_save_settings'));
+			add_action('wp_ajax_sflmcp_generate_app_password', array($this, 'ajax_generate_app_password'));
 		}
 	}
 
@@ -1823,6 +1824,77 @@ class StifliFlexMcp {
 		// No custom settings needed - uses WordPress Application Passwords
 	}
 
+	/**
+	 * Check if Application Passwords are available for a given user.
+	 *
+	 * @param WP_User $user WordPress user object.
+	 * @return bool
+	 */
+	private function isApplicationPasswordsAvailableForUser( $user ) {
+		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
+			return false;
+		}
+
+		if ( function_exists( 'wp_is_application_passwords_available_for_user' ) ) {
+			return (bool) wp_is_application_passwords_available_for_user( $user );
+		}
+
+		if ( function_exists( 'wp_is_application_passwords_available' ) ) {
+			return (bool) wp_is_application_passwords_available();
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if an application password name already exists for a user.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $name    Candidate application password name.
+	 * @return bool
+	 */
+	private function applicationPasswordNameExistsForUser( $user_id, $name ) {
+		if ( class_exists( 'WP_Application_Passwords' ) && method_exists( 'WP_Application_Passwords', 'application_name_exists_for_user' ) ) {
+			return (bool) WP_Application_Passwords::application_name_exists_for_user( $user_id, $name );
+		}
+
+		if ( class_exists( 'WP_Application_Passwords' ) && method_exists( 'WP_Application_Passwords', 'get_user_application_passwords' ) ) {
+			$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
+			foreach ( $passwords as $password ) {
+				$current_name = isset( $password['name'] ) ? (string) $password['name'] : '';
+				if ( 0 === strcasecmp( $current_name, $name ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Generate a unique default Application Password name for the current site.
+	 *
+	 * @param int $user_id User ID.
+	 * @return string
+	 */
+	private function getNextDefaultApplicationPasswordName( $user_id ) {
+		$base_name  = 'StifLi MCP App';
+		$candidate  = $base_name;
+		$next_index = 2;
+
+		while ( $this->applicationPasswordNameExistsForUser( $user_id, $candidate ) ) {
+			$candidate = $base_name . ' ' . $next_index;
+			$next_index++;
+
+			if ( $next_index > 999 ) {
+				$candidate = $base_name . ' ' . wp_generate_password( 4, false, false );
+				break;
+			}
+		}
+
+		return $candidate;
+	}
+
 	private function getOAuthWellKnownProbeTransientKey() {
 		$host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
 		if ('' === $host) {
@@ -2050,7 +2122,7 @@ class StifliFlexMcp {
 			'sflmcp-admin-settings',
 			plugin_dir_url(__FILE__) . 'assets/admin-settings.js',
 			array(),
-			'1.0.3',
+			'1.0.4',
 			true
 		);
 
@@ -2061,6 +2133,8 @@ class StifliFlexMcp {
 			'i18n' => array(
 				'urlCopied' => __('URL copied', 'stifli-flex-mcp'),
 				'headerCopied' => __('Header copied', 'stifli-flex-mcp'),
+				'appPasswordGenerating' => __('Generating...', 'stifli-flex-mcp'),
+				'appPasswordGenerateError' => __('Could not generate Application Password. Please try again.', 'stifli-flex-mcp'),
 			),
 		));
 
@@ -2512,17 +2586,60 @@ class StifliFlexMcp {
 			<!-- Alternative: Application Passwords -->
 			<div class="sflmcp-settings-section">
 				<h3><?php esc_html_e( 'Alternative: Application Passwords', 'stifli-flex-mcp' ); ?></h3>
+				<p class="description"><?php esc_html_e( 'For advanced setups or clients that do not support OAuth, you can use WordPress Application Passwords with HTTP Basic Auth.', 'stifli-flex-mcp' ); ?></p>
+
+				<div class="sflmcp-mb-4">
+					<button type="button" id="sflmcp-generate-app-password-btn" class="button button-secondary"><?php esc_html_e( 'Generate Application Password', 'stifli-flex-mcp' ); ?></button>
+					<span id="sflmcp-generate-app-password-status" class="description sflmcp-hidden"><?php esc_html_e( 'Generating...', 'stifli-flex-mcp' ); ?></span>
+				</div>
+
 				<p class="description">
 					<?php echo wp_kses(
 						sprintf(
 							/* translators: %s: link to profile page */
-							__( 'For advanced setups or clients that don\'t support OAuth, you can still use WordPress Application Passwords. Go to %s to create one, then use HTTP Basic Auth with your username and the generated password.', 'stifli-flex-mcp' ),
+							__( 'You can also manage or revoke passwords from %s.', 'stifli-flex-mcp' ),
 							'<a href="' . esc_url( get_edit_profile_url( get_current_user_id() ) . '#application-passwords-section' ) . '" target="_blank">'
 							. esc_html__( 'your profile', 'stifli-flex-mcp' ) . '</a>'
 						),
 						array( 'a' => array( 'href' => array(), 'target' => array() ) )
 					); ?>
 				</p>
+
+				<div id="sflmcp-app-password-feedback" class="sflmcp-hidden"></div>
+				<div id="sflmcp-generated-app-password-wrap" class="sflmcp-hidden">
+					<p class="description"><strong><?php esc_html_e( 'Username:', 'stifli-flex-mcp' ); ?></strong> <code id="sflmcp-generated-app-password-user"></code></p>
+					<p class="description"><strong><?php esc_html_e( 'Application Name:', 'stifli-flex-mcp' ); ?></strong> <code id="sflmcp-generated-app-password-name"></code></p>
+					<div class="sflmcp-settings-url-box">
+						<code id="sflmcp_generated_app_password" class="sflmcp-settings-endpoint-code"></code>
+						<button type="button" class="button button-primary sflmcp-copy-btn" data-copy-target="#sflmcp_generated_app_password" data-copy-notice="<?php echo esc_attr__( 'Application Password copied!', 'stifli-flex-mcp' ); ?>"><?php esc_html_e( 'Copy', 'stifli-flex-mcp' ); ?></button>
+					</div>
+				</div>
+				<?php
+				$messages_endpoint = rest_url( $this->namespace . '/messages' );
+				$current_user = wp_get_current_user();
+				$example_user = ( $current_user && ! empty( $current_user->user_login ) ) ? $current_user->user_login : 'your_wp_username';
+				$curl_example = implode(
+					"\n",
+					array(
+						sprintf( 'curl -u "%s:<APP_PASSWORD_WITHOUT_SPACES>" \\', $example_user ),
+						'  -H "Content-Type: application/json" \\',
+						'  -d \'{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\' \\',
+						sprintf( '  "%s"', $messages_endpoint ),
+					)
+				);
+				?>
+				<p class="description"><strong><?php esc_html_e( 'Note:', 'stifli-flex-mcp' ); ?></strong> <?php esc_html_e( 'This method uses HTTP Basic Auth (not Bearer token). If WordPress shows spaces in the generated Application Password, you can remove all spaces before using it.', 'stifli-flex-mcp' ); ?></p>
+				<p class="description">
+					<?php echo wp_kses(
+						sprintf(
+							/* translators: %s: dynamic endpoint URL */
+							__( 'Example (dynamic endpoint for this site: %s):', 'stifli-flex-mcp' ),
+							'<code>' . esc_html( $messages_endpoint ) . '</code>'
+						),
+						array( 'code' => array() )
+					); ?>
+				</p>
+				<pre class="sflmcp-oauth-pre"><?php echo esc_html( $curl_example ); ?></pre>
 			</div>
 
 		</div>
@@ -5118,6 +5235,32 @@ class StifliFlexMcp {
 					<p class="sflmcp-oauth-guide-note">
 						<?php esc_html_e( 'Use HTTP Basic Auth with your WordPress username and the generated application password. This method does not require OAuth setup.', 'stifli-flex-mcp' ); ?>
 					</p>
+					<?php
+					$messages_endpoint = rest_url( $this->namespace . '/messages' );
+					$current_user = wp_get_current_user();
+					$example_user = ( $current_user && ! empty( $current_user->user_login ) ) ? $current_user->user_login : 'your_wp_username';
+					$curl_example = implode(
+						"\n",
+						array(
+							sprintf( 'curl -u "%s:<APP_PASSWORD_WITHOUT_SPACES>" \\', $example_user ),
+							'  -H "Content-Type: application/json" \\',
+							'  -d \'{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\' \\',
+							sprintf( '  "%s"', $messages_endpoint ),
+						)
+					);
+					?>
+					<p class="sflmcp-oauth-guide-note"><strong><?php esc_html_e( 'Note:', 'stifli-flex-mcp' ); ?></strong> <?php esc_html_e( 'This method uses HTTP Basic Auth (not Bearer token). If WordPress shows spaces in the generated Application Password, you can remove all spaces before using it.', 'stifli-flex-mcp' ); ?></p>
+					<p class="sflmcp-oauth-guide-note">
+						<?php echo wp_kses(
+							sprintf(
+								/* translators: %s: dynamic endpoint URL */
+								__( 'Example (dynamic endpoint for this site: %s):', 'stifli-flex-mcp' ),
+								'<code>' . esc_html( $messages_endpoint ) . '</code>'
+							),
+							array( 'code' => array() )
+						); ?>
+					</p>
+					<pre class="sflmcp-oauth-pre"><?php echo esc_html( $curl_example ); ?></pre>
 				</div>
 			</div>
 
@@ -5210,6 +5353,65 @@ class StifliFlexMcp {
 		$this->invalidateOAuthWellKnownProbeCache();
 
 		wp_send_json_success();
+	}
+
+	/**
+	 * AJAX: Generate an Application Password for current user.
+	 */
+	public function ajax_generate_app_password() {
+		check_ajax_referer( 'SFLMCP-admin', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ), 403 );
+			return;
+		}
+
+		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Application Passwords are not available on this WordPress installation.', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$current_user = wp_get_current_user();
+		if ( ! is_a( $current_user, 'WP_User' ) || empty( $current_user->ID ) ) {
+			wp_send_json_error( array( 'message' => __( 'Could not resolve the current user.', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		if ( ! $this->isApplicationPasswordsAvailableForUser( $current_user ) ) {
+			wp_send_json_error( array( 'message' => __( 'Application Passwords are not available for this user/site. Ensure HTTPS is enabled and no plugin disables this feature.', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$app_name = $this->getNextDefaultApplicationPasswordName( (int) $current_user->ID );
+		$created = WP_Application_Passwords::create_new_application_password(
+			(int) $current_user->ID,
+			array(
+				'name'   => $app_name,
+				'app_id' => wp_generate_uuid4(),
+			)
+		);
+
+		if ( is_wp_error( $created ) ) {
+			wp_send_json_error( array( 'message' => wp_strip_all_tags( $created->get_error_message() ) ) );
+			return;
+		}
+
+		$raw_password = isset( $created[0] ) ? (string) $created[0] : '';
+		$record       = ( isset( $created[1] ) && is_array( $created[1] ) ) ? $created[1] : array();
+
+		if ( '' === $raw_password ) {
+			wp_send_json_error( array( 'message' => __( 'Application Password was created but the plain-text value was not returned.', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		wp_send_json_success(
+			array(
+				'message'    => __( 'Application Password created. Copy it now: it is only shown this one time.', 'stifli-flex-mcp' ),
+				'user_login' => isset( $current_user->user_login ) ? (string) $current_user->user_login : '',
+				'app_name'   => isset( $record['name'] ) ? (string) $record['name'] : $app_name,
+				'password'   => $raw_password,
+			)
+		);
 	}
 
 	/**
