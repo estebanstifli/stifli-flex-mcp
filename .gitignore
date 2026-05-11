@@ -2,6 +2,9 @@
 /dev/
 /.dev/
 /.doc/
+/.img/
+/.pages/
+/.github/
 
 # IDE and editor files
 /.vscode/
