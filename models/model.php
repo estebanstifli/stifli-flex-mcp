@@ -440,12 +440,14 @@ class StifliFlexMcpModel {
                 ),
                 'wp_update_post' => array(
                     'name' => 'wp_update_post',
-                    'description' => 'Update a post by ID. The "fields" object should use the standard parameters accepted by the WordPress wp_update_post() function. Optional top-level featured_media (attachment ID) sets the featured image.',
+                    'description' => 'Update a post by ID. The "fields" object should use the standard parameters accepted by the WordPress wp_update_post() function. Supports taxonomy updates with fields.post_category / fields.tax_input (or top-level post_category / tax_input). Optional top-level featured_media (attachment ID) sets the featured image.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID' => array('type' => 'integer'),
                             'fields' => array('type' => 'object'),
+                            'post_category'=> array('type' => 'array', 'items' => array('type' => 'integer')),
+                            'tax_input'    => array('type' => 'object'),
                             'meta_input' => array('type' => 'object'),
                             'featured_media' => array('type' => 'integer', 'description' => 'Attachment ID to set as featured image.'),
                         ),
@@ -2250,6 +2252,65 @@ class StifliFlexMcpModel {
             }
             return false;
         };
+        $normalizePostCategories = function($value) {
+            $normalized = array();
+            if (is_numeric($value)) {
+                $value = array($value);
+            }
+            if (!is_array($value)) {
+                return $normalized;
+            }
+            foreach ($value as $categoryId) {
+                if (!is_scalar($categoryId) && null !== $categoryId) {
+                    continue;
+                }
+                $parsedId = intval($categoryId);
+                if ($parsedId > 0) {
+                    $normalized[$parsedId] = $parsedId;
+                }
+            }
+            return array_values($normalized);
+        };
+        $normalizeTaxInput = function($taxInput) {
+            $normalized = array();
+            if (!is_array($taxInput)) {
+                return $normalized;
+            }
+            foreach ($taxInput as $taxonomy => $termValues) {
+                $taxonomyKey = sanitize_key((string) $taxonomy);
+                if ('' === $taxonomyKey || !taxonomy_exists($taxonomyKey)) {
+                    continue;
+                }
+
+                if (is_string($termValues)) {
+                    $termValues = explode(',', $termValues);
+                } elseif (is_numeric($termValues)) {
+                    $termValues = array($termValues);
+                } elseif (!is_array($termValues)) {
+                    $termValues = array();
+                }
+
+                $terms = array();
+                foreach ($termValues as $termValue) {
+                    if (!is_scalar($termValue) && null !== $termValue) {
+                        continue;
+                    }
+                    $termText = trim((string) $termValue);
+                    if ('' === $termText) {
+                        continue;
+                    }
+                    $terms[] = ctype_digit($termText)
+                        ? intval($termText)
+                        : sanitize_text_field($termText);
+                }
+
+                if (!empty($terms)) {
+                    $normalized[$taxonomyKey] = array_values(array_unique($terms, SORT_REGULAR));
+                }
+            }
+
+            return $normalized;
+        };
 
         $this->maybeLoadOptionalModuleForTool( $tool );
 
@@ -2524,6 +2585,20 @@ class StifliFlexMcpModel {
                     }
                     $ins['post_author'] = $cp_author_id;
                 }
+                $cp_post_categories = array();
+                if (array_key_exists('post_category', $args)) {
+                    $cp_post_categories = $normalizePostCategories($args['post_category']);
+                    if (!empty($cp_post_categories)) {
+                        $ins['post_category'] = $cp_post_categories;
+                    }
+                }
+                $cp_tax_input = array();
+                if (array_key_exists('tax_input', $args) && is_array($args['tax_input'])) {
+                    $cp_tax_input = $normalizeTaxInput($args['tax_input']);
+                    if (!empty($cp_tax_input)) {
+                        $ins['tax_input'] = $cp_tax_input;
+                    }
+                }
                 if (!empty($args['meta_input']) && is_array($args['meta_input'])) {
                     $ins['meta_input'] = $args['meta_input'];
                 }
@@ -2536,6 +2611,16 @@ class StifliFlexMcpModel {
                             update_post_meta($new, sanitize_key($k), maybe_serialize($v));
                         }
                     }
+
+                    if (!empty($cp_post_categories)) {
+                        wp_set_post_categories($new, $cp_post_categories, false);
+                    }
+                    if (!empty($cp_tax_input)) {
+                        foreach ($cp_tax_input as $cp_taxonomy => $cp_terms) {
+                            wp_set_post_terms($new, $cp_terms, $cp_taxonomy, false);
+                        }
+                    }
+
                     // Featured image (post thumbnail).
                     if ( isset( $args['featured_media'] ) ) {
                         $att_id = intval( $args['featured_media'] );
@@ -2562,6 +2647,8 @@ class StifliFlexMcpModel {
                 }
                 $up_pt_obj = get_post_type_object($up_existing->post_type);
                 $c = array('ID' => $up_id);
+                $up_post_categories = array();
+                $up_tax_input = array();
                 if (!empty($args['fields']) && is_array($args['fields'])) {
                     foreach ($args['fields'] as $k => $v) {
                         // Validate post_type change
@@ -2594,14 +2681,54 @@ class StifliFlexMcpModel {
                             $c[$k] = $up_author_id;
                             continue;
                         }
+                        if ('post_category' === $k) {
+                            $up_post_categories = $normalizePostCategories($v);
+                            if (!empty($up_post_categories)) {
+                                $c['post_category'] = $up_post_categories;
+                            }
+                            continue;
+                        }
+                        if ('tax_input' === $k) {
+                            if (is_array($v)) {
+                                $up_tax_input = $normalizeTaxInput($v);
+                                if (!empty($up_tax_input)) {
+                                    $c['tax_input'] = $up_tax_input;
+                                }
+                            }
+                            continue;
+                        }
                         $c[$k] = in_array($k, array('post_content', 'post_excerpt'), true) ? $cleanHtml($v) : sanitize_text_field($v);
                     }
                 }
+
+                if (array_key_exists('post_category', $args)) {
+                    $up_post_categories = $normalizePostCategories($args['post_category']);
+                    if (!empty($up_post_categories)) {
+                        $c['post_category'] = $up_post_categories;
+                    }
+                }
+                if (array_key_exists('tax_input', $args) && is_array($args['tax_input'])) {
+                    $up_tax_input = $normalizeTaxInput($args['tax_input']);
+                    if (!empty($up_tax_input)) {
+                        $c['tax_input'] = $up_tax_input;
+                    }
+                }
+
                 $u = ( count($c) > 1 ) ? wp_update_post($c, true) : $c['ID'];
                 if (is_wp_error($u)) {
                     $r['error'] = array('code' => $u->get_error_code(), 'message' => $u->get_error_message());
                     break;
                 }
+
+                if (!empty($up_post_categories)) {
+                    wp_set_post_categories($u, $up_post_categories, false);
+                }
+                if (!empty($up_tax_input)) {
+                    foreach ($up_tax_input as $up_taxonomy => $up_terms) {
+                        wp_set_post_terms($u, $up_terms, $up_taxonomy, false);
+                    }
+                }
+
                 if (!empty($args['meta_input']) && is_array($args['meta_input'])) {
                     foreach ($args['meta_input'] as $k => $v) {
                         update_post_meta($u, sanitize_key($k), maybe_serialize($v));
