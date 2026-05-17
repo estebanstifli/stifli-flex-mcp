@@ -3720,11 +3720,97 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => -42602, 'message' => 'menu_id & menu_item_id required');
                     break;
                 }
-                $item = array();
+                $existing_post = get_post(intval($args['menu_item_id']));
+                if (!$existing_post || 'nav_menu_item' !== $existing_post->post_type) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Menu item not found');
+                    break;
+                }
+                $existing_item = wp_setup_nav_menu_item($existing_post);
+                if (!$existing_item || intval($existing_item->menu_item_parent) < 0) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Unable to load menu item');
+                    break;
+                }
+
+                $item = array(
+                    'menu-item-db-id' => intval($existing_item->ID),
+                    'menu-item-object-id' => intval($existing_item->object_id),
+                    'menu-item-object' => isset($existing_item->object) ? sanitize_key($existing_item->object) : '',
+                    'menu-item-parent-id' => intval($existing_item->menu_item_parent),
+                    'menu-item-position' => intval($existing_item->menu_order),
+                    'menu-item-type' => isset($existing_item->type) ? sanitize_key($existing_item->type) : '',
+                    'menu-item-title' => isset($existing_item->title) ? sanitize_text_field($existing_item->title) : '',
+                    'menu-item-url' => isset($existing_item->url) ? esc_url_raw($existing_item->url) : '',
+                    'menu-item-description' => isset($existing_item->description) ? sanitize_text_field($existing_item->description) : '',
+                    'menu-item-attr-title' => isset($existing_item->attr_title) ? sanitize_text_field($existing_item->attr_title) : '',
+                    'menu-item-target' => isset($existing_item->target) ? sanitize_text_field($existing_item->target) : '',
+                    'menu-item-classes' => isset($existing_item->classes) && is_array($existing_item->classes)
+                        ? implode(' ', array_map('sanitize_html_class', $existing_item->classes))
+                        : '',
+                    'menu-item-xfn' => isset($existing_item->xfn) ? sanitize_text_field($existing_item->xfn) : '',
+                    'menu-item-status' => !empty($existing_post->post_status) ? sanitize_key($existing_post->post_status) : 'publish',
+                );
+
+                $menu_update_error = null;
                 if (!empty($args['fields']) && is_array($args['fields'])) {
                     foreach ($args['fields'] as $k => $v) {
-                        $item['menu-item-' . $k] = sanitize_text_field($v);
+                        switch ((string) $k) {
+                            case 'title':
+                                $new_title = sanitize_text_field($v);
+                                if ('' === $new_title && '' !== trim((string) $existing_item->title)) {
+                                    $menu_update_error = array('code' => -42602, 'message' => 'Refusing to clear a non-empty menu item title. Delete and recreate the item if you intend to blank it.');
+                                    break 2;
+                                }
+                                $item['menu-item-title'] = $new_title;
+                                break;
+                            case 'url':
+                                $new_url = esc_url_raw($v);
+                                if ('' === $new_url && '' !== trim((string) $existing_item->url)) {
+                                    $menu_update_error = array('code' => -42602, 'message' => 'Refusing to clear a non-empty menu item URL. Delete and recreate the item if you intend to blank it.');
+                                    break 2;
+                                }
+                                $item['menu-item-url'] = $new_url;
+                                break;
+                            case 'parent_id':
+                                $item['menu-item-parent-id'] = intval($v);
+                                break;
+                            case 'menu_order':
+                            case 'position':
+                                $item['menu-item-position'] = intval($v);
+                                break;
+                            case 'object':
+                                $item['menu-item-object'] = sanitize_key($v);
+                                break;
+                            case 'object_id':
+                                $item['menu-item-object-id'] = intval($v);
+                                break;
+                            case 'type':
+                                $item['menu-item-type'] = sanitize_key($v);
+                                break;
+                            case 'description':
+                                $item['menu-item-description'] = sanitize_text_field($v);
+                                break;
+                            case 'attr_title':
+                                $item['menu-item-attr-title'] = sanitize_text_field($v);
+                                break;
+                            case 'target':
+                                $item['menu-item-target'] = sanitize_text_field($v);
+                                break;
+                            case 'xfn':
+                                $item['menu-item-xfn'] = sanitize_text_field($v);
+                                break;
+                            case 'classes':
+                                if (is_array($v)) {
+                                    $item['menu-item-classes'] = implode(' ', array_map('sanitize_html_class', $v));
+                                } else {
+                                    $item['menu-item-classes'] = sanitize_text_field($v);
+                                }
+                                break;
+                        }
                     }
+                }
+                if (!empty($menu_update_error)) {
+                    $r['error'] = $menu_update_error;
+                    break;
                 }
                 $item_id = wp_update_nav_menu_item(intval($args['menu_id']), intval($args['menu_item_id']), $item);
                 if (is_wp_error($item_id)) {

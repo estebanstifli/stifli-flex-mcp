@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 117+ tools (55 WordPress, 61 WooCommerce, 1 Core + WordPress Abilities) that AI agents like ChatGPT, Claude, and LibreChat can use to manage your WordPress and WooCommerce site via JSON-RPC 2.0.
-Version: 3.3.2
+Version: 3.3.3
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -61,30 +61,35 @@ if (!function_exists('stifli_flex_mcp_log')) {
 	}
 }
 
+if (!function_exists('stifli_flex_mcp_get_logs_dir_path')) {
+	function stifli_flex_mcp_get_logs_dir_path() {
+		$upload_dir = wp_upload_dir();
+		$log_dir = $upload_dir['basedir'] . '/sflmcp-logs';
+
+		if (!file_exists($log_dir)) {
+			wp_mkdir_p($log_dir);
+		}
+
+		$htaccess = $log_dir . '/.htaccess';
+		if (!file_exists($htaccess)) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			file_put_contents($htaccess, "Order deny,allow\nDeny from all");
+		}
+
+		$index = $log_dir . '/index.php';
+		if (!file_exists($index)) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			file_put_contents($index, '<?php // Silence is golden.');
+		}
+
+		return $log_dir;
+	}
+}
+
 // Get log file path
 if (!function_exists('stifli_flex_mcp_get_log_file_path')) {
 	function stifli_flex_mcp_get_log_file_path() {
-		$upload_dir = wp_upload_dir();
-		$log_dir = $upload_dir['basedir'] . '/sflmcp-logs';
-		
-		// Create log directory if it doesn't exist
-		if (!file_exists($log_dir)) {
-			wp_mkdir_p($log_dir);
-			// Add .htaccess to protect log files
-			$htaccess = $log_dir . '/.htaccess';
-			if (!file_exists($htaccess)) {
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-				file_put_contents($htaccess, "Order deny,allow\nDeny from all");
-			}
-			// Add index.php for extra protection
-			$index = $log_dir . '/index.php';
-			if (!file_exists($index)) {
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-				file_put_contents($index, '<?php // Silence is golden.');
-			}
-		}
-		
-		return $log_dir . '/sflmcp-debug.log';
+		return stifli_flex_mcp_get_logs_dir_path() . '/sflmcp-debug.log';
 	}
 }
 
@@ -117,14 +122,14 @@ if (!function_exists('stifli_flex_mcp_get_log_contents')) {
 if (!function_exists('stifli_flex_mcp_clear_log')) {
 	function stifli_flex_mcp_clear_log() {
 		$log_file = stifli_flex_mcp_get_log_file_path();
-		
-		if (file_exists($log_file)) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-			file_put_contents($log_file, '');
+
+		if (!file_exists($log_file)) {
 			return true;
 		}
-		
-		return false;
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		file_put_contents($log_file, '');
+		return true;
 	}
 }
 

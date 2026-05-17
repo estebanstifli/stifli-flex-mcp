@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, ai copilot
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.3.2
+Stable tag: 3.3.3
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -409,6 +409,15 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.3 =
+* Improvement: Upgraded the Abilities admin table with sortable columns, row selection, and bulk actions (enable, disable, remove).
+* Improvement: Upgraded Discover Abilities with category filtering and bulk import actions for selected or visible abilities.
+* Improvement: Added a dedicated bulk abilities backend action and reused shared import/category normalization logic.
+* Fix: Moved the OAuth global reset action to the visible Connected Clients area in MCP Server Settings and removed duplicate placement.
+* Change: Removed the optional Activity Log layer and kept Debug Log + Change Log as the logging surfaces.
+* Fix: Hardened `wp_update_nav_menu_item` updates with a safer merge flow that preserves existing values unless explicitly changed.
+* Fix: Plugin Check compliance updates in Abilities bulk code (prepared-query warnings and translators comments for placeholder strings).
+
 = 3.3.2 =
 * Fixed: `wp_create_post` and `wp_update_post` now correctly apply `post_category` and `tax_input` (including `post_tag`) when creating or updating posts.
 

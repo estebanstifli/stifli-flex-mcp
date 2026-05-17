@@ -615,6 +615,43 @@ class StifliFlexMcp_OAuth_Storage {
 	}
 
 	/**
+	 * Reset all OAuth state: clients, tokens, and pending auth codes.
+	 *
+	 * @return array|WP_Error Deleted row counts on success.
+	 */
+	public function reset_all_state() {
+		global $wpdb;
+
+		$clients_table = $wpdb->prefix . 'sflmcp_oauth_clients';
+		$codes_table   = $wpdb->prefix . 'sflmcp_oauth_codes';
+		$tokens_table  = $wpdb->prefix . 'sflmcp_oauth_tokens';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- plugin-managed OAuth tables.
+		$deleted_codes = $wpdb->query( "DELETE FROM {$codes_table}" );
+		if ( false === $deleted_codes ) {
+			return new WP_Error( 'oauth_reset_failed', __( 'Failed to delete pending authorization codes.', 'stifli-flex-mcp' ) );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- plugin-managed OAuth tables.
+		$deleted_tokens = $wpdb->query( "DELETE FROM {$tokens_table}" );
+		if ( false === $deleted_tokens ) {
+			return new WP_Error( 'oauth_reset_failed', __( 'Failed to delete OAuth tokens.', 'stifli-flex-mcp' ) );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- plugin-managed OAuth tables.
+		$deleted_clients = $wpdb->query( "DELETE FROM {$clients_table}" );
+		if ( false === $deleted_clients ) {
+			return new WP_Error( 'oauth_reset_failed', __( 'Failed to delete OAuth clients.', 'stifli-flex-mcp' ) );
+		}
+
+		return array(
+			'codes_deleted'   => (int) $deleted_codes,
+			'tokens_deleted'  => (int) $deleted_tokens,
+			'clients_deleted' => (int) $deleted_clients,
+		);
+	}
+
+	/**
 	 * Delete a client and all its tokens.
 	 *
 	 * @param string $client_id Client ID.

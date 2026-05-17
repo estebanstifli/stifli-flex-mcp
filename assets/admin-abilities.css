@@ -25,6 +25,75 @@
     border-bottom: 1px solid #eee;
 }
 
+.sflmcp-panel-notice {
+    margin-bottom: 15px;
+}
+
+.sflmcp-abilities-bulk-toolbar {
+    margin: 12px 0;
+}
+
+.sflmcp-abilities-bulk-toolbar .actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sflmcp-imported-abilities-table .check-column,
+.sflmcp-imported-abilities-table .check-column input {
+    vertical-align: middle;
+}
+
+.sflmcp-sort-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.sflmcp-sort-button:hover,
+.sflmcp-sort-button:focus {
+    color: #0073aa;
+}
+
+.sflmcp-sort-button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.sflmcp-sort-button.is-active {
+    color: #0073aa;
+}
+
+.sflmcp-discovered-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.sflmcp-discovered-toolbar-main,
+.sflmcp-discovered-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.sflmcp-discovered-toolbar select {
+    min-width: 180px;
+}
+
+.sflmcp-discovered-summary {
+    color: #50575e;
+    font-size: 12px;
+}
+
 /* Discovered abilities list */
 .sflmcp-discovered-list {
     margin-top: 15px;
@@ -49,6 +118,11 @@
 .sflmcp-discovered-item.imported {
     opacity: 0.7;
     background: #f0f0f0;
+}
+
+.sflmcp-discovered-item-select {
+    margin-right: 12px;
+    padding-top: 2px;
 }
 
 .sflmcp-discovered-item-info {
@@ -86,6 +160,8 @@
 
 .sflmcp-discovered-item-actions {
     margin-left: 15px;
+    display: flex;
+    align-items: flex-start;
 }
 
 .sflmcp-discovered-item-actions .button {
@@ -155,6 +231,16 @@
 @media screen and (max-width: 1200px) {
     .sflmcp-abilities-container {
         flex-direction: column;
+    }
+
+    .sflmcp-discovered-toolbar {
+        align-items: stretch;
+    }
+
+    .sflmcp-discovered-toolbar-main,
+    .sflmcp-discovered-toolbar-actions,
+    .sflmcp-abilities-bulk-toolbar .actions {
+        width: 100%;
     }
 }
 

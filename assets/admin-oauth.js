@@ -104,6 +104,35 @@
 					}
 				});
 			});
+
+			// Reset all OAuth state
+			$(document).on('click', '.sflmcp-oauth-reset-state', function(e) {
+				e.preventDefault();
+				if (!confirm(sflmcpOAuth.i18n.confirmResetState)) {
+					return;
+				}
+
+				var $btn = $(this);
+				$btn.prop('disabled', true);
+
+				$.post(sflmcpOAuth.ajaxUrl, {
+					action: 'sflmcp_oauth_reset_state',
+					nonce: sflmcpOAuth.nonce
+				}, function(response) {
+					if (response.success) {
+						OAuthAdmin.showNotice(sflmcpOAuth.i18n.resetStateSuccess);
+						window.setTimeout(function() {
+							window.location.reload();
+						}, 600);
+					} else {
+						OAuthAdmin.showNotice(response.data.message || sflmcpOAuth.i18n.error, 'error');
+						$btn.prop('disabled', false);
+					}
+				}).fail(function() {
+					OAuthAdmin.showNotice(sflmcpOAuth.i18n.error, 'error');
+					$btn.prop('disabled', false);
+				});
+			});
 		},
 
 		showNotice: function(message, type) {

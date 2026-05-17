@@ -136,6 +136,7 @@ class StifliFlexMcp_Logs_Admin {
 					'loading'         => __( 'Loading...', 'stifli-flex-mcp' ),
 					'confirmClear'    => __( 'Are you sure you want to clear all logs?', 'stifli-flex-mcp' ),
 					'logsCleared'     => __( 'Logs cleared successfully', 'stifli-flex-mcp' ),
+					'errorClearing'   => __( 'Error clearing logs', 'stifli-flex-mcp' ),
 				),
 			) );
 		}
@@ -180,7 +181,6 @@ class StifliFlexMcp_Logs_Admin {
 		$log_size        = stifli_flex_mcp_get_log_size();
 		$log_file_path   = stifli_flex_mcp_get_log_file_path();
 
-		// Format file size
 		if ( $log_size >= 1048576 ) {
 			$log_size_formatted = number_format( $log_size / 1048576, 2 ) . ' MB';
 		} elseif ( $log_size >= 1024 ) {
@@ -212,11 +212,11 @@ class StifliFlexMcp_Logs_Admin {
 			<tr valign="top">
 				<th scope="row"><?php echo esc_html__( 'Log File', 'stifli-flex-mcp' ); ?></th>
 				<td>
-					<code class="sflmcp-log-path"><?php echo esc_html( $log_file_path ); ?></code>
+					<code class="sflmcp-log-path" id="sflmcp_log_path"><?php echo esc_html( $log_file_path ); ?></code>
 					<p class="description"><?php echo sprintf(
 						/* translators: %s: file size */
 						esc_html__( 'Current file size: %s', 'stifli-flex-mcp' ),
-						esc_html( $log_size_formatted )
+						'<span id="sflmcp_log_size">' . esc_html( $log_size_formatted ) . '</span>'
 					); ?></p>
 				</td>
 			</tr>

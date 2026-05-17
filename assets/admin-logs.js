@@ -47,6 +47,8 @@
 				success: function(response) {
 					if (response.success) {
 						$('#sflmcp_log_viewer').val(response.data.contents);
+						$('#sflmcp_log_path').text(response.data.path || '');
+						$('#sflmcp_log_size').text(response.data.size_formatted || '0 bytes');
 						// Scroll to bottom
 						var textarea = document.getElementById('sflmcp_log_viewer');
 						if (textarea) {
@@ -78,6 +80,7 @@
 				success: function(response) {
 					if (response.success) {
 						$('#sflmcp_log_viewer').val('');
+						$('#sflmcp_log_size').text('0 bytes');
 						alert(sflmcpLogs.i18n.logsCleared);
 					} else {
 						alert(response.data.message || sflmcpLogs.i18n.errorClearing);

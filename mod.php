@@ -64,6 +64,7 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_toggle_ability', array($this, 'ajax_toggle_ability'));
 			add_action('wp_ajax_sflmcp_delete_ability', array($this, 'ajax_delete_ability'));
 			add_action('wp_ajax_sflmcp_get_imported_abilities', array($this, 'ajax_get_imported_abilities'));
+			add_action('wp_ajax_sflmcp_bulk_manage_abilities', array($this, 'ajax_bulk_manage_abilities'));
 			// AJAX handlers for Multimedia settings
 			add_action('wp_ajax_sflmcp_save_multimedia_settings', array($this, 'ajax_save_multimedia_settings'));
 			add_action('wp_ajax_sflmcp_load_multimedia_settings', array($this, 'ajax_load_multimedia_settings'));
@@ -72,6 +73,7 @@ class StifliFlexMcp {
 			// AJAX handlers for OAuth Clients
 			add_action('wp_ajax_sflmcp_oauth_delete_client', array($this, 'ajax_oauth_delete_client'));
 			add_action('wp_ajax_sflmcp_oauth_revoke_token', array($this, 'ajax_oauth_revoke_token'));
+			add_action('wp_ajax_sflmcp_oauth_reset_state', array($this, 'ajax_oauth_reset_state'));
 			add_action('wp_ajax_sflmcp_oauth_save_settings', array($this, 'ajax_oauth_save_settings'));
 			add_action('wp_ajax_sflmcp_generate_app_password', array($this, 'ajax_generate_app_password'));
 		}
@@ -2188,13 +2190,30 @@ class StifliFlexMcp {
 				'nonce' => wp_create_nonce('sflmcp_abilities'),
 				'i18n' => array(
 					'discovering' => __('Discovering abilities...', 'stifli-flex-mcp'),
+					'discoverButton' => __('Discover Abilities', 'stifli-flex-mcp'),
 					'noAbilities' => __('No abilities found. Install plugins that register WordPress Abilities.', 'stifli-flex-mcp'),
 					'confirmDelete' => __('Are you sure you want to remove this ability?', 'stifli-flex-mcp'),
+					'confirmBulkRemove' => __('Remove the selected imported abilities?', 'stifli-flex-mcp'),
+					'confirmBulkImport' => __('Import the selected discovered abilities?', 'stifli-flex-mcp'),
 					'imported' => __('Ability imported successfully', 'stifli-flex-mcp'),
 					'deleted' => __('Ability removed', 'stifli-flex-mcp'),
 					'error' => __('An error occurred', 'stifli-flex-mcp'),
+					'chooseBulkAction' => __('Select a bulk action first.', 'stifli-flex-mcp'),
+					'noSelection' => __('Select at least one ability.', 'stifli-flex-mcp'),
+					'applying' => __('Applying...', 'stifli-flex-mcp'),
 					'alreadyImported' => __('Already imported', 'stifli-flex-mcp'),
 					'import' => __('Import', 'stifli-flex-mcp'),
+					'importing' => __('Importing...', 'stifli-flex-mcp'),
+					'enabledLabel' => __('Enabled', 'stifli-flex-mcp'),
+					'disabledLabel' => __('Disabled', 'stifli-flex-mcp'),
+					'selectedSuffix' => __('selected', 'stifli-flex-mcp'),
+					'importedSuffix' => __('imported', 'stifli-flex-mcp'),
+					'visibleSuffix' => __('visible', 'stifli-flex-mcp'),
+					'allCategories' => __('All categories', 'stifli-flex-mcp'),
+					'selectAllVisible' => __('Select all visible', 'stifli-flex-mcp'),
+					'clearSelection' => __('Clear selection', 'stifli-flex-mcp'),
+					'importSelected' => __('Import selected', 'stifli-flex-mcp'),
+					'importVisible' => __('Import visible', 'stifli-flex-mcp'),
 				),
 			));
 		}
@@ -2220,8 +2239,10 @@ class StifliFlexMcp {
 				'i18n' => array(
 					'confirmDeleteClient' => __('Are you sure you want to delete this OAuth client and revoke all its tokens?', 'stifli-flex-mcp'),
 					'confirmRevokeToken' => __('Revoke this token? The client will need to re-authorize.', 'stifli-flex-mcp'),
+					'confirmResetState' => __('Reset all OAuth clients, access tokens, refresh tokens, and pending authorization codes? All MCP clients will need to authorize again.', 'stifli-flex-mcp'),
 					'clientDeleted' => __('OAuth client deleted', 'stifli-flex-mcp'),
 					'tokenRevoked' => __('Token revoked', 'stifli-flex-mcp'),
+					'resetStateSuccess' => __('OAuth state reset. Reloading...', 'stifli-flex-mcp'),
 					'settingsSaved' => __('Settings saved', 'stifli-flex-mcp'),
 					'error' => __('An error occurred', 'stifli-flex-mcp'),
 				),
@@ -2475,6 +2496,8 @@ class StifliFlexMcp {
 			<!-- Connected Clients -->
 			<div class="sflmcp-settings-section">
 				<h3><?php esc_html_e( 'Connected Clients', 'stifli-flex-mcp' ); ?></h3>
+				<p class="description"><?php esc_html_e( 'If external MCP clients are stuck after a site restore or a broken OAuth handshake, you can wipe every registered OAuth client, token, and pending authorization code and start over.', 'stifli-flex-mcp' ); ?></p>
+				<p><button type="button" class="button button-secondary sflmcp-oauth-reset-state"><?php esc_html_e( 'Reset OAuth State', 'stifli-flex-mcp' ); ?></button></p>
 				<?php if ( empty( $clients ) ) : ?>
 					<p class="description"><?php esc_html_e( 'No clients connected yet. Follow the steps above to connect your first AI assistant.', 'stifli-flex-mcp' ); ?></p>
 				<?php else : ?>
@@ -3891,20 +3914,42 @@ class StifliFlexMcp {
 			return;
 		}
 
-		echo '<table class="widefat striped">';
+		echo '<div class="tablenav top sflmcp-abilities-bulk-toolbar">';
+		echo '<div class="alignleft actions bulkactions">';
+		echo '<label class="screen-reader-text" for="sflmcp-imported-bulk-action">' . esc_html__('Select bulk action', 'stifli-flex-mcp') . '</label>';
+		echo '<select id="sflmcp-imported-bulk-action">';
+		echo '<option value="">' . esc_html__('Bulk actions', 'stifli-flex-mcp') . '</option>';
+		echo '<option value="enable">' . esc_html__('Enable selected', 'stifli-flex-mcp') . '</option>';
+		echo '<option value="disable">' . esc_html__('Disable selected', 'stifli-flex-mcp') . '</option>';
+		echo '<option value="delete">' . esc_html__('Remove selected', 'stifli-flex-mcp') . '</option>';
+		echo '</select>';
+		echo '<button type="button" class="button action" id="sflmcp-apply-imported-bulk-action">' . esc_html__('Apply', 'stifli-flex-mcp') . '</button>';
+		echo '</div>';
+		echo '<div class="tablenav-pages one-page">';
+		echo '<span class="displaying-num"><span id="sflmcp-imported-selected-count">0</span> ' . esc_html__('selected', 'stifli-flex-mcp') . '</span>';
+		echo '</div>';
+		echo '</div>';
+
+		echo '<table class="widefat striped sflmcp-imported-abilities-table">';
 		echo '<thead><tr>';
-		echo '<th>' . esc_html__('Ability', 'stifli-flex-mcp') . '</th>';
-		echo '<th>' . esc_html__('Category', 'stifli-flex-mcp') . '</th>';
-		echo '<th class="sflmcp-logs-col-enabled">' . esc_html__('Enabled', 'stifli-flex-mcp') . '</th>';
-		echo '<th class="sflmcp-logs-col-enabled">' . esc_html__('Actions', 'stifli-flex-mcp') . '</th>';
+		echo '<td class="check-column"><input type="checkbox" class="sflmcp-select-all-imported" aria-label="' . esc_attr__('Select all imported abilities', 'stifli-flex-mcp') . '"></td>';
+		echo '<th scope="col"><button type="button" class="button-link sflmcp-sort-button" data-sort-key="label" data-sort-type="text">' . esc_html__('Ability', 'stifli-flex-mcp') . '<span class="dashicons dashicons-sort"></span></button></th>';
+		echo '<th scope="col"><button type="button" class="button-link sflmcp-sort-button" data-sort-key="category" data-sort-type="text">' . esc_html__('Category', 'stifli-flex-mcp') . '<span class="dashicons dashicons-sort"></span></button></th>';
+		echo '<th scope="col" class="sflmcp-logs-col-enabled"><button type="button" class="button-link sflmcp-sort-button" data-sort-key="enabled" data-sort-type="number">' . esc_html__('Enabled', 'stifli-flex-mcp') . '<span class="dashicons dashicons-sort"></span></button></th>';
+		echo '<th scope="col" class="sflmcp-logs-col-enabled">' . esc_html__('Actions', 'stifli-flex-mcp') . '</th>';
 		echo '</tr></thead><tbody>';
 
 		foreach ($abilities as $ability) {
 			$enabled_class = $ability->enabled ? 'dashicons-yes-alt' : 'dashicons-marker';
 			$enabled_color = $ability->enabled ? '#46b450' : '#dc3232';
 			$tool_name = 'ability_' . str_replace(array('/', '-'), '_', $ability->ability_name);
+			/* translators: %s: ability label */
+			$select_ability_aria = sprintf( __( 'Select %s', 'stifli-flex-mcp' ), $ability->ability_label );
 			
-			echo '<tr data-ability-id="' . esc_attr($ability->id) . '">';
+			echo '<tr data-ability-id="' . esc_attr($ability->id) . '" data-ability-name="' . esc_attr($ability->ability_name) . '" data-sort-label="' . esc_attr(strtolower($ability->ability_label)) . '" data-sort-category="' . esc_attr(strtolower($ability->ability_category)) . '" data-sort-enabled="' . esc_attr((int) $ability->enabled) . '">';
+			echo '<th scope="row" class="check-column">';
+			echo '<input type="checkbox" class="sflmcp-imported-select-row" value="' . esc_attr($ability->id) . '" aria-label="' . esc_attr( $select_ability_aria ) . '">';
+			echo '</th>';
 			echo '<td>';
 			echo '<strong>' . esc_html($ability->ability_label) . '</strong>';
 			echo '<br><code class="sflmcp-ability-tool-name">' . esc_html($tool_name) . '</code>';
@@ -3927,6 +3972,84 @@ class StifliFlexMcp {
 		}
 
 		echo '</tbody></table>';
+	}
+
+	/**
+	 * Normalize an ability category label.
+	 *
+	 * @param mixed $ability_or_category Ability instance or raw category value.
+	 * @return string
+	 */
+	private function getAbilityCategoryLabel( $ability_or_category ) {
+		$category = $ability_or_category;
+
+		if ( is_object( $ability_or_category ) && method_exists( $ability_or_category, 'get_category' ) ) {
+			$category = $ability_or_category->get_category();
+		}
+
+		if ( is_object( $category ) && method_exists( $category, 'get_label' ) ) {
+			$category = $category->get_label();
+		}
+
+		if ( is_scalar( $category ) ) {
+			$category = sanitize_text_field( (string) $category );
+		} else {
+			$category = '';
+		}
+
+		return '' !== $category ? $category : __( 'Uncategorized', 'stifli-flex-mcp' );
+	}
+
+	/**
+	 * Import a single registered WordPress ability into the plugin table.
+	 *
+	 * @param string $ability_name Ability slug.
+	 * @return int|WP_Error
+	 */
+	private function importAbilityRecord( $ability_name ) {
+		if ( ! stifli_flex_mcp_abilities_available() ) {
+			return new WP_Error( 'abilities_unavailable', __( 'WordPress Abilities API not available', 'stifli-flex-mcp' ) );
+		}
+
+		$ability = wp_get_ability( $ability_name );
+		if ( ! $ability ) {
+			return new WP_Error( 'ability_not_found', __( 'Ability not found', 'stifli-flex-mcp' ) );
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'sflmcp_abilities';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE ability_name = %s", $ability_name ) );
+		if ( $exists ) {
+			return new WP_Error( 'ability_exists', __( 'Ability already imported', 'stifli-flex-mcp' ) );
+		}
+
+		$input_schema  = StifliFlexMcpUtils::normalizeToolInputSchema( $ability->get_input_schema() );
+		$output_schema = $ability->get_output_schema();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$result = $wpdb->insert(
+			$table,
+			array(
+				'ability_name'        => $ability_name,
+				'ability_label'       => $ability->get_label(),
+				'ability_description' => $ability->get_description(),
+				'ability_category'    => $this->getAbilityCategoryLabel( $ability ),
+				'input_schema'        => is_array( $input_schema ) ? wp_json_encode( $input_schema ) : null,
+				'output_schema'       => is_array( $output_schema ) ? wp_json_encode( $output_schema ) : null,
+				'enabled'             => 1,
+				'created_at'          => current_time( 'mysql', true ),
+				'updated_at'          => current_time( 'mysql', true ),
+			),
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
+		);
+
+		if ( false === $result ) {
+			return new WP_Error( 'ability_insert_failed', __( 'Failed to import ability', 'stifli-flex-mcp' ) );
+		}
+
+		return (int) $wpdb->insert_id;
 	}
 
 	/**
@@ -3970,16 +4093,11 @@ class StifliFlexMcp {
 			}
 
 			// Get category - may be a string or null
-			$category = method_exists($ability, 'get_category') ? $ability->get_category() : '';
-			if (is_object($category) && method_exists($category, 'get_label')) {
-				$category = $category->get_label();
-			}
-
 			$abilities_list[] = array(
 				'name' => $name,
 				'label' => $ability->get_label(),
 				'description' => $ability->get_description(),
-				'category' => $category ?: 'Uncategorized',
+				'category' => $this->getAbilityCategoryLabel( $ability ),
 				'input_schema' => $ability->get_input_schema(),
 				'output_schema' => method_exists($ability, 'get_output_schema') ? $ability->get_output_schema() : null,
 				'imported' => isset($imported_map[$name]),
@@ -4011,51 +4129,156 @@ class StifliFlexMcp {
 			wp_send_json_error(array('message' => __('WordPress Abilities API not available', 'stifli-flex-mcp')));
 		}
 
-		// Use wp_get_ability() to get a specific ability
-		$ability = wp_get_ability($ability_name);
-		
-		if (!$ability) {
-			wp_send_json_error(array('message' => __('Ability not found', 'stifli-flex-mcp')));
+		$result = $this->importAbilityRecord( $ability_name );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error(array('message' => $result->get_error_message()));
+		}
+
+		wp_send_json_success(array(
+			'message' => __('Ability imported successfully', 'stifli-flex-mcp'),
+			'id' => $result,
+		));
+	}
+
+	/**
+	 * AJAX handler: Bulk manage imported or discovered abilities.
+	 */
+	public function ajax_bulk_manage_abilities() {
+		check_ajax_referer( 'sflmcp_abilities', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+		}
+
+		$bulk_action = isset( $_POST['bulk_action'] ) ? sanitize_key( wp_unslash( $_POST['bulk_action'] ) ) : '';
+		if ( empty( $bulk_action ) ) {
+			wp_send_json_error( array( 'message' => __( 'Bulk action is required', 'stifli-flex-mcp' ) ) );
+		}
+
+		$ability_ids = array();
+		if ( isset( $_POST['ability_ids'] ) ) {
+			$ability_ids = array_values( array_unique( array_filter( array_map( 'intval', (array) wp_unslash( $_POST['ability_ids'] ) ) ) ) );
+		}
+
+		$ability_names = array();
+		if ( isset( $_POST['ability_names'] ) ) {
+			$ability_names = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['ability_names'] ) ) ) ) );
 		}
 
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_abilities';
 
-		// Check if already imported
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE ability_name = %s", $ability_name));
-		if ($exists) {
-			wp_send_json_error(array('message' => __('Ability already imported', 'stifli-flex-mcp')));
+		switch ( $bulk_action ) {
+			case 'enable':
+			case 'disable':
+				if ( empty( $ability_ids ) ) {
+					wp_send_json_error( array( 'message' => __( 'Select at least one imported ability.', 'stifli-flex-mcp' ) ) );
+				}
+
+				$new_state = 'enable' === $bulk_action ? 1 : 0;
+				$updated   = 0;
+				$timestamp = current_time( 'mysql', true );
+
+				foreach ( $ability_ids as $ability_id ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+					$row_result = $wpdb->update(
+						$table,
+						array(
+							'enabled'    => $new_state,
+							'updated_at' => $timestamp,
+						),
+						array( 'id' => $ability_id ),
+						array( '%d', '%s' ),
+						array( '%d' )
+					);
+
+					if ( false === $row_result ) {
+						wp_send_json_error( array( 'message' => __( 'Failed to update abilities', 'stifli-flex-mcp' ) ) );
+					}
+
+					$updated += (int) $row_result;
+				}
+
+				wp_send_json_success( array(
+					'updated' => (int) $updated,
+					'message' => 'enable' === $bulk_action
+						? __( 'Selected abilities enabled', 'stifli-flex-mcp' )
+						: __( 'Selected abilities disabled', 'stifli-flex-mcp' ),
+				) );
+				break;
+
+			case 'delete':
+				if ( empty( $ability_ids ) ) {
+					wp_send_json_error( array( 'message' => __( 'Select at least one imported ability.', 'stifli-flex-mcp' ) ) );
+				}
+
+				$deleted = 0;
+				foreach ( $ability_ids as $ability_id ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+					$row_result = $wpdb->delete( $table, array( 'id' => $ability_id ), array( '%d' ) );
+
+					if ( false === $row_result ) {
+						wp_send_json_error( array( 'message' => __( 'Failed to delete abilities', 'stifli-flex-mcp' ) ) );
+					}
+
+					$deleted += (int) $row_result;
+				}
+
+				wp_send_json_success( array(
+					'deleted' => (int) $deleted,
+					'message' => __( 'Selected abilities removed', 'stifli-flex-mcp' ),
+				) );
+				break;
+
+			case 'import':
+				if ( empty( $ability_names ) ) {
+					wp_send_json_error( array( 'message' => __( 'Select at least one discovered ability.', 'stifli-flex-mcp' ) ) );
+				}
+
+				$imported_count = 0;
+				$skipped_count  = 0;
+				$processed_names = array();
+				$errors         = array();
+
+				foreach ( $ability_names as $ability_name ) {
+					$result = $this->importAbilityRecord( $ability_name );
+					if ( is_wp_error( $result ) ) {
+						if ( 'ability_exists' === $result->get_error_code() ) {
+							++$skipped_count;
+							$processed_names[] = $ability_name;
+							continue;
+						}
+
+						$errors[] = $result->get_error_message();
+						continue;
+					}
+
+					++$imported_count;
+					$processed_names[] = $ability_name;
+				}
+
+				if ( 0 === $imported_count && ! empty( $errors ) ) {
+					wp_send_json_error( array( 'message' => $errors[0] ) );
+				}
+
+				/* translators: %d: number of imported abilities. */
+				$imported_message = sprintf( __( '%d abilities imported', 'stifli-flex-mcp' ), $imported_count );
+				$message = $imported_count > 0
+					? $imported_message
+					: __( 'No new abilities were imported', 'stifli-flex-mcp' );
+
+				wp_send_json_success( array(
+					'imported'        => $imported_count,
+					'skipped'         => $skipped_count,
+					'processed_names' => $processed_names,
+					'errors'          => $errors,
+					'message'         => $message,
+				) );
+				break;
+
+			default:
+				wp_send_json_error( array( 'message' => __( 'Invalid bulk action', 'stifli-flex-mcp' ) ) );
 		}
-
-		$input_schema = StifliFlexMcpUtils::normalizeToolInputSchema( $ability->get_input_schema() );
-		$output_schema = $ability->get_output_schema();
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$result = $wpdb->insert(
-			$table,
-			array(
-				'ability_name' => $ability_name,
-				'ability_label' => $ability->get_label(),
-				'ability_description' => $ability->get_description(),
-				'ability_category' => $ability->get_category(),
-				'input_schema' => is_array($input_schema) ? wp_json_encode($input_schema) : null,
-				'output_schema' => is_array($output_schema) ? wp_json_encode($output_schema) : null,
-				'enabled' => 1,
-				'created_at' => current_time('mysql', true),
-				'updated_at' => current_time('mysql', true),
-			),
-			array('%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s')
-		);
-
-		if ($result === false) {
-			wp_send_json_error(array('message' => __('Failed to import ability', 'stifli-flex-mcp')));
-		}
-
-		wp_send_json_success(array(
-			'message' => __('Ability imported successfully', 'stifli-flex-mcp'),
-			'id' => $wpdb->insert_id,
-		));
 	}
 
 	/**
@@ -5353,6 +5576,28 @@ class StifliFlexMcp {
 		$this->invalidateOAuthWellKnownProbeCache();
 
 		wp_send_json_success();
+	}
+
+	/**
+	 * AJAX: Reset all OAuth clients, tokens, and auth codes.
+	 */
+	public function ajax_oauth_reset_state() {
+		check_ajax_referer( 'sflmcp_oauth', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied', 'stifli-flex-mcp' ) ) );
+			return;
+		}
+
+		$storage = StifliFlexMcp_OAuth_Storage::get_instance();
+		$result = $storage->reset_all_state();
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			return;
+		}
+
+		wp_send_json_success( $result );
 	}
 
 	/**
