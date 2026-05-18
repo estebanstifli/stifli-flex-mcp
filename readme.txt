@@ -2,7 +2,7 @@
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags:  mcp, chatgpt, claude, woocommerce ai, ai copilot
+Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.8
 Tested up to: 7.0
 Stable tag: 3.3.3
@@ -14,13 +14,28 @@ The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent
 
 == Description ==
 
-**StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect AI clients safely (ChatGPT, Claude, Gemini, etc), roll back changes when needed, and manage your site through natural conversation without losing control.
+**StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect ChatGPT, Claude Desktop, Gemini, and other MCP clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
 
-Three powerful tools in one plugin:
+Three powerful MCP and AI tools in one plugin:
 
 1. **MCP Server** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site
 2. **AI Copilot** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time
 3. **AI Chat Agent** — A full conversational interface to manage posts, WooCommerce, settings, and more
+
+Released in December 2025, **StifLi Flex MCP** was the first MCP plugin for WordPress and remains the most complete WordPress MCP platform for ChatGPT, Claude Desktop, and other MCP clients.
+It starts with 117+ built-in MCP tools, and with supported integrations such as All Sources Images, Stifli Backup Tools, AiPatch Security Scanner, Notification for Telegram, WPCode, Code Snippets, Woody Snippets, Advanced Custom Fields, Yoast SEO, Rank Math, WPForms, Gravity Forms, Forminator, and The Events Calendar, it can exceed 200 total tools depending on the plugins you install.
+
+**📡 MCP Server — Connect ChatGPT, Claude Desktop, and Other MCP Clients**
+
+StifLi Flex MCP includes a full standards-compliant MCP server for WordPress, so ChatGPT, Claude Desktop, LibreChat, and other MCP clients can connect directly to your site and use real WordPress tools through OAuth 2.1.
+
+* **ChatGPT** — Connect through Apps & Connectors with OAuth 2.1 authentication
+* **Claude Desktop** — Connect through Connectors with automatic OAuth flow
+* **LibreChat and other MCP clients** — Use the same MCP endpoint and discovery flow
+* **Zero shared secrets** — No custom API keys or passwords for external MCP clients
+* **Standards-based** — Automatic discovery, registration, and authentication with OAuth 2.1, PKCE, RFC 9728, RFC 8414, and RFC 7591
+
+Just copy the SSE URL from the Settings page, paste it into ChatGPT, Claude Desktop, or another MCP client, and authorize.
 
 **✍️ AI Copilot — Your Writing Assistant Inside the Editor**
 
@@ -45,15 +60,8 @@ Here are just a few examples of what you can ask while editing a post or page:
 
 * ✏️ "Rewrite the introduction to sound more professional and engaging"
 * 📊 "Add a comparison table below the second paragraph with pros and cons"
-* 🌍 "Translate the third paragraph into French"
-* 🔤 "Bold the most important keywords for SEO throughout the article"
 * 🖼️ "Generate an image that illustrates the idea in paragraph four and insert it right above"
 * 📝 "Write a compelling meta description and set it as the excerpt"
-* 🏷️ "Suggest 5 relevant tags based on the content and add them"
-* 📐 "Split this long paragraph into three shorter ones with subheadings"
-* 🔗 "Add a call-to-action block at the end with a link to the pricing page"
-* 💬 "Turn the bullet list into a FAQ block with questions and answers"
-* 🎨 "Add a custom CSS class to the hero image block for full-width display"
 * 🛒 "Update the product short description to highlight free shipping and set the sale price to $19.99"
 
 The Copilot reads your full content, understands context, and applies changes directly in the editor — no copy-pasting, no switching tabs.
@@ -64,7 +72,7 @@ The built-in AI Chat Agent gives you a powerful conversational interface to mana
 
 * **Talk to your site** — "Show me the last 5 orders", "Create a blog post about SEO tips", "What plugins are installed?"
 * **Multi-provider** — Built-in OpenAI (GPT-5.4, GPT-5.3), Anthropic (Claude 4.6 Opus/Sonnet, Claude 4.5 Haiku), Google (Gemini 3.1 Pro, Gemini 3 Flash) + optional WordPress AI Client connectors (OpenRouter, Mistral)
-* **117+ tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, update settings, and much more
+* **117+ MCP tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, update settings, and much more
 * **Smart suggestions** — After each response, get contextual follow-up suggestions
 * **Conversation history** — Auto-saved across sessions with multi-tab support
 * **Safe by design** — Choose "Always Allow" or "Ask User" mode for tool execution confirmations
@@ -78,12 +86,7 @@ Here are just a few examples of what you can ask your AI agent:
 * 🛒 "Show me today's WooCommerce orders and their total revenue"
 * 🔍 "What are the top 10 most commented posts on my site?"
 * 📊 "List all products with stock below 5 units"
-* 🏷️ "Create a 20% discount coupon valid for the next 7 days"
-* 📦 "Update the price of product #123 to $29.99"
-* 💬 "Show me all pending comments so I can review them"
-* 🧩 "What plugins are currently active?"
 * 🎨 "Generate a hero image for my latest blog post about technology"
-* 🎬 "Create a 5-second promotional video for my new product"
 
 The AI agent understands context, chains multiple operations, and works with your site's real data in real time.
 
@@ -125,18 +128,6 @@ Schedule AI-powered tasks to run automatically on your WordPress site:
 **🎯 Event Automations — Trigger AI on WordPress Events**
 
 Run AI workflows automatically when specific events happen
-
-**📡 Full MCP Server — Connect External AI Clients**
-
-StifLi Flex MCP also works as a standards-compliant Model Context Protocol (MCP) server, so you can connect external AI clients:
-
-* **ChatGPT** — via Apps & Connectors with OAuth 2.1 authentication
-* **Claude Desktop** — via Connectors with automatic OAuth flow
-* **LibreChat** — full MCP integration
-* **Any MCP-compatible client** 
-
-Just copy the SSE URL from the Settings page, paste it into your AI client, and authorize. That's it — no tokens to manage, no passwords to share. The server handles discovery, registration, and authentication automatically following the latest security standards (OAuth 2.1, PKCE, RFC 9728, RFC 8414, RFC 7591).
-
 
 **⏪ Roll Back — The Only MCP Server With Undo**
 
@@ -414,9 +405,7 @@ When using the MCP server with external AI clients (ChatGPT, Claude Desktop, Lib
 * Improvement: Upgraded Discover Abilities with category filtering and bulk import actions for selected or visible abilities.
 * Improvement: Added a dedicated bulk abilities backend action and reused shared import/category normalization logic.
 * Fix: Moved the OAuth global reset action to the visible Connected Clients area in MCP Server Settings and removed duplicate placement.
-* Change: Removed the optional Activity Log layer and kept Debug Log + Change Log as the logging surfaces.
 * Fix: Hardened `wp_update_nav_menu_item` updates with a safer merge flow that preserves existing values unless explicitly changed.
-* Fix: Plugin Check compliance updates in Abilities bulk code (prepared-query warnings and translators comments for placeholder strings).
 
 = 3.3.2 =
 * Fixed: `wp_create_post` and `wp_update_post` now correctly apply `post_category` and `tax_input` (including `post_tag`) when creating or updating posts.

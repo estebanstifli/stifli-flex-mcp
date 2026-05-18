@@ -22,6 +22,20 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 'catalog_tools' => array(),
             ),
             array(
+                'id' => 'stifli_backup_tools',
+                'name' => 'Stifli Backup Tools',
+                'description' => 'Backup and restore workflows for WordPress using plugin abilities discoverable from MCP.',
+                'plugin_files' => array( 'stifli-backup-tools/stifli-backup-tools.php' ),
+                'install_slug' => 'stifli-backup-tools',
+                'featured' => true,
+                'featured_label' => 'Recommended!',
+                'match' => array(
+                    // Discover abilities dynamically (stifbt/* -> ability_stifbt_*).
+                    'prefixes' => array( 'ability_stifbt_' ),
+                ),
+                'catalog_tools' => array(),
+            ),
+            array(
                 'id' => 'aipatch_security_scanner',
                 'name' => 'AiPatch Security Scanner',
                 'description' => 'Security auditing and vulnerability scanning with AI-powered recommendations.',
