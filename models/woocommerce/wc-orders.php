@@ -270,6 +270,15 @@ class StifliFlexMcp_WC_Orders {
             }
             return !empty($value);
         };
+        $isOrderObject = function($order) {
+            if (!class_exists('WC_Order') || !$order instanceof WC_Order) {
+                return false;
+            }
+            if (class_exists('WC_Order_Refund') && $order instanceof WC_Order_Refund) {
+                return false;
+            }
+            return !method_exists($order, 'get_type') || 'shop_order_refund' !== $order->get_type();
+        };
         $buildPaginationMeta = function($totalItems, $limit, $offset = 0, $paged = 1) {
             $limit = max(1, (int) $limit);
             $offset = max(0, (int) $offset);
@@ -370,6 +379,7 @@ class StifliFlexMcp_WC_Orders {
                 $query_args = array(
                     'limit' => $limit,
                     'offset' => $offset,
+                    'type' => 'shop_order',
                     'orderby' => sanitize_key($utils::getArrayValue($args, 'orderby', 'date')),
                     'order' => sanitize_key($utils::getArrayValue($args, 'order', 'DESC')),
                 );
@@ -413,6 +423,9 @@ class StifliFlexMcp_WC_Orders {
                 $result = array();
                 
                 foreach ($orders as $order) {
+                    if (!$isOrderObject($order)) {
+                        continue;
+                    }
                     $result[] = $buildOrderRow($order, $compact, $includeItems, $includeTotalsBreakdown, $includeShippingSummary);
                 }
 
@@ -503,7 +516,7 @@ class StifliFlexMcp_WC_Orders {
                 }
                 
                 $order = wc_get_order($order_id);
-                if (!$order) {
+                if (!$isOrderObject($order)) {
                     $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                     return true;
                 }
@@ -551,7 +564,7 @@ class StifliFlexMcp_WC_Orders {
                 $force = (bool) $utils::getArrayValue($args, 'force', false);
                 $order = wc_get_order($order_id);
                 
-                if (!$order) {
+                if (!$isOrderObject($order)) {
                     $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                     return true;
                 }
@@ -579,7 +592,7 @@ class StifliFlexMcp_WC_Orders {
                     }
                     
                     $order = wc_get_order(intval($update['order_id']));
-                    if (!$order) {
+                    if (!$isOrderObject($order)) {
                         continue;
                     }
                     
@@ -602,7 +615,7 @@ class StifliFlexMcp_WC_Orders {
                 }
                 
                 $order = wc_get_order($order_id);
-                if (!$order) {
+                if (!$isOrderObject($order)) {
                     $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                     return true;
                 }
@@ -637,7 +650,7 @@ class StifliFlexMcp_WC_Orders {
                 }
                 
                 $order = wc_get_order($order_id);
-                if (!$order) {
+                if (!$isOrderObject($order)) {
                     $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                     return true;
                 }
@@ -660,7 +673,7 @@ class StifliFlexMcp_WC_Orders {
                 }
                 
                 $order = wc_get_order($order_id);
-                if (!$order) {
+                if (!$isOrderObject($order)) {
                     $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                     return true;
                 }
@@ -684,7 +697,7 @@ class StifliFlexMcp_WC_Orders {
                 }
                 
                 $order = wc_get_order($order_id);
-                if (!$order) {
+                if (!$isOrderObject($order)) {
                     $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                     return true;
                 }
@@ -750,7 +763,7 @@ class StifliFlexMcp_WC_Orders {
                 if ($order_id > 0) {
                     // Get refunds for specific order
                     $order = wc_get_order($order_id);
-                    if (!$order) {
+                    if (!$isOrderObject($order)) {
                         $r['error'] = array('code' => -50002, 'message' => 'Order not found');
                         return true;
                     }

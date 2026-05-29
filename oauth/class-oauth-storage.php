@@ -158,7 +158,7 @@ class StifliFlexMcp_OAuth_Storage {
 		}
 
 		// Validate auth method.
-		$allowed_methods = array( 'none', 'client_secret_post' );
+		$allowed_methods = array( 'none', 'client_secret_post', 'client_secret_basic' );
 		if ( ! in_array( $auth_method, $allowed_methods, true ) ) {
 			return new WP_Error( 'invalid_client_metadata', 'Unsupported token_endpoint_auth_method.' );
 		}
@@ -166,7 +166,7 @@ class StifliFlexMcp_OAuth_Storage {
 		// Generate client_secret for confidential clients.
 		$client_secret      = null;
 		$client_secret_hash = null;
-		if ( 'client_secret_post' === $auth_method ) {
+		if ( 'none' !== $auth_method ) {
 			$client_secret      = bin2hex( random_bytes( 32 ) );
 			$client_secret_hash = wp_hash_password( $client_secret );
 		}
@@ -369,7 +369,7 @@ class StifliFlexMcp_OAuth_Storage {
 	 * @param int         $user_id   WordPress user ID.
 	 * @param string      $scope     Scope.
 	 * @param string|null $resource  Resource indicator.
-	 * @return array Token response: access_token, refresh_token, expires_in, token_type.
+	 * @return array|WP_Error Token response: access_token, refresh_token, expires_in, token_type.
 	 */
 	public function create_token_pair( $client_id, $user_id, $scope, $resource = null ) {
 		global $wpdb;
@@ -381,7 +381,7 @@ class StifliFlexMcp_OAuth_Storage {
 		$refresh_exp   = gmdate( 'Y-m-d H:i:s', time() + self::REFRESH_TOKEN_TTL );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$wpdb->prefix . 'sflmcp_oauth_tokens',
 			array(
 				'access_token_hash'  => hash( 'sha256', $access_token ),
@@ -395,6 +395,14 @@ class StifliFlexMcp_OAuth_Storage {
 				'created_at'         => $now,
 			)
 		);
+
+		if ( false === $inserted ) {
+			$db_error = isset( $wpdb->last_error ) ? (string) $wpdb->last_error : '';
+			if ( '' !== $db_error && function_exists( 'stifli_flex_mcp_log' ) ) {
+				stifli_flex_mcp_log( 'OAuth create_token_pair DB error: ' . $db_error );
+			}
+			return new WP_Error( 'server_error_db', 'Failed to store OAuth token.' );
+		}
 
 		return array(
 			'access_token'  => $access_token,
@@ -461,7 +469,7 @@ class StifliFlexMcp_OAuth_Storage {
 	 *
 	 * @param string $refresh_token Plaintext refresh token.
 	 * @param string $client_id     Expected client ID.
-	 * @return array|null New token response or null if invalid.
+	 * @return array|WP_Error|null New token response, error on storage failure, or null if invalid.
 	 */
 	public function refresh_token( $refresh_token, $client_id ) {
 		global $wpdb;
@@ -615,9 +623,9 @@ class StifliFlexMcp_OAuth_Storage {
 	}
 
 	/**
-	 * Reset all OAuth state: clients, tokens, and pending auth codes.
+	 * Reset OAuth sessions and pending auth codes while preserving client registrations.
 	 *
-	 * @return array|WP_Error Deleted row counts on success.
+	 * @return array|WP_Error Affected row counts on success.
 	 */
 	public function reset_all_state() {
 		global $wpdb;
@@ -638,16 +646,13 @@ class StifliFlexMcp_OAuth_Storage {
 			return new WP_Error( 'oauth_reset_failed', __( 'Failed to delete OAuth tokens.', 'stifli-flex-mcp' ) );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- plugin-managed OAuth tables.
-		$deleted_clients = $wpdb->query( "DELETE FROM {$clients_table}" );
-		if ( false === $deleted_clients ) {
-			return new WP_Error( 'oauth_reset_failed', __( 'Failed to delete OAuth clients.', 'stifli-flex-mcp' ) );
-		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- plugin-managed OAuth table.
+		$clients_preserved = $wpdb->get_var( "SELECT COUNT(*) FROM {$clients_table}" );
 
 		return array(
-			'codes_deleted'   => (int) $deleted_codes,
-			'tokens_deleted'  => (int) $deleted_tokens,
-			'clients_deleted' => (int) $deleted_clients,
+			'codes_deleted'     => (int) $deleted_codes,
+			'tokens_deleted'    => (int) $deleted_tokens,
+			'clients_preserved' => (int) $clients_preserved,
 		);
 	}
 

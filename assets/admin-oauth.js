@@ -105,7 +105,7 @@
 				});
 			});
 
-			// Reset all OAuth state
+			// Reset OAuth sessions
 			$(document).on('click', '.sflmcp-oauth-reset-state', function(e) {
 				e.preventDefault();
 				if (!confirm(sflmcpOAuth.i18n.confirmResetState)) {

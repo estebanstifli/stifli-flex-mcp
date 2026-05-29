@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.3.3
+Stable tag: 3.3.6
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -22,8 +22,16 @@ Three powerful MCP and AI tools in one plugin:
 2. **AI Copilot** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time
 3. **AI Chat Agent** — A full conversational interface to manage posts, WooCommerce, settings, and more
 
+**🎬 Video: Claude to WordPress MCP Connector in 1 Minute**
+
+https://youtu.be/AcmvwRzoOSM
+
+**📚 Documentation**
+
+https://andromedanova.com/stifli-flex-mcp.html
+
 Released in December 2025, **StifLi Flex MCP** was the first MCP plugin for WordPress and remains the most complete WordPress MCP platform for ChatGPT, Claude Desktop, and other MCP clients.
-It starts with 117+ built-in MCP tools, and with supported integrations such as All Sources Images, Stifli Backup Tools, AiPatch Security Scanner, Notification for Telegram, WPCode, Code Snippets, Woody Snippets, Advanced Custom Fields, Yoast SEO, Rank Math, WPForms, Gravity Forms, Forminator, and The Events Calendar, it can exceed 200 total tools depending on the plugins you install.
+It starts with 122+ built-in MCP tools, and with supported integrations such as All Sources Images, Stifli Backup Tools, AiPatch Security Scanner, Notification for Telegram, WPCode, Code Snippets, Woody Snippets, Advanced Custom Fields, Yoast SEO, Rank Math, WPForms, Gravity Forms, Forminator, The Events Calendar, and Elementor, it can exceed 200 total tools depending on the plugins you install.
 
 **📡 MCP Server — Connect ChatGPT, Claude Desktop, and Other MCP Clients**
 
@@ -72,7 +80,7 @@ The built-in AI Chat Agent gives you a powerful conversational interface to mana
 
 * **Talk to your site** — "Show me the last 5 orders", "Create a blog post about SEO tips", "What plugins are installed?"
 * **Multi-provider** — Built-in OpenAI (GPT-5.4, GPT-5.3), Anthropic (Claude 4.6 Opus/Sonnet, Claude 4.5 Haiku), Google (Gemini 3.1 Pro, Gemini 3 Flash) + optional WordPress AI Client connectors (OpenRouter, Mistral)
-* **117+ MCP tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, update settings, and much more
+* **122+ MCP tools at its disposal** — The AI agent can read posts, create content, manage WooCommerce products, check orders, inspect SEO data, update settings, and much more
 * **Smart suggestions** — After each response, get contextual follow-up suggestions
 * **Conversation history** — Auto-saved across sessions with multi-tab support
 * **Safe by design** — Choose "Always Allow" or "Ask User" mode for tool execution confirmations
@@ -170,7 +178,7 @@ StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard se
 * WooCommerce Read Only — query store data
 * WooCommerce Store Management — products, orders, coupons
 * Complete E-commerce — all WooCommerce tools
-* Complete Site — all 117+ tools enabled
+* Complete Site — all 122+ tools enabled
 * Safe Mode — non-sensitive reads only
 * Development/Debug — diagnostic tools
 
@@ -195,10 +203,6 @@ StifLi Flex MCP integrates with:
 **📐 MCP Spec Compliance**
 
 StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25/) for lifecycle and tool operations over JSON-RPC 2.0, while keeping legacy SSE compatibility for older MCP clients.
-
-**Demo & Installation Tutorial:**
-
-https://youtu.be/KHr1zt2R8Ew
 
 == Installation ==
 
@@ -267,7 +271,7 @@ You can switch providers at any time from the Settings tab.
 
 = What can the AI agent do with my site? =
 
-The agent has access to 117+ tools covering:
+The agent has access to 122+ tools covering:
 
 * **Content** — Create, edit, delete posts, pages, and comments
 * **Media** — Upload, list, and manage images and files
@@ -397,9 +401,26 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 * **Google Gemini** — Used for Gemini AI models (AI Chat Agent, AI Copilot), Gemini Image + Imagen 4 (image generation), and Veo 2/3 (video generation)
   [Terms of Service](https://ai.google.dev/terms) | [Privacy Policy](https://policies.google.com/privacy)
 
+* **Google Search Console** - Used only when you connect your Google account in the SEO settings, for read-only site/search performance data.
+  [Terms of Service](https://policies.google.com/terms) | [Privacy Policy](https://policies.google.com/privacy)
+
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.6 =
+* New: Added SEO optimization tools for GSC-backed post context, title/meta suggestions, and safe Yoast/Rank Math metadata updates with rollback support.
+* New: Added MCP resources for site info, post types, recent posts, and SEO summary through resources/list and resources/read.
+* Improvement: SEO and Google Search Console modules now load lazily only when enabled, connected, or opened in the SEO admin page.
+
+= 3.3.5 =
+* New: Added Google Search Console support under a new SEO admin page, with Google OAuth connection, encrypted tokens, connection testing, cache controls, tool toggles, and 5 read-only SEO data tools.
+* Improvement: Google Search Console performance queries now return compact summaries with capped row output to prevent excessive MCP token usage.
+* New: Added Elementor compatibility as a plugin integration with 7 dedicated tools for cloning pages, replacing text/images/links, reading page outlines, listing local templates, and importing templates.
+* Improvement: Various reliability and compatibility improvements across WordPress content handling, WooCommerce order tools, OAuth discovery, and plugin integrations.
+
+= 3.3.4 =
+* Improvement: Various improvements and content updates in the plugin documentation and onboarding resources.
+
 = 3.3.3 =
 * Improvement: Upgraded the Abilities admin table with sortable columns, row selection, and bulk actions (enable, disable, remove).
 * Improvement: Upgraded Discover Abilities with category filtering and bulk import actions for selected or visible abilities.

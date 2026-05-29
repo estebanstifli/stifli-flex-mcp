@@ -166,6 +166,26 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 'catalog_tools' => array( 'forminator_list_forms', 'forminator_get_entries' ),
             ),
             array(
+                'id' => 'elementor',
+                'name' => 'Elementor',
+                'description' => 'Clone and customize Elementor pages safely without generating page-builder JSON from scratch.',
+                'plugin_files' => array( 'elementor/elementor.php' ),
+                'match_classes' => array( 'Elementor\\Plugin' ),
+                'install_slug' => 'elementor',
+                'match' => array(
+                    'prefixes' => array( 'elementor_' ),
+                ),
+                'catalog_tools' => array(
+                    'elementor_clone_page',
+                    'elementor_replace_text',
+                    'elementor_replace_image',
+                    'elementor_replace_link',
+                    'elementor_get_page_outline',
+                    'elementor_list_local_templates',
+                    'elementor_import_template',
+                ),
+            ),
+            array(
                 'id' => 'the_events_calendar',
                 'name' => 'The Events Calendar',
                 'description' => 'Manage events, venues, and organizers through the native The Events Calendar REST API.',

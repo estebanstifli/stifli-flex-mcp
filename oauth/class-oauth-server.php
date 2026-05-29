@@ -70,6 +70,7 @@ class StifliFlexMcp_OAuth_Server {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
 		$path        = wp_parse_url( $request_uri, PHP_URL_PATH );
+		$path        = is_string( $path ) ? $path : '';
 		$method      = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : 'UNKNOWN';
 
 		// Log all incoming requests that hit .well-known or sflmcp_oauth.
@@ -82,6 +83,7 @@ class StifliFlexMcp_OAuth_Server {
 		if ( $home_path && '/' !== $home_path ) {
 			$path = substr( $path, strlen( $home_path ) );
 		}
+		$path = ( '/' !== $path ) ? untrailingslashit( $path ) : $path;
 
 		if ( '/.well-known/oauth-protected-resource' === $path ) {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
@@ -130,7 +132,7 @@ class StifliFlexMcp_OAuth_Server {
 	 */
 	private function serve_protected_resource_metadata() {
 		$metadata = array(
-			'resource'                => rest_url( $this->namespace ),
+			'resource'                => rest_url( $this->namespace . '/sse' ),
 			'authorization_servers'   => array( home_url() ),
 			'bearer_methods_supported' => array( 'header' ),
 			'scopes_supported'        => array( 'mcp' ),
@@ -152,7 +154,7 @@ class StifliFlexMcp_OAuth_Server {
 			'scopes_supported'                      => array( 'mcp' ),
 			'response_types_supported'              => array( 'code' ),
 			'grant_types_supported'                 => array( 'authorization_code', 'refresh_token' ),
-			'token_endpoint_auth_methods_supported' => array( 'none', 'client_secret_post' ),
+			'token_endpoint_auth_methods_supported' => array( 'none', 'client_secret_post', 'client_secret_basic' ),
 			'code_challenge_methods_supported'      => array( 'S256' ),
 			'service_documentation'                 => 'https://modelcontextprotocol.io/',
 		);
@@ -237,7 +239,7 @@ class StifliFlexMcp_OAuth_Server {
 		$storage = StifliFlexMcp_OAuth_Storage::get_instance();
 		$client  = $storage->get_client( $client_id );
 		if ( ! $client ) {
-			$this->show_authorize_error( 'Unknown client_id.' );
+			$this->show_authorize_error( 'Unknown client_id. This connector may still be using an OAuth client registration that was deleted. Remove and recreate the connector in your MCP client so it can register again.' );
 			return;
 		}
 
@@ -589,14 +591,20 @@ class StifliFlexMcp_OAuth_Server {
 		$grant_type = $request->get_param( 'grant_type' );
 
 		if ( 'authorization_code' === $grant_type ) {
-			return $this->handle_authorization_code_grant( $request );
+			$response = $this->handle_authorization_code_grant( $request );
+			$this->log_token_response( 'authorization_code', $request, $response );
+			return $response;
 		}
 
 		if ( 'refresh_token' === $grant_type ) {
-			return $this->handle_refresh_token_grant( $request );
+			$response = $this->handle_refresh_token_grant( $request );
+			$this->log_token_response( 'refresh_token', $request, $response );
+			return $response;
 		}
 
-		return $this->oauth_error( 'unsupported_grant_type', 'Supported: authorization_code, refresh_token.', 400 );
+		$response = $this->oauth_error( 'unsupported_grant_type', 'Supported: authorization_code, refresh_token.', 400 );
+		$this->log_token_response( (string) $grant_type, $request, $response );
+		return $response;
 	}
 
 	/**
@@ -611,6 +619,20 @@ class StifliFlexMcp_OAuth_Server {
 		$client_id     = $request->get_param( 'client_id' );
 		$code_verifier = $request->get_param( 'code_verifier' );
 		$client_secret = $request->get_param( 'client_secret' );
+		$basic_credentials = $this->get_basic_client_credentials( $request );
+		if ( is_wp_error( $basic_credentials ) ) {
+			return $this->oauth_error( 'invalid_client', $basic_credentials->get_error_message(), 401 );
+		}
+		if ( is_array( $basic_credentials ) ) {
+			if ( empty( $client_id ) ) {
+				$client_id = $basic_credentials['client_id'];
+			} elseif ( ! hash_equals( (string) $client_id, (string) $basic_credentials['client_id'] ) ) {
+				return $this->oauth_error( 'invalid_client', 'Mismatched client credentials.', 401 );
+			}
+			if ( empty( $client_secret ) ) {
+				$client_secret = $basic_credentials['client_secret'];
+			}
+		}
 
 		if ( empty( $code ) || empty( $redirect_uri ) || empty( $client_id ) || empty( $code_verifier ) ) {
 			return $this->oauth_error( 'invalid_request', 'Missing required parameters: code, redirect_uri, client_id, code_verifier.', 400 );
@@ -625,7 +647,7 @@ class StifliFlexMcp_OAuth_Server {
 		}
 
 		// Authenticate confidential clients.
-		if ( 'client_secret_post' === $client->token_endpoint_auth_method ) {
+		if ( 'none' !== $client->token_endpoint_auth_method ) {
 			if ( empty( $client_secret ) || ! $storage->validate_client_secret( $client, $client_secret ) ) {
 				return $this->oauth_error( 'invalid_client', 'Invalid client credentials.', 401 );
 			}
@@ -659,6 +681,9 @@ class StifliFlexMcp_OAuth_Server {
 			$code_record->scope,
 			$code_record->resource
 		);
+		if ( is_wp_error( $tokens ) ) {
+			return $this->oauth_error( 'server_error', $tokens->get_error_message(), 500 );
+		}
 
 		$response = new WP_REST_Response( $tokens, 200 );
 		return $this->with_no_cache_headers( $response );
@@ -674,6 +699,20 @@ class StifliFlexMcp_OAuth_Server {
 		$refresh_token = $request->get_param( 'refresh_token' );
 		$client_id     = $request->get_param( 'client_id' );
 		$client_secret = $request->get_param( 'client_secret' );
+		$basic_credentials = $this->get_basic_client_credentials( $request );
+		if ( is_wp_error( $basic_credentials ) ) {
+			return $this->oauth_error( 'invalid_client', $basic_credentials->get_error_message(), 401 );
+		}
+		if ( is_array( $basic_credentials ) ) {
+			if ( empty( $client_id ) ) {
+				$client_id = $basic_credentials['client_id'];
+			} elseif ( ! hash_equals( (string) $client_id, (string) $basic_credentials['client_id'] ) ) {
+				return $this->oauth_error( 'invalid_client', 'Mismatched client credentials.', 401 );
+			}
+			if ( empty( $client_secret ) ) {
+				$client_secret = $basic_credentials['client_secret'];
+			}
+		}
 
 		if ( empty( $refresh_token ) || empty( $client_id ) ) {
 			return $this->oauth_error( 'invalid_request', 'Missing required parameters: refresh_token, client_id.', 400 );
@@ -688,7 +727,7 @@ class StifliFlexMcp_OAuth_Server {
 		}
 
 		// Authenticate confidential clients.
-		if ( 'client_secret_post' === $client->token_endpoint_auth_method ) {
+		if ( 'none' !== $client->token_endpoint_auth_method ) {
 			if ( empty( $client_secret ) || ! $storage->validate_client_secret( $client, $client_secret ) ) {
 				return $this->oauth_error( 'invalid_client', 'Invalid client credentials.', 401 );
 			}
@@ -696,6 +735,9 @@ class StifliFlexMcp_OAuth_Server {
 
 		// Rotate: revoke old, issue new.
 		$tokens = $storage->refresh_token( $refresh_token, $client_id );
+		if ( is_wp_error( $tokens ) ) {
+			return $this->oauth_error( 'server_error', $tokens->get_error_message(), 500 );
+		}
 		if ( ! $tokens ) {
 			return $this->oauth_error( 'invalid_grant', 'Refresh token is invalid, expired, or revoked.', 400 );
 		}
@@ -821,6 +863,73 @@ class StifliFlexMcp_OAuth_Server {
 	}
 
 	/**
+	 * Parse HTTP Basic client authentication from a token request.
+	 *
+	 * @param WP_REST_Request $request REST request.
+	 * @return array|WP_Error|null Client credentials, error for malformed Basic auth, or null if absent.
+	 */
+	private function get_basic_client_credentials( $request ) {
+		$auth_header = $request ? $request->get_header( 'Authorization' ) : '';
+		if ( ! $auth_header && $request ) {
+			$auth_header = $request->get_header( 'authorization' );
+		}
+		if ( ! $auth_header ) {
+			foreach ( array( 'HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION' ) as $server_key ) {
+				if ( ! empty( $_SERVER[ $server_key ] ) ) {
+					$auth_header = wp_unslash( $_SERVER[ $server_key ] );
+					break;
+				}
+			}
+		}
+
+		if ( ! is_string( $auth_header ) || stripos( $auth_header, 'Basic ' ) !== 0 ) {
+			return null;
+		}
+
+		$decoded = base64_decode( trim( substr( $auth_header, 6 ) ), true );
+		if ( false === $decoded || strpos( $decoded, ':' ) === false ) {
+			return new WP_Error( 'invalid_client', 'Invalid Basic client authentication.' );
+		}
+
+		list( $client_id, $client_secret ) = explode( ':', $decoded, 2 );
+		$client_id = sanitize_text_field( rawurldecode( $client_id ) );
+		$client_secret = rawurldecode( $client_secret );
+
+		if ( '' === $client_id || '' === $client_secret ) {
+			return new WP_Error( 'invalid_client', 'Invalid Basic client authentication.' );
+		}
+
+		return array(
+			'client_id'     => $client_id,
+			'client_secret' => $client_secret,
+		);
+	}
+
+	/**
+	 * Log token endpoint outcome without recording secrets or token values.
+	 *
+	 * @param string           $grant_type Grant type label.
+	 * @param WP_REST_Request $request    REST request.
+	 * @param WP_REST_Response $response  REST response.
+	 */
+	private function log_token_response( $grant_type, $request, $response ) {
+		if ( ! function_exists( 'stifli_flex_mcp_log' ) ) {
+			return;
+		}
+		$client_id = sanitize_text_field( (string) $request->get_param( 'client_id' ) );
+		$client_log = '' !== $client_id ? substr( $client_id, 0, 16 ) . '...' : '(none)';
+		$status = is_object( $response ) && method_exists( $response, 'get_status' ) ? (int) $response->get_status() : 0;
+		$error = '';
+		if ( is_object( $response ) && method_exists( $response, 'get_data' ) ) {
+			$data = $response->get_data();
+			if ( is_array( $data ) && ! empty( $data['error'] ) ) {
+				$error = ' error=' . sanitize_key( $data['error'] );
+			}
+		}
+		stifli_flex_mcp_log( sprintf( 'OAuth token response: grant=%s client=%s status=%d%s', sanitize_key( (string) $grant_type ), $client_log, $status, $error ) );
+	}
+
+	/**
 	 * Handle GET /oauth/register — informational response for discovery probes.
 	 *
 	 * @param WP_REST_Request $request REST request.
@@ -865,6 +974,9 @@ class StifliFlexMcp_OAuth_Server {
 	 */
 	private function log_rest_request( $label, $request ) {
 		if ( ! function_exists( 'stifli_flex_mcp_log' ) ) {
+			return;
+		}
+		if ( '1' === (string) $request->get_header( 'x-stifli-flex-mcp-self-check' ) ) {
 			return;
 		}
 		$headers = $request->get_headers();

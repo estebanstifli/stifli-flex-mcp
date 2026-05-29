@@ -94,6 +94,15 @@
 .sflmcp-api-key-toggle:hover {
 	background: #dcdcde;
 }
+.sflmcp-search-image-providers .sflmcp-api-key-field {
+	margin-top: 8px;
+}
+.sflmcp-provider-enable {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 500;
+}
 
 /* Post-processing section */
 .sflmcp-postprocess-section {

@@ -34,6 +34,7 @@ class StifliFlexMcp {
 			add_action('admin_menu', array($this, 'registerAdmin'));
 			add_action('admin_menu', array($this, 'registerMcpServerSubmenu'), 15);
 			add_action('admin_menu', array($this, 'registerMultimediaSubmenu'), 25);
+			add_action('admin_menu', array($this, 'registerSeoSubmenu'), 26);
 			add_action('admin_init', array($this, 'registerSettings'));
 			add_action('admin_init', array($this, 'handleOAuthWellKnownNoticeDismiss'));
 			add_action('admin_notices', array($this, 'renderOAuthWellKnownNotice'));
@@ -131,7 +132,7 @@ class StifliFlexMcp {
 		// --- Verbose debug logging ---
 		$req_method = $request->get_method();
 		$req_route  = $request->get_route();
-		$auth_hdr   = $request->get_header( 'Authorization' );
+		$auth_hdr   = $this->getAuthorizationHeader( $request );
 		stifli_flex_mcp_log( sprintf(
 			'canAccessMCP: %s %s | Auth: %s | User-Agent: %s',
 			$req_method,
@@ -139,6 +140,13 @@ class StifliFlexMcp {
 			$auth_hdr ? substr( $auth_hdr, 0, 20 ) . '...' : '(none)',
 			$request->get_header( 'User-Agent' ) ?: '(none)'
 		) );
+		$this->traceMcpRequest('canAccessMCP/entry', array(
+			'method' => $req_method,
+			'route' => $req_route,
+			'auth_header' => $auth_hdr ? 'present' : 'none',
+			'query_token' => $request->get_param('token') ? 'present' : 'none',
+			'user_agent' => $request->get_header('User-Agent') ?: 'n/a',
+		));
 
 		// Streamable HTTP security: reject invalid Origin headers.
 		$origin = trim( (string) $request->get_header( 'Origin' ) );
@@ -177,7 +185,7 @@ class StifliFlexMcp {
 		set_transient( $rate_key, $rate_data, $window );
 
 		// --- OAuth 2.1 Bearer token validation ---
-		$auth_header = $request->get_header( 'Authorization' );
+		$auth_header = $auth_hdr;
 		if ( $auth_header && stripos( $auth_header, 'Bearer ' ) === 0 ) {
 			$bearer_token = substr( $auth_header, 7 );
 			if ( class_exists( 'StifliFlexMcp_OAuth_Server' ) ) {
@@ -214,6 +222,36 @@ class StifliFlexMcp {
 		return false;
 	}
 
+	private function getAuthorizationHeader( $request ) {
+		$auth_header = $request ? $request->get_header( 'Authorization' ) : '';
+		if ( ! $auth_header && $request ) {
+			$auth_header = $request->get_header( 'authorization' );
+		}
+
+		if ( ! $auth_header ) {
+			foreach ( array( 'HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION' ) as $server_key ) {
+				if ( ! empty( $_SERVER[ $server_key ] ) ) {
+					$auth_header = wp_unslash( $_SERVER[ $server_key ] );
+					break;
+				}
+			}
+		}
+
+		if ( ! $auth_header && function_exists( 'getallheaders' ) ) {
+			$headers = getallheaders();
+			if ( is_array( $headers ) ) {
+				foreach ( $headers as $name => $value ) {
+					if ( 'authorization' === strtolower( (string) $name ) ) {
+						$auth_header = $value;
+						break;
+					}
+				}
+			}
+		}
+
+		return is_string( $auth_header ) ? trim( sanitize_text_field( $auth_header ) ) : '';
+	}
+
 	/**
 	 * Resolve OAuth client_name from a bearer token for source tracking.
 	 *
@@ -237,14 +275,49 @@ class StifliFlexMcp {
 
 	public function handleCallback( $result, string $tool, array $args, $id ) {
 		if (!empty($result)) {
+			$this->traceMcpRequest('callback/short-circuit', array(
+				'id' => $id,
+				'tool' => $tool,
+			));
 			return $result;
 		}
 		$tools = $this->getModel()->getTools();
 		if (!isset($tools[$tool])) {
+			$this->traceMcpRequest('callback/tool-not-found', array(
+				'id' => $id,
+				'tool' => $tool,
+			));
 			StifliFlexMcpFrame::_()->saveDebugLogging('Tool not found ' . $tool, false, 'SFLMCP');
 			return $result;
 		}
-		return $this->getModel()->dispatchTool($tool, $args, $id);
+		$this->traceMcpRequest('callback/before-dispatch', array(
+			'id' => $id,
+			'tool' => $tool,
+			'args' => $args,
+		));
+		if ('wp_create_post' === $tool) {
+			$this->traceWpCreatePost('callback/before-dispatch', array(
+				'id' => $id,
+				'tool' => $tool,
+				'args' => $args,
+			));
+		}
+		$dispatch_result = $this->getModel()->dispatchTool($tool, $args, $id);
+		$this->traceMcpRequest('callback/after-dispatch', array(
+			'id' => $id,
+			'tool' => $tool,
+			'has_result' => is_array($dispatch_result) && isset($dispatch_result['result']),
+			'has_error' => is_array($dispatch_result) && isset($dispatch_result['error']),
+		));
+		if ('wp_create_post' === $tool) {
+			$this->traceWpCreatePost('callback/after-dispatch', array(
+				'id' => $id,
+				'has_result' => is_array($dispatch_result) && isset($dispatch_result['result']),
+				'has_error' => is_array($dispatch_result) && isset($dispatch_result['error']),
+				'dispatch_result' => $dispatch_result,
+			));
+		}
+		return $dispatch_result;
 	}
 
 	private function getSSEid($req) {
@@ -348,6 +421,58 @@ class StifliFlexMcp {
 
 	private function toolRequiresTask( $tool ): bool {
 		return is_string($tool) && in_array($tool, $this->getTaskManagedTools(), true);
+	}
+
+	private function isWpCreatePostToolsCallPayload( array $params ): bool {
+		if (isset($params['name']) && 'wp_create_post' === (string) $params['name']) {
+			return true;
+		}
+		if (isset($params['tool']) && 'wp_create_post' === (string) $params['tool']) {
+			return true;
+		}
+		return false;
+	}
+
+	private function isVerboseTraceEnabled(): bool {
+		return defined('SFLMCP_VERBOSE_TRACE') && true === SFLMCP_VERBOSE_TRACE;
+	}
+
+	private function traceWpCreatePost( string $stage, array $payload = array() ): void {
+		if (!$this->isVerboseTraceEnabled()) {
+			return;
+		}
+		$encoded = wp_json_encode($payload);
+		if (false === $encoded) {
+			$encoded = '[unserializable]';
+		}
+		if (strlen($encoded) > 3000) {
+			$encoded = substr($encoded, 0, 3000) . '...[truncated]';
+		}
+		stifli_flex_mcp_log('[TRACE wp_create_post] ' . $stage . ' ' . $encoded);
+	}
+
+	private function traceMcpRequest( string $stage, array $payload = array() ): void {
+		if (!$this->isVerboseTraceEnabled()) {
+			return;
+		}
+		$encoded = wp_json_encode($payload);
+		if (false === $encoded) {
+			$encoded = '[unserializable]';
+		}
+		if (strlen($encoded) > 3000) {
+			$encoded = substr($encoded, 0, 3000) . '...[truncated]';
+		}
+		stifli_flex_mcp_log('[TRACE mcp] ' . $stage . ' ' . $encoded);
+	}
+
+	private function getToolNameFromToolsCallParams( array $params ): string {
+		if (isset($params['name']) && is_scalar($params['name'])) {
+			return (string) $params['name'];
+		}
+		if (isset($params['tool']) && is_scalar($params['tool'])) {
+			return (string) $params['tool'];
+		}
+		return '';
 	}
 
 	private function normalizeArgumentsForTaskKey( $value ) {
@@ -816,6 +941,19 @@ class StifliFlexMcp {
 	}
 
 	private function handleToolsCallMethod( $id, array $params ) {
+		$this->traceMcpRequest('tools-call/raw-params', array(
+			'id' => $id,
+			'tool' => $this->getToolNameFromToolsCallParams($params),
+			'params' => $params,
+		));
+
+		if ($this->isWpCreatePostToolsCallPayload($params)) {
+			$this->traceWpCreatePost('tools-call/raw-params', array(
+				'id' => $id,
+				'params' => $params,
+			));
+		}
+
 		$tool = null;
 		$arguments = array();
 		if (isset($params['name'])) {
@@ -836,6 +974,20 @@ class StifliFlexMcp {
 			$argsLog = '[unserializable]';
 		}
 		stifli_flex_mcp_log(sprintf('tools/call: tool=%s arguments=%s task_augmented=%s', $toolLog, $argsLog, $isTaskAugmented ? 'yes' : 'no'));
+		$this->traceMcpRequest('tools-call/parsed', array(
+			'id' => $id,
+			'tool' => is_scalar($tool) ? (string) $tool : '',
+			'arguments' => $arguments,
+			'task_augmented' => $isTaskAugmented,
+		));
+		if ('wp_create_post' === $tool) {
+			$this->traceWpCreatePost('tools-call/parsed', array(
+				'id' => $id,
+				'tool' => $tool,
+				'arguments' => $arguments,
+				'task_augmented' => $isTaskAugmented,
+			));
+		}
 
 		if ($this->toolRequiresTask($tool)) {
 			if ($isTaskAugmented) {
@@ -850,6 +1002,13 @@ class StifliFlexMcp {
 		if ($isTaskAugmented) {
 			stifli_flex_mcp_log('tools/call: task augmentation rejected for unsupported tool=' . $toolLog);
 			return $this->rpcError($id, -32601, 'Task augmentation is not supported for tool: ' . $tool);
+		}
+		$this->traceMcpRequest('tools-call/before-execute', array(
+			'id' => $id,
+			'tool' => is_scalar($tool) ? (string) $tool : '',
+		));
+		if ('wp_create_post' === $tool) {
+			$this->traceWpCreatePost('tools-call/before-execute', array('id' => $id));
 		}
 
 		return $this->executeTool($tool, $arguments, $id);
@@ -952,6 +1111,29 @@ class StifliFlexMcp {
 		$qp = $request->get_param('token') ? 'present' : 'none';
 		$hdr = $request->get_header('Authorization') ? 'present' : 'none';
 		stifli_flex_mcp_log(sprintf('handleDirectJsonRPC: id=%s method=%s header=%s query=%s', $id, $method, $hdr, $qp));
+		$this->traceMcpRequest('direct-rpc/entry', array(
+			'id' => $id,
+			'method' => is_scalar($method) ? (string) $method : '',
+			'header_auth' => $hdr,
+			'query_token' => $qp,
+			'data_keys' => is_array($data) ? array_keys($data) : array(),
+		));
+		if ('tools/call' === $method) {
+			$params_for_trace = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+			if (is_array($params_for_trace)) {
+				$this->traceMcpRequest('direct-rpc/tools-call', array(
+					'id' => $id,
+					'tool' => $this->getToolNameFromToolsCallParams($params_for_trace),
+					'params' => $params_for_trace,
+				));
+			}
+			if (is_array($params_for_trace) && $this->isWpCreatePostToolsCallPayload($params_for_trace)) {
+				$this->traceWpCreatePost('direct-rpc/entry', array(
+					'id' => $id,
+					'params' => $params_for_trace,
+				));
+			}
+		}
 
 		// Set session_id for ChangeTracker — use query param or generate per request.
 		if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
@@ -1058,8 +1240,12 @@ class StifliFlexMcp {
 					$reply = array(
 						'jsonrpc' => '2.0',
 						'id' => $id,
-						'result' => array('resources' => array()),
+						'result' => array('resources' => $this->getResourcesList()),
 					);
+					break;
+				case 'resources/read':
+					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+					$reply = $this->handleResourcesReadMethod($id, $params);
 					break;
 				case 'prompts/list':
 					$reply = array(
@@ -1078,9 +1264,20 @@ class StifliFlexMcp {
 						'error' => array('code' => -44001, 'message' => "Method not found: {$method}"),
 					);
 			}
+			$this->traceMcpRequest('direct-rpc/reply', array(
+				'id' => $id,
+				'method' => is_scalar($method) ? (string) $method : '',
+				'has_result' => is_array($reply) && isset($reply['result']),
+				'has_error' => is_array($reply) && isset($reply['error']),
+			));
 			return $this->withProtocolHeaders(new WP_REST_Response($reply, 200), $replyProtocolVersion);
 		}
 		catch ( Exception $e ) {
+			$this->traceMcpRequest('direct-rpc/exception', array(
+				'id' => $id,
+				'method' => is_scalar($method) ? (string) $method : '',
+				'message' => $e->getMessage(),
+			));
 			return $this->withProtocolHeaders(new WP_REST_Response(array(
 				'jsonrpc' => '2.0',
 				'id' => $id,
@@ -1104,6 +1301,22 @@ class StifliFlexMcp {
 		   $hdr = $request->get_header('Authorization') ? 'present' : 'none';
 		   $qp = $request->get_param('token') ? 'present' : 'none';
 		   $remote = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'n/a';
+		   $this->traceMcpRequest('messages/entry', array(
+			   'session' => $sess,
+			   'remote' => $remote,
+			   'header_auth' => $hdr,
+			   'query_token' => $qp,
+			   'body_len' => strlen($body),
+			   'body_sample' => substr((string) $body, 0, 1400),
+		   ));
+		   if (false !== strpos((string) $body, 'wp_create_post')) {
+			   $this->traceWpCreatePost('messages/entry-body-hit', array(
+				   'session' => $sess,
+				   'remote' => $remote,
+				   'body_len' => strlen($body),
+				   'body_sample' => substr((string) $body, 0, 1400),
+			   ));
+		   }
 		   stifli_flex_mcp_log(sprintf('handleMessage: session=%s remote=%s header=%s query=%s body_len=%d', $sess, $remote, $hdr, $qp, strlen($body)));
 		   stifli_flex_mcp_log('handleMessage: RAW BODY: ' . $body);
 		   $data = json_decode($body, true);
@@ -1114,6 +1327,29 @@ class StifliFlexMcp {
 		   stifli_flex_mcp_log('handleMessage: JSON decoded: ' . $decodedForLog);
 		   $id = isset($data['id']) ? $data['id'] : null;
 		   $method = StifliFlexMcpUtils::getArrayValue($data, 'method', null);
+		   $this->traceMcpRequest('messages/decoded', array(
+			   'session' => $sess,
+			   'id' => $id,
+			   'method' => is_scalar($method) ? (string) $method : '',
+			   'json_error' => json_last_error(),
+			   'data_keys' => is_array($data) ? array_keys($data) : array(),
+		   ));
+		   if ('tools/call' === $method) {
+			   $params_for_trace = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+			   if (is_array($params_for_trace)) {
+				   $this->traceMcpRequest('messages/tools-call', array(
+					   'id' => $id,
+					   'tool' => $this->getToolNameFromToolsCallParams($params_for_trace),
+					   'params' => $params_for_trace,
+				   ));
+			   }
+			   if (is_array($params_for_trace) && $this->isWpCreatePostToolsCallPayload($params_for_trace)) {
+				   $this->traceWpCreatePost('messages/decoded-tools-call', array(
+					   'id' => $id,
+					   'params' => $params_for_trace,
+				   ));
+			   }
+		   }
 		   $replyProtocolVersion = $this->protocolVersion;
 		   $headerProtocolVersion = $this->getProtocolVersionHeader($request);
 		if ('initialize' !== $method && null !== $headerProtocolVersion) {
@@ -1217,6 +1453,10 @@ class StifliFlexMcp {
 						'result' => array('resources' => $this->getResourcesList()),
 					);
 					break;
+				case 'resources/read':
+					$params = StifliFlexMcpUtils::getArrayValue($data, 'params', array(), 2);
+					$reply = $this->handleResourcesReadMethod($id, $params);
+					break;
 				case 'prompts/list':
 					$reply = array(
 						'jsonrpc' => '2.0',
@@ -1239,14 +1479,32 @@ class StifliFlexMcp {
 					$reply = $this->rpcError($id, -45601, "Method not found: {$method}");
 			}
 			if ($reply) {
+				$this->traceMcpRequest('messages/reply', array(
+					'session' => $sess,
+					'id' => $id,
+					'method' => is_scalar($method) ? (string) $method : '',
+					'has_result' => is_array($reply) && isset($reply['result']),
+					'has_error' => is_array($reply) && isset($reply['error']),
+				));
 				// Devolver la respuesta JSON-RPC directamente
 				return $this->withProtocolHeaders(new WP_REST_Response($reply, 200), $replyProtocolVersion);
 			}
 		}
 		catch ( Exception $e ) {
+			$this->traceMcpRequest('messages/exception', array(
+				'session' => $sess,
+				'id' => $id,
+				'method' => is_scalar($method) ? (string) $method : '',
+				'message' => $e->getMessage(),
+			));
 			$error = $this->rpcError($id, -45603, 'Internal error', $e->getMessage() );
 			return $this->withProtocolHeaders(new WP_REST_Response($error, 200), $replyProtocolVersion);
 		}
+		$this->traceMcpRequest('messages/no-reply-202', array(
+			'session' => $sess,
+			'id' => $id,
+			'method' => is_scalar($method) ? (string) $method : '',
+		));
 		return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
 	}
 
@@ -1256,8 +1514,235 @@ class StifliFlexMcp {
 	}
 
 	private function getResourcesList() {
-		return array();
+		return array(
+			array(
+				'uri' => 'wp://site/info',
+				'name' => 'Site Info',
+				'description' => 'Compact WordPress site identity, environment, theme, permalink and MCP server context.',
+				'mimeType' => 'application/json',
+			),
+			array(
+				'uri' => 'wp://site/post-types',
+				'name' => 'Public Post Types',
+				'description' => 'Public post types with labels, REST bases, taxonomies and common editor supports.',
+				'mimeType' => 'application/json',
+			),
+			array(
+				'uri' => 'wp://site/recent-posts',
+				'name' => 'Recent Posts',
+				'description' => 'Recent public posts and pages with IDs, status, modified dates, permalinks and excerpts.',
+				'mimeType' => 'application/json',
+			),
+			array(
+				'uri' => 'wp://seo/summary',
+				'name' => 'SEO Summary',
+				'description' => 'Read-only SEO plugin and Search Console configuration summary without loading optional SEO modules.',
+				'mimeType' => 'application/json',
+			),
+		);
 	}
+
+	private function handleResourcesReadMethod( $id, $params ) {
+		$params = is_array($params) ? $params : array();
+		$uri = isset($params['uri']) ? sanitize_text_field((string) $params['uri']) : '';
+		if ('' === $uri) {
+			return $this->rpcError($id, -32602, 'Missing required resource uri.');
+		}
+
+		$payload = $this->readResourcePayload($uri);
+		if (is_wp_error($payload)) {
+			return $this->rpcError($id, -32004, $payload->get_error_message());
+		}
+
+		$text = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+		if (false === $text) {
+			$text = '{}';
+		}
+
+		return array(
+			'jsonrpc' => '2.0',
+			'id' => $id,
+			'result' => array(
+				'contents' => array(
+					array(
+						'uri' => $uri,
+						'mimeType' => 'application/json',
+						'text' => $text,
+					),
+				),
+			),
+		);
+	}
+
+	private function readResourcePayload( $uri ) {
+		switch ((string) $uri) {
+			case 'wp://site/info':
+				return $this->buildSiteInfoResource();
+			case 'wp://site/post-types':
+				return $this->buildPostTypesResource();
+			case 'wp://site/recent-posts':
+				return $this->buildRecentPostsResource();
+			case 'wp://seo/summary':
+				return $this->buildSeoSummaryResource();
+		}
+
+		return new WP_Error('resource_not_found', 'Unknown MCP resource: ' . (string) $uri);
+	}
+
+	private function buildSiteInfoResource() {
+		$theme = wp_get_theme();
+		$active_plugins = get_option('active_plugins', array());
+		$active_plugins = is_array($active_plugins) ? $active_plugins : array();
+
+		return array(
+			'uri' => 'wp://site/info',
+			'name' => get_bloginfo('name'),
+			'description' => get_bloginfo('description'),
+			'home_url' => home_url('/'),
+			'site_url' => site_url('/'),
+			'rest_url' => rest_url(),
+			'language' => get_bloginfo('language'),
+			'timezone' => wp_timezone_string(),
+			'current_time' => current_time('mysql'),
+			'wordpress_version' => get_bloginfo('version'),
+			'multisite' => is_multisite(),
+			'permalink_structure' => get_option('permalink_structure'),
+			'active_theme' => array(
+				'name' => $theme->get('Name'),
+				'version' => $theme->get('Version'),
+				'stylesheet' => get_stylesheet(),
+				'template' => get_template(),
+			),
+			'active_plugins_count' => count($active_plugins),
+			'mcp' => array(
+				'namespace' => $this->namespace,
+				'protocol_version' => $this->protocolVersion,
+			),
+		);
+	}
+
+	private function buildPostTypesResource() {
+		$post_types = get_post_types(array('public' => true), 'objects');
+		$out = array();
+
+		foreach ($post_types as $name => $post_type) {
+			$supports = array();
+			foreach (array('title', 'editor', 'excerpt', 'thumbnail', 'custom-fields', 'revisions') as $feature) {
+				if (post_type_supports($name, $feature)) {
+					$supports[] = $feature;
+				}
+			}
+
+			$out[] = array(
+				'name' => $name,
+				'label' => isset($post_type->label) ? $post_type->label : $name,
+				'rest_base' => !empty($post_type->rest_base) ? $post_type->rest_base : $name,
+				'has_archive' => !empty($post_type->has_archive),
+				'hierarchical' => !empty($post_type->hierarchical),
+				'taxonomies' => get_object_taxonomies($name),
+				'supports' => $supports,
+			);
+		}
+
+		return array(
+			'uri' => 'wp://site/post-types',
+			'post_types' => $out,
+			'total' => count($out),
+		);
+	}
+
+	private function buildRecentPostsResource() {
+		$query = new WP_Query(array(
+			'post_type' => array('post', 'page'),
+			'post_status' => array('publish', 'draft', 'pending', 'future', 'private'),
+			'posts_per_page' => 10,
+			'orderby' => 'modified',
+			'order' => 'DESC',
+			'no_found_rows' => true,
+		));
+		$items = array();
+
+		foreach ($query->posts as $post) {
+			if (!current_user_can('edit_post', $post->ID)) {
+				continue;
+			}
+			$content = wp_strip_all_tags(strip_shortcodes((string) $post->post_content));
+			$excerpt = wp_strip_all_tags((string) $post->post_excerpt);
+			if ('' === trim($excerpt)) {
+				$excerpt = wp_trim_words($content, 28, '');
+			}
+			$items[] = array(
+				'id' => (int) $post->ID,
+				'post_type' => $post->post_type,
+				'post_status' => $post->post_status,
+				'title' => get_the_title($post),
+				'permalink' => get_permalink($post),
+				'modified_gmt' => $post->post_modified_gmt,
+				'excerpt' => trim(preg_replace('/\s+/', ' ', $excerpt)),
+			);
+		}
+
+		return array(
+			'uri' => 'wp://site/recent-posts',
+			'items' => $items,
+			'total' => count($items),
+		);
+	}
+
+	private function buildSeoSummaryResource() {
+		$settings = get_option('sflmcp_seo_settings', array());
+		$settings = is_array($settings) ? $settings : array();
+		$gsc_enabled = isset($settings['gsc_enabled']) && '1' === (string) $settings['gsc_enabled'];
+		$gsc_configured = !empty($settings['gsc_oauth_client_id']) && !empty($settings['gsc_oauth_client_secret']) && !empty($settings['gsc_oauth_refresh_token']);
+		$tools_table = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools', false);
+		$seo_tools = array();
+
+		if (function_exists('stifli_flex_mcp_table_exists') && stifli_flex_mcp_table_exists($tools_table)) {
+			global $wpdb;
+			$tools_table_sql = StifliFlexMcpUtils::getPrefixedTable('sflmcp_tools');
+			$cache_key = 'seo_summary_tools';
+			$rows = wp_cache_get($cache_key, 'sflmcp');
+			if (false === $rows) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- plugin table name is sanitized by getPrefixedTable().
+				$rows = $wpdb->get_results(
+					$wpdb->prepare(
+						"SELECT tool_name, enabled FROM {$tools_table_sql} WHERE category LIKE %s OR category = %s ORDER BY category, tool_name",
+						$wpdb->esc_like('SEO - ') . '%',
+						'WordPress - SEO'
+					),
+					ARRAY_A
+				);
+				wp_cache_set($cache_key, $rows, 'sflmcp', 5 * MINUTE_IN_SECONDS);
+			}
+			if (is_array($rows)) {
+				foreach ($rows as $row) {
+					$seo_tools[] = array(
+						'name' => isset($row['tool_name']) ? $row['tool_name'] : '',
+						'enabled' => isset($row['enabled']) ? 1 === (int) $row['enabled'] : false,
+					);
+				}
+			}
+		}
+
+		return array(
+			'uri' => 'wp://seo/summary',
+			'plugins' => array(
+				'yoast_active' => defined('WPSEO_VERSION') || function_exists('YoastSEO'),
+				'rank_math_active' => defined('RANK_MATH_VERSION') || function_exists('rank_math'),
+			),
+			'search_console' => array(
+				'enabled' => $gsc_enabled,
+				'configured' => $gsc_configured,
+				'runtime_available' => function_exists('stifli_flex_mcp_is_gsc_enabled_for_runtime') ? stifli_flex_mcp_is_gsc_enabled_for_runtime() : false,
+				'default_property' => isset($settings['gsc_site_url']) ? sanitize_text_field((string) $settings['gsc_site_url']) : '',
+				'cache_ttl' => isset($settings['gsc_cache_ttl']) ? absint($settings['gsc_cache_ttl']) : 900,
+				'connected_at' => isset($settings['gsc_oauth_connected_at']) ? sanitize_text_field((string) $settings['gsc_oauth_connected_at']) : '',
+				'last_test_status' => isset($settings['gsc_last_test_status']) ? sanitize_text_field((string) $settings['gsc_last_test_status']) : '',
+			),
+			'tools' => $seo_tools,
+		);
+	}
+
 	private function getPromptsList() {
 		return array();
 	}
@@ -1277,8 +1762,37 @@ class StifliFlexMcp {
 				   $idLog = is_scalar($id) ? (string) $id : '[unserializable]';
 			   }
 			   stifli_flex_mcp_log(sprintf('executeTool: tool=%s args=%s id=%s', $toolLog, $argsLog, $idLog));
+			   $this->traceMcpRequest('execute/start', array(
+				   'id' => $id,
+				   'tool' => is_scalar($tool) ? (string) $tool : '',
+				   'args' => is_array($args) ? $args : array(),
+			   ));
+			   if ('wp_create_post' === $tool) {
+				   $this->traceWpCreatePost('execute/start', array(
+					   'id' => $id,
+					   'tool' => $tool,
+					   'args' => $args,
+				   ));
+			   }
 			   $filtered = StifliFlexMcpDispatcher::applyFilters('sflmcp_callback', null, $tool, $args, $id, $this);
 			   if (!is_null($filtered)) {
+				   $this->traceMcpRequest('execute/after-filter', array(
+					   'id' => $id,
+					   'tool' => is_scalar($tool) ? (string) $tool : '',
+					   'has_result' => is_array($filtered) && isset($filtered['result']),
+					   'has_error' => is_array($filtered) && isset($filtered['error']),
+				   ));
+				   if ('wp_create_post' === $tool) {
+					   $this->traceWpCreatePost('execute/after-filter', array(
+						   'id' => $id,
+						   'has_result' => is_array($filtered) && isset($filtered['result']),
+						   'has_error' => is_array($filtered) && isset($filtered['error']),
+						   'filtered' => $filtered,
+					   ));
+				   }
+				   if (is_array($filtered) && isset($filtered['error']) && !isset($filtered['result'])) {
+					   return $this->convertToolErrorToResult($filtered, $id, is_scalar($tool) ? (string) $tool : '');
+				   }
 				   if (is_array($filtered) && isset($filtered['jsonrpc']) && isset($filtered['id'])) {
 					   return $filtered;
 				   }
@@ -1292,8 +1806,67 @@ class StifliFlexMcp {
 		   }
 		   catch ( Exception $e ) {
 			   stifli_flex_mcp_log('executeTool: Exception: ' . $e->getMessage());
-			   return $this->rpcError( $id, -44003, $e->getMessage() );
+			   $this->traceMcpRequest('execute/exception', array(
+				   'id' => $id,
+				   'tool' => is_scalar($tool) ? (string) $tool : '',
+				   'message' => $e->getMessage(),
+			   ));
+			   if ('wp_create_post' === $tool) {
+				   $this->traceWpCreatePost('execute/exception', array(
+					   'id' => $id,
+					   'message' => $e->getMessage(),
+				   ));
+			   }
+			   return $this->convertToolErrorToResult(
+				   $this->rpcError( $id, -44003, $e->getMessage() ),
+				   $id,
+				   is_scalar($tool) ? (string) $tool : ''
+			   );
 		   }
+	}
+
+	private function convertToolErrorToResult( array $payload, $id, string $tool = '' ): array {
+		$error = isset($payload['error']) && is_array($payload['error']) ? $payload['error'] : array();
+		$errorCodeRaw = isset($error['code']) ? $error['code'] : -32603;
+		$errorCodeNumeric = is_int($errorCodeRaw)
+			? $errorCodeRaw
+			: (is_numeric($errorCodeRaw) ? intval($errorCodeRaw) : -32603);
+		$errorCodeLabel = is_scalar($errorCodeRaw) ? (string) $errorCodeRaw : '';
+
+		$errorMessage = isset($error['message']) && is_scalar($error['message'])
+			? (string) $error['message']
+			: 'Tool execution failed.';
+
+		$structured = array(
+			'success' => false,
+			'error_code' => $errorCodeNumeric,
+			'error_message' => $errorMessage,
+		);
+
+		if ('' !== $tool) {
+			$structured['tool'] = $tool;
+		}
+		if ('' !== $errorCodeLabel && (string) $errorCodeNumeric !== $errorCodeLabel) {
+			$structured['error_slug'] = $errorCodeLabel;
+		}
+		if (isset($error['data'])) {
+			$structured['error_data'] = $error['data'];
+		}
+
+		return array(
+			'jsonrpc' => '2.0',
+			'id' => $id,
+			'result' => array(
+				'content' => array(
+					array(
+						'type' => 'text',
+						'text' => $errorMessage,
+					),
+				),
+				'structuredContent' => $structured,
+				'isError' => true,
+			),
+		);
 	}
 
 	private function rpcError( $id, int $code, string $msg, $extra = null ): array {
@@ -1820,6 +2393,37 @@ class StifliFlexMcp {
 	}
 
 	/**
+	 * Register SEO submenu without loading the optional SEO module.
+	 */
+	public function registerSeoSubmenu() {
+		add_submenu_page(
+			'stifli-flex-mcp',
+			__('SEO', 'stifli-flex-mcp'),
+			__('SEO', 'stifli-flex-mcp'),
+			'manage_options',
+			'sflmcp-seo',
+			array($this, 'seoPage')
+		);
+	}
+
+	/**
+	 * Load and render the optional SEO admin module on demand.
+	 */
+	public function seoPage() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to view this page.', 'stifli-flex-mcp' ) );
+		}
+
+		$seo_admin = function_exists( 'stifli_flex_mcp_load_seo_admin_module' ) ? stifli_flex_mcp_load_seo_admin_module() : null;
+		if ( $seo_admin && method_exists( $seo_admin, 'render_page' ) ) {
+			$seo_admin->render_page();
+			return;
+		}
+
+		wp_die( esc_html__( 'SEO module is not available.', 'stifli-flex-mcp' ) );
+	}
+
+	/**
 	 * Register settings used by the plugin
 	 */
 	public function registerSettings() {
@@ -2002,6 +2606,17 @@ class StifliFlexMcp {
 		$result['code'] = $code;
 
 		if (200 === $code) {
+			$bodyHead = strtolower(ltrim($body));
+			foreach (array('<!doctype html', '<html', '<head', '<?xml') as $htmlPrefix) {
+				if (0 === strpos($bodyHead, $htmlPrefix)) {
+					$result['status'] = 'body_is_html';
+					$result['blocked'] = true;
+					$result['message'] = 'The OAuth discovery endpoint returned HTML instead of JSON.';
+					set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
+					return $result;
+				}
+			}
+
 			$decoded = json_decode($body, true);
 			if (is_array($decoded) && !empty($decoded['authorization_endpoint']) && !empty($decoded['token_endpoint'])) {
 				$result['status'] = 'ok';
@@ -2016,6 +2631,34 @@ class StifliFlexMcp {
 		} else {
 			$result['status'] = 'error';
 			$result['message'] = 'Unexpected HTTP status from oauth-authorization-server endpoint.';
+		}
+
+		if ('ok' === $result['status']) {
+			$registerUrl = rest_url($this->namespace . '/oauth/register');
+			$registerResponse = wp_remote_post($registerUrl, array(
+				'timeout' => 8,
+				'redirection' => 0,
+				'headers' => array(
+					'Content-Type' => 'application/json',
+					'X-Stifli-Flex-MCP-Self-Check' => '1',
+				),
+				'body' => '{}',
+			));
+
+			if (!is_wp_error($registerResponse)) {
+				$registerCode = (int) wp_remote_retrieve_response_code($registerResponse);
+				$location = (string) wp_remote_retrieve_header($registerResponse, 'location');
+				$registerPath = (string) wp_parse_url($registerUrl, PHP_URL_PATH);
+				$locationPath = '' !== $location ? (string) wp_parse_url($location, PHP_URL_PATH) : '';
+				if (in_array($registerCode, array(301, 302, 307, 308), true) && '' !== $locationPath && untrailingslashit($locationPath) === untrailingslashit($registerPath) && $locationPath !== $registerPath) {
+					$result['status'] = 'register_redirect';
+					$result['blocked'] = true;
+					$result['url'] = $registerUrl;
+					$result['code'] = $registerCode;
+					$result['location'] = $location;
+					$result['message'] = 'The OAuth registration endpoint redirects POST requests to a trailing-slash URL.';
+				}
+			}
 		}
 
 		set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
@@ -2083,11 +2726,21 @@ class StifliFlexMcp {
 		$helpUrl = admin_url('admin.php?page=sflmcp-server&tab=help#troubleshooting');
 		$endpoint = isset($check['url']) ? (string) $check['url'] : home_url('/.well-known/oauth-authorization-server');
 		$code = isset($check['code']) ? (int) $check['code'] : 0;
+		$status = isset($check['status']) ? (string) $check['status'] : '';
+		$title = __('OAuth discovery endpoint may be blocked by hosting.', 'stifli-flex-mcp');
+		$description = __('External MCP connectors (Claude/ChatGPT) may fail to open the authorization window if this endpoint is unreachable:', 'stifli-flex-mcp');
+		if ('body_is_html' === $status) {
+			$title = __('OAuth discovery endpoint is returning HTML instead of JSON.', 'stifli-flex-mcp');
+			$description = __('A membership plugin, theme, firewall, or host rule may be intercepting this endpoint before the OAuth metadata reaches the client:', 'stifli-flex-mcp');
+		} elseif ('register_redirect' === $status) {
+			$title = __('OAuth registration endpoint redirects POST requests.', 'stifli-flex-mcp');
+			$description = __('Dynamic client registration may fail because this POST endpoint is redirected, usually to a trailing-slash URL:', 'stifli-flex-mcp');
+		}
 		?>
 		<div class="notice notice-warning is-dismissible">
-			<p><strong><?php echo esc_html__('OAuth discovery endpoint may be blocked by hosting.', 'stifli-flex-mcp'); ?></strong></p>
+			<p><strong><?php echo esc_html($title); ?></strong></p>
 			<p>
-				<?php echo esc_html__('External MCP connectors (Claude/ChatGPT) may fail to open the authorization window if this endpoint is unreachable:', 'stifli-flex-mcp'); ?>
+				<?php echo esc_html($description); ?>
 				<code><?php echo esc_html($endpoint); ?></code>
 				<?php if ($code > 0) : ?>
 					(HTTP <?php echo esc_html((string) $code); ?>)
@@ -2239,10 +2892,10 @@ class StifliFlexMcp {
 				'i18n' => array(
 					'confirmDeleteClient' => __('Are you sure you want to delete this OAuth client and revoke all its tokens?', 'stifli-flex-mcp'),
 					'confirmRevokeToken' => __('Revoke this token? The client will need to re-authorize.', 'stifli-flex-mcp'),
-					'confirmResetState' => __('Reset all OAuth clients, access tokens, refresh tokens, and pending authorization codes? All MCP clients will need to authorize again.', 'stifli-flex-mcp'),
+					'confirmResetState' => __('Revoke all OAuth access tokens, refresh tokens, and pending authorization codes? Registered clients will be kept so MCP apps can reconnect with the same client ID.', 'stifli-flex-mcp'),
 					'clientDeleted' => __('OAuth client deleted', 'stifli-flex-mcp'),
 					'tokenRevoked' => __('Token revoked', 'stifli-flex-mcp'),
-					'resetStateSuccess' => __('OAuth state reset. Reloading...', 'stifli-flex-mcp'),
+					'resetStateSuccess' => __('OAuth sessions reset. Reloading...', 'stifli-flex-mcp'),
 					'settingsSaved' => __('Settings saved', 'stifli-flex-mcp'),
 					'error' => __('An error occurred', 'stifli-flex-mcp'),
 				),
@@ -2496,8 +3149,8 @@ class StifliFlexMcp {
 			<!-- Connected Clients -->
 			<div class="sflmcp-settings-section">
 				<h3><?php esc_html_e( 'Connected Clients', 'stifli-flex-mcp' ); ?></h3>
-				<p class="description"><?php esc_html_e( 'If external MCP clients are stuck after a site restore or a broken OAuth handshake, you can wipe every registered OAuth client, token, and pending authorization code and start over.', 'stifli-flex-mcp' ); ?></p>
-				<p><button type="button" class="button button-secondary sflmcp-oauth-reset-state"><?php esc_html_e( 'Reset OAuth State', 'stifli-flex-mcp' ); ?></button></p>
+				<p class="description"><?php esc_html_e( 'If external MCP clients are stuck after a site restore or a broken OAuth handshake, you can revoke every OAuth session and pending authorization code while keeping registered clients available for re-authorization. Use Delete to remove a client registration completely.', 'stifli-flex-mcp' ); ?></p>
+				<p><button type="button" class="button button-secondary sflmcp-oauth-reset-state"><?php esc_html_e( 'Reset OAuth Sessions', 'stifli-flex-mcp' ); ?></button></p>
 				<?php if ( empty( $clients ) ) : ?>
 					<p class="description"><?php esc_html_e( 'No clients connected yet. Follow the steps above to connect your first AI assistant.', 'stifli-flex-mcp' ); ?></p>
 				<?php else : ?>
@@ -2694,10 +3347,10 @@ class StifliFlexMcp {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Tools reset and reseeded successfully.', 'stifli-flex-mcp') . '</p></div>';
 		}
 		
-		// Get all tools grouped by category (ONLY WordPress, excluding WooCommerce).
-		$tools_query = sprintf('SELECT * FROM %s WHERE category NOT LIKE %%s ORDER BY category, tool_name', $table_sql);
+		// Get all tools grouped by category (ONLY core WordPress tools; exclude WooCommerce and Plugins integration categories).
+		$tools_query = sprintf('SELECT * FROM %s WHERE category NOT LIKE %%s AND category NOT LIKE %%s ORDER BY category, tool_name', $table_sql);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- query uses sprintf with safe table wrapper.
-		$tools = $wpdb->get_results($wpdb->prepare($tools_query, 'WooCommerce%'), ARRAY_A);
+		$tools = $wpdb->get_results($wpdb->prepare($tools_query, 'WooCommerce%', 'Plugins - %'), ARRAY_A);
 
 		if (!empty($integration_managed_tools)) {
 			$tools = array_values(array_filter($tools, function($tool) use ($integration_managed_tools) {
@@ -3578,7 +4231,6 @@ class StifliFlexMcp {
 		
 		// Calculate new token totals
 		$is_wc = strpos($tool['category'], 'WooCommerce') === 0;
-		$like_pattern = $is_wc ? 'WooCommerce%' : '';
 		
 		if ($is_wc) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -3589,8 +4241,8 @@ class StifliFlexMcp {
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$total_tokens = $wpdb->get_var($wpdb->prepare(
-				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND enabled = %d",
-				'WooCommerce%', 1
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND category NOT LIKE %s AND enabled = %d",
+				'WooCommerce%', 'Plugins - %', 1
 			));
 		}
 		
@@ -3745,8 +4397,8 @@ class StifliFlexMcp {
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$total_tokens = $wpdb->get_var($wpdb->prepare(
-				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND enabled = %d",
-				'WooCommerce%', 1
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND category NOT LIKE %s AND enabled = %d",
+				'WooCommerce%', 'Plugins - %', 1
 			));
 		}
 		
@@ -3825,8 +4477,8 @@ class StifliFlexMcp {
 		} else {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$total_tokens = $wpdb->get_var($wpdb->prepare(
-				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND enabled = %d",
-				'WooCommerce%', 1
+				"SELECT COALESCE(SUM(token_estimate),0) FROM $table WHERE category NOT LIKE %s AND category NOT LIKE %s AND enabled = %d",
+				'WooCommerce%', 'Plugins - %', 1
 			));
 		}
 		
@@ -4376,13 +5028,13 @@ class StifliFlexMcp {
 			'sflmcp-admin-multimedia',
 			plugin_dir_url(__FILE__) . 'assets/admin-multimedia.css',
 			array(),
-			'1.3.0'
+			'1.4.0'
 		);
 		wp_enqueue_script(
 			'sflmcp-admin-multimedia',
 			plugin_dir_url(__FILE__) . 'assets/admin-multimedia.js',
 			array('jquery'),
-			'1.6.0',
+			'1.7.0',
 			true
 		);
 		wp_localize_script('sflmcp-admin-multimedia', 'sflmcpMultimedia', array(
@@ -4414,6 +5066,9 @@ class StifliFlexMcp {
 				<a href="?page=sflmcp-multimedia&tab=images" class="nav-tab <?php echo $active_tab === 'images' ? 'nav-tab-active' : ''; ?>">
 					🖼️ <?php esc_html_e( 'Images', 'stifli-flex-mcp' ); ?>
 				</a>
+				<a href="?page=sflmcp-multimedia&tab=search-image" class="nav-tab <?php echo $active_tab === 'search-image' ? 'nav-tab-active' : ''; ?>">
+					<span class="dashicons dashicons-search"></span> <?php esc_html_e( 'Search Image', 'stifli-flex-mcp' ); ?>
+				</a>
 				<a href="?page=sflmcp-multimedia&tab=videos" class="nav-tab <?php echo $active_tab === 'videos' ? 'nav-tab-active' : ''; ?>">
 					🎬 <?php esc_html_e( 'Videos', 'stifli-flex-mcp' ); ?>
 				</a>
@@ -4421,6 +5076,8 @@ class StifliFlexMcp {
 			<?php
 			if ( $active_tab === 'videos' ) {
 				$this->renderVideoSettingsTab();
+			} elseif ( $active_tab === 'search-image' ) {
+				$this->renderSearchImageSettingsTab();
 			} else {
 				$this->renderMultimediaTab();
 			}
@@ -4464,6 +5121,20 @@ class StifliFlexMcp {
 			'video_resolution'     => '720p',
 			'video_poll_interval'  => 10,
 			'video_max_wait'       => 300,
+			// Search Image settings
+			'search_image_preferred_bank' => 'random',
+			'search_image_selection'      => 'most_relevant',
+			'search_image_orientation'    => 'any',
+			'search_image_safe_search'    => '1',
+			'search_image_language'       => 'en',
+			'search_image_locale'         => 'en-US',
+			'search_image_timeout'        => 20,
+			'search_image_unsplash_enabled' => '0',
+			'search_image_unsplash_api_key' => '',
+			'search_image_pexels_enabled'   => '0',
+			'search_image_pexels_api_key'   => '',
+			'search_image_pixabay_enabled'  => '0',
+			'search_image_pixabay_api_key'  => '',
 		);
 		$saved = get_option( 'sflmcp_multimedia_settings', array() );
 		return wp_parse_args( $saved, $defaults );
@@ -4963,6 +5634,169 @@ class StifliFlexMcp {
 	}
 
 	/**
+	 * Render Search Image Settings Tab.
+	 */
+	private function renderSearchImageSettingsTab() {
+		$s = $this->getMultimediaSettings();
+
+		$unsplash_display = $this->maskApiKeyForDisplay( $s['search_image_unsplash_api_key'] );
+		$pexels_display   = $this->maskApiKeyForDisplay( $s['search_image_pexels_api_key'] );
+		$pixabay_display  = $this->maskApiKeyForDisplay( $s['search_image_pixabay_api_key'] );
+		?>
+		<div class="sflmcp-multimedia-wrap">
+
+			<div class="sflmcp-tool-toggle-banner" data-tool="wp_search_image">
+				<label class="sflmcp-toggle-switch">
+					<input type="checkbox" id="sflmcp_mm_tool_search_image_toggle" class="sflmcp-mm-tool-toggle" data-tool="wp_search_image">
+					<span class="sflmcp-toggle-slider"></span>
+				</label>
+				<span class="sflmcp-toggle-label">
+					<strong>wp_search_image</strong> — <?php esc_html_e( 'Enable this tool for MCP clients and AI agents', 'stifli-flex-mcp' ); ?>
+				</span>
+				<span class="sflmcp-toggle-status"></span>
+			</div>
+
+			<h2><?php esc_html_e( 'Search Image Settings', 'stifli-flex-mcp' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Configure free image-bank search for the wp_search_image tool. The tool returns a selected image URL plus attribution, captions, dimensions, thumbnails and provider metadata.', 'stifli-flex-mcp' ); ?>
+			</p>
+
+			<div id="sflmcp-mm-notice" class="sflmcp-mm-notice"></div>
+
+			<form id="sflmcp-multimedia-form-search-image" class="sflmcp-multimedia-form">
+				<div class="card">
+					<h3><span class="dashicons dashicons-admin-site-alt3"></span> <?php esc_html_e( 'Image Banks', 'stifli-flex-mcp' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'Enable the providers you want to use and add each provider API key. Only enabled providers with a key are used by the tool.', 'stifli-flex-mcp' ); ?></p>
+
+					<table class="form-table sflmcp-search-image-providers">
+						<tr>
+							<th>Unsplash</th>
+							<td>
+								<label class="sflmcp-provider-enable">
+									<input type="checkbox" id="sflmcp_mm_search_unsplash_enabled" <?php checked( $s['search_image_unsplash_enabled'], '1' ); ?>>
+									<?php esc_html_e( 'Enable Unsplash', 'stifli-flex-mcp' ); ?>
+								</label>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_search_unsplash_key" class="sflmcp-shared-apikey" data-key="search_image_unsplash_api_key" value="<?php echo esc_attr( $unsplash_display ); ?>" placeholder="Unsplash access key" autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Uses Unsplash Search Photos. Attribution and download tracking fields are included in the tool response.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th>Pexels</th>
+							<td>
+								<label class="sflmcp-provider-enable">
+									<input type="checkbox" id="sflmcp_mm_search_pexels_enabled" <?php checked( $s['search_image_pexels_enabled'], '1' ); ?>>
+									<?php esc_html_e( 'Enable Pexels', 'stifli-flex-mcp' ); ?>
+								</label>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_search_pexels_key" class="sflmcp-shared-apikey" data-key="search_image_pexels_api_key" value="<?php echo esc_attr( $pexels_display ); ?>" placeholder="Pexels API key" autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Uses Pexels Photo Search with photographer attribution, source page and image dimensions.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th>Pixabay</th>
+							<td>
+								<label class="sflmcp-provider-enable">
+									<input type="checkbox" id="sflmcp_mm_search_pixabay_enabled" <?php checked( $s['search_image_pixabay_enabled'], '1' ); ?>>
+									<?php esc_html_e( 'Enable Pixabay', 'stifli-flex-mcp' ); ?>
+								</label>
+								<div class="sflmcp-api-key-field">
+									<input type="password" id="sflmcp_mm_search_pixabay_key" class="sflmcp-shared-apikey" data-key="search_image_pixabay_api_key" value="<?php echo esc_attr( $pixabay_display ); ?>" placeholder="Pixabay API key" autocomplete="off">
+									<button type="button" class="button sflmcp-api-key-toggle" title="<?php esc_attr_e( 'Toggle visibility', 'stifli-flex-mcp' ); ?>"><span class="dashicons dashicons-visibility"></span></button>
+								</div>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Uses Pixabay image search with tags, preview URLs, dimensions and user attribution.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<div class="card">
+					<h3><span class="dashicons dashicons-filter"></span> <?php esc_html_e( 'Selection Defaults', 'stifli-flex-mcp' ); ?></h3>
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Preferred Image Bank', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_search_preferred_bank">
+									<option value="random" <?php selected( $s['search_image_preferred_bank'], 'random' ); ?>><?php esc_html_e( 'Random configured provider', 'stifli-flex-mcp' ); ?></option>
+									<option value="unsplash" <?php selected( $s['search_image_preferred_bank'], 'unsplash' ); ?>>Unsplash</option>
+									<option value="pexels" <?php selected( $s['search_image_preferred_bank'], 'pexels' ); ?>>Pexels</option>
+									<option value="pixabay" <?php selected( $s['search_image_preferred_bank'], 'pixabay' ); ?>>Pixabay</option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Tool calls can override this with the provider argument.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Image Selection', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_search_selection">
+									<option value="most_relevant" <?php selected( $s['search_image_selection'], 'most_relevant' ); ?>><?php esc_html_e( 'Most relevant (first result)', 'stifli-flex-mcp' ); ?></option>
+									<option value="random_top10" <?php selected( $s['search_image_selection'], 'random_top10' ); ?>><?php esc_html_e( 'Random from top 10', 'stifli-flex-mcp' ); ?></option>
+									<option value="random_top20" <?php selected( $s['search_image_selection'], 'random_top20' ); ?>><?php esc_html_e( 'Random from top 20', 'stifli-flex-mcp' ); ?></option>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Orientation', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<select id="sflmcp_mm_search_orientation">
+									<option value="any" <?php selected( $s['search_image_orientation'], 'any' ); ?>><?php esc_html_e( 'Any', 'stifli-flex-mcp' ); ?></option>
+									<option value="landscape" <?php selected( $s['search_image_orientation'], 'landscape' ); ?>><?php esc_html_e( 'Landscape', 'stifli-flex-mcp' ); ?></option>
+									<option value="portrait" <?php selected( $s['search_image_orientation'], 'portrait' ); ?>><?php esc_html_e( 'Portrait', 'stifli-flex-mcp' ); ?></option>
+									<option value="square" <?php selected( $s['search_image_orientation'], 'square' ); ?>><?php esc_html_e( 'Square', 'stifli-flex-mcp' ); ?></option>
+								</select>
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Pixabay supports landscape and portrait; Unsplash maps square to squarish.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<div class="card">
+					<h3><span class="dashicons dashicons-admin-generic"></span> <?php esc_html_e( 'Provider Parameters', 'stifli-flex-mcp' ); ?></h3>
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Safe Search', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<label>
+									<input type="checkbox" id="sflmcp_mm_search_safe" <?php checked( $s['search_image_safe_search'], '1' ); ?>>
+									<?php esc_html_e( 'Request stricter content filtering when the provider supports it', 'stifli-flex-mcp' ); ?>
+								</label>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Pixabay Language', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<input type="text" id="sflmcp_mm_search_language" value="<?php echo esc_attr( $s['search_image_language'] ); ?>" maxlength="5" placeholder="en">
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Two-letter language code used by Pixabay, for example en or es.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Pexels Locale', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<input type="text" id="sflmcp_mm_search_locale" value="<?php echo esc_attr( $s['search_image_locale'] ); ?>" maxlength="10" placeholder="en-US">
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Locale used by Pexels, for example en-US or es-ES.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Request Timeout', 'stifli-flex-mcp' ); ?></th>
+							<td>
+								<input type="number" id="sflmcp_mm_search_timeout" value="<?php echo esc_attr( $s['search_image_timeout'] ); ?>" min="5" max="60" step="1">
+								<p class="sflmcp-field-desc"><?php esc_html_e( 'Maximum seconds to wait for the selected image-bank API.', 'stifli-flex-mcp' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<div id="sflmcp-mm-autosave-status" class="sflmcp-autosave-status"></div>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
 	 * AJAX handler: Save multimedia settings.
 	 */
 	public function ajax_save_multimedia_settings() {
@@ -4990,6 +5824,9 @@ class StifliFlexMcp {
 			'video_duration'       => array( '4', '5', '6', '8', '12' ),
 			'video_aspect_ratio'   => array( '16:9', '9:16', '1:1' ),
 			'video_resolution'     => array( '480p', '720p', '1080p' ),
+			'search_image_preferred_bank' => array( 'random', 'unsplash', 'pexels', 'pixabay' ),
+			'search_image_selection'      => array( 'most_relevant', 'random_top10', 'random_top20' ),
+			'search_image_orientation'    => array( 'any', 'landscape', 'portrait', 'square' ),
 		);
 
 		// Numeric fields: key => array( min, max )
@@ -4999,6 +5836,7 @@ class StifliFlexMcp {
 			'pp_quality'           => array( 30, 100 ),
 			'video_poll_interval'  => array( 5, 60 ),
 			'video_max_wait'       => array( 60, 600 ),
+			'search_image_timeout' => array( 5, 60 ),
 		);
 
 		// Start from existing settings (partial merge — only update fields present in POST)
@@ -5021,6 +5859,18 @@ class StifliFlexMcp {
 			$settings['pp_enabled'] = sanitize_text_field( wp_unslash( $_POST['pp_enabled'] ) ) === '1' ? '1' : '0';
 		}
 
+		$checkbox_fields = array(
+			'search_image_safe_search',
+			'search_image_unsplash_enabled',
+			'search_image_pexels_enabled',
+			'search_image_pixabay_enabled',
+		);
+		foreach ( $checkbox_fields as $key ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$settings[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) === '1' ? '1' : '0';
+			}
+		}
+
 		// Update numeric fields only if present in POST
 		foreach ( $numeric_fields as $key => $range ) {
 			if ( isset( $_POST[ $key ] ) ) {
@@ -5028,8 +5878,18 @@ class StifliFlexMcp {
 			}
 		}
 
+		$text_fields = array(
+			'search_image_language' => 5,
+			'search_image_locale'   => 10,
+		);
+		foreach ( $text_fields as $key => $max_length ) {
+			if ( isset( $_POST[ $key ] ) ) {
+				$settings[ $key ] = substr( sanitize_text_field( wp_unslash( $_POST[ $key ] ) ), 0, $max_length );
+			}
+		}
+
 		// Handle API keys — only update if user entered a real value (not the masked placeholder)
-		$api_key_fields = array( 'openai_api_key', 'gemini_api_key' );
+		$api_key_fields = array( 'openai_api_key', 'gemini_api_key', 'search_image_unsplash_api_key', 'search_image_pexels_api_key', 'search_image_pixabay_api_key' );
 		foreach ( $api_key_fields as $key ) {
 			if ( isset( $_POST[ $key ] ) ) {
 				$raw = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
@@ -5067,7 +5927,7 @@ class StifliFlexMcp {
 		$s = $this->getMultimediaSettings();
 
 		// Mask API keys — partial reveal (first 4 + bullets + last 4 chars)
-		$api_keys = array( 'openai_api_key', 'gemini_api_key' );
+		$api_keys = array( 'openai_api_key', 'gemini_api_key', 'search_image_unsplash_api_key', 'search_image_pexels_api_key', 'search_image_pixabay_api_key' );
 		foreach ( $api_keys as $key ) {
 			$s[ $key ] = $this->maskApiKeyForDisplay( $s[ $key ] );
 		}
@@ -5075,7 +5935,7 @@ class StifliFlexMcp {
 		// Include tool enabled/disabled status from wp_sflmcp_tools.
 		global $wpdb;
 		$tools_table = $wpdb->prefix . 'sflmcp_tools';
-		$tool_names  = array( 'wp_generate_image', 'wp_generate_video' );
+		$tool_names  = array( 'wp_generate_image', 'wp_generate_video', 'wp_search_image' );
 		foreach ( $tool_names as $tname ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$enabled = $wpdb->get_var( $wpdb->prepare(
@@ -5099,7 +5959,7 @@ class StifliFlexMcp {
 		}
 
 		$key_name = sanitize_text_field( wp_unslash( $_POST['key_name'] ?? '' ) );
-		$allowed  = array( 'openai_api_key', 'gemini_api_key' );
+		$allowed  = array( 'openai_api_key', 'gemini_api_key', 'search_image_unsplash_api_key', 'search_image_pexels_api_key', 'search_image_pixabay_api_key' );
 		if ( ! in_array( $key_name, $allowed, true ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid key name', 'stifli-flex-mcp' ) ) );
 		}
@@ -5134,7 +5994,7 @@ class StifliFlexMcp {
 		$tool_name = sanitize_text_field( wp_unslash( $_POST['tool_name'] ?? '' ) );
 		$enabled   = isset( $_POST['enabled'] ) ? intval( $_POST['enabled'] ) : -1;
 
-		$allowed = array( 'wp_generate_image', 'wp_generate_video' );
+		$allowed = array( 'wp_generate_image', 'wp_generate_video', 'wp_search_image' );
 		if ( ! in_array( $tool_name, $allowed, true ) || ! in_array( $enabled, array( 0, 1 ), true ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid parameters', 'stifli-flex-mcp' ) ) );
 		}
@@ -5579,7 +6439,7 @@ class StifliFlexMcp {
 	}
 
 	/**
-	 * AJAX: Reset all OAuth clients, tokens, and auth codes.
+	 * AJAX: Reset OAuth tokens and auth codes while preserving clients.
 	 */
 	public function ajax_oauth_reset_state() {
 		check_ajax_referer( 'sflmcp_oauth', 'nonce' );

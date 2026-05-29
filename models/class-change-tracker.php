@@ -240,7 +240,22 @@ class StifliFlexMcp_ChangeTracker {
 			}
 		}
 
-		// Unknown tool (custom_, ability_, or any future tool) — track generically
+		// Check optional integration modules before falling back to generic tracking.
+		if ( class_exists( 'StifliFlexMcp_Elementor' ) && method_exists( 'StifliFlexMcp_Elementor', 'getChangeTrackerSnapshot' ) ) {
+			$snapshot = StifliFlexMcp_Elementor::getChangeTrackerSnapshot( $tool, $args );
+			if ( is_array( $snapshot ) ) {
+				return $snapshot;
+			}
+		}
+
+		if ( class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) && method_exists( 'StifliFlexMcp_GoogleSearchConsole', 'getChangeTrackerSnapshot' ) ) {
+			$snapshot = StifliFlexMcp_GoogleSearchConsole::getChangeTrackerSnapshot( $tool, $args );
+			if ( is_array( $snapshot ) ) {
+				return $snapshot;
+			}
+		}
+
+		// Unknown tool (custom_, ability_, or any future tool) - track generically.
 		if ( $this->isLikelyMutating( $tool ) ) {
 			return array(
 				'operation_type' => 'unknown',
@@ -1055,6 +1070,15 @@ class StifliFlexMcp_ChangeTracker {
 		return array( 'success' => false, 'message' => "Unknown object type: {$obj_type}." );
 	}
 
+	private function preparePostWriteData( $data ) {
+		foreach ( array( 'post_content', 'post_excerpt', 'post_content_filtered' ) as $field ) {
+			if ( array_key_exists( $field, $data ) ) {
+				$data[ $field ] = wp_slash( (string) $data[ $field ] );
+			}
+		}
+		return $data;
+	}
+
 	/** Reverse an update: restore from before-state. */
 	private function rollbackUpdate( $obj_type, $obj_id, $before ) {
 		switch ( $obj_type ) {
@@ -1062,6 +1086,7 @@ class StifliFlexMcp_ChangeTracker {
 			case 'page':
 				$data = $before;
 				unset( $data['meta'] );
+				$data = $this->preparePostWriteData( $data );
 				wp_update_post( $data );
 				if ( ! empty( $before['meta'] ) && is_array( $before['meta'] ) ) {
 					foreach ( $before['meta'] as $key => $values ) {
@@ -1228,6 +1253,7 @@ class StifliFlexMcp_ChangeTracker {
 				$data = $before;
 				$meta = isset( $data['meta'] ) ? $data['meta'] : array();
 				unset( $data['meta'], $data['ID'] );
+				$data = $this->preparePostWriteData( $data );
 				$new_id = wp_insert_post( $data );
 				if ( $new_id && ! is_wp_error( $new_id ) ) {
 					foreach ( $meta as $key => $values ) {
@@ -1405,6 +1431,7 @@ class StifliFlexMcp_ChangeTracker {
 				$data = $state;
 				unset( $data['meta'] );
 				$data['ID'] = (int) $obj_id;
+				$data = $this->preparePostWriteData( $data );
 				wp_update_post( $data );
 				return array( 'success' => true, 'message' => "Re-applied state to {$obj_type} #{$obj_id}." );
 
@@ -1566,8 +1593,16 @@ class StifliFlexMcp_ChangeTracker {
 	public static function migrateAddSourceColumns() {
 		global $wpdb;
 		$table = $wpdb->prefix . 'sflmcp_changelog';
+		$like = $wpdb->esc_like( $table );
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) );
+		if ( $exists !== $table ) {
+			return;
+		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix is safe.
 		$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+		if ( ! is_array( $cols ) ) {
+			return;
+		}
 		if ( ! in_array( 'source', $cols, true ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- schema migration for plugin-managed changelog table.
 			$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `source` VARCHAR(50) DEFAULT NULL AFTER `file_backup_path`, ADD COLUMN `source_label` VARCHAR(255) DEFAULT NULL AFTER `source`, ADD KEY `idx_source` (`source`)" );

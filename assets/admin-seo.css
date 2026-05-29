@@ -1,0 +1,258 @@
+/**
+ * SEO settings styles.
+ *
+ * @package StifliFlexMcp
+ */
+
+.sflmcp-seo-wrap {
+	max-width: 100%;
+}
+
+.sflmcp-seo-wrap .card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0,0,0,.04);
+	margin: 20px 0;
+	max-width: none;
+	min-width: 0;
+	padding: 20px 24px;
+}
+
+.sflmcp-seo-wrap .card h3 {
+	align-items: center;
+	display: flex;
+	font-size: 15px;
+	gap: 8px;
+	margin-top: 0;
+}
+
+.sflmcp-seo-status-row {
+	display: grid;
+	gap: 20px;
+	grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+}
+
+.sflmcp-seo-status-pill {
+	border-radius: 999px;
+	display: inline-block;
+	font-size: 12px;
+	font-weight: 600;
+	margin: 10px 0;
+	padding: 4px 10px;
+}
+
+.sflmcp-seo-status-pill.is-ok {
+	background: #d4edda;
+	color: #155724;
+}
+
+.sflmcp-seo-status-pill.is-warning {
+	background: #fff4d6;
+	color: #684e00;
+}
+
+.sflmcp-seo-meta {
+	display: grid;
+	gap: 6px 16px;
+	grid-template-columns: 140px minmax(0, 1fr);
+	margin: 14px 0 0;
+}
+
+.sflmcp-seo-meta dt {
+	color: #50575e;
+	font-weight: 600;
+}
+
+.sflmcp-seo-meta dd {
+	font-family: monospace;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.sflmcp-seo-wrap .form-table th {
+	font-weight: 500;
+	width: 210px;
+}
+
+.sflmcp-seo-wrap input.regular-text {
+	max-width: 520px;
+	width: 100%;
+}
+
+.sflmcp-seo-wrap textarea {
+	font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+	max-width: 820px;
+	width: 100%;
+}
+
+.sflmcp-seo-steps {
+	margin: 8px 0 12px 20px;
+}
+
+.sflmcp-seo-steps li {
+	margin-bottom: 6px;
+}
+
+.sflmcp-redirect-field {
+	align-items: center;
+	display: flex;
+	gap: 8px;
+	margin: 10px 0 14px;
+}
+
+.sflmcp-redirect-field input {
+	font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+	max-width: 680px;
+	width: 100%;
+}
+
+.sflmcp-seo-actions {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 18px 0;
+}
+
+.sflmcp-seo-actions .button .dashicons {
+	font-size: 16px;
+	height: 16px;
+	line-height: 1.4;
+	margin-right: 4px;
+	width: 16px;
+}
+
+.sflmcp-seo-notice {
+	border-radius: 4px;
+	display: none;
+	font-weight: 500;
+	margin: 12px 0;
+	padding: 10px 14px;
+}
+
+.sflmcp-seo-notice.success {
+	background: #d4edda;
+	border: 1px solid #28a745;
+	color: #155724;
+	display: block;
+}
+
+.sflmcp-seo-notice.error {
+	background: #f8d7da;
+	border: 1px solid #dc3545;
+	color: #721c24;
+	display: block;
+}
+
+.sflmcp-seo-notice.info {
+	background: #f0f6fc;
+	border: 1px solid #72aee6;
+	color: #1d2327;
+	display: block;
+}
+
+.sflmcp-tool-toggle-banner {
+	align-items: center;
+	background: #f0f6fc;
+	border: 1px solid #2271b1;
+	border-radius: 6px;
+	display: flex;
+	gap: 12px;
+	margin: 18px 0;
+	padding: 14px 20px;
+}
+
+.sflmcp-tool-toggle-banner.disabled {
+	background: #fef7f1;
+	border-color: #dba617;
+}
+
+.sflmcp-toggle-label {
+	font-size: 14px;
+	line-height: 1.4;
+}
+
+.sflmcp-toggle-label strong {
+	font-family: monospace;
+	font-size: 13px;
+}
+
+.sflmcp-toggle-status {
+	font-size: 13px;
+	font-weight: 500;
+	margin-left: auto;
+	white-space: nowrap;
+}
+
+.sflmcp-toggle-switch {
+	display: inline-block;
+	flex-shrink: 0;
+	height: 24px;
+	position: relative;
+	width: 44px;
+}
+
+.sflmcp-toggle-switch input {
+	height: 0;
+	opacity: 0;
+	width: 0;
+}
+
+.sflmcp-toggle-slider {
+	background-color: #ccc;
+	border-radius: 24px;
+	bottom: 0;
+	cursor: pointer;
+	left: 0;
+	position: absolute;
+	right: 0;
+	top: 0;
+	transition: .25s;
+}
+
+.sflmcp-toggle-slider::before {
+	background-color: #fff;
+	border-radius: 50%;
+	bottom: 3px;
+	content: "";
+	height: 18px;
+	left: 3px;
+	position: absolute;
+	transition: .25s;
+	width: 18px;
+}
+
+.sflmcp-toggle-switch input:checked + .sflmcp-toggle-slider {
+	background-color: #2271b1;
+}
+
+.sflmcp-toggle-switch input:checked + .sflmcp-toggle-slider::before {
+	transform: translateX(20px);
+}
+
+.sflmcp-autosave-status {
+	color: #50575e;
+	display: inline-block;
+	font-size: 13px;
+	font-weight: 500;
+	min-height: 20px;
+}
+
+@media (max-width: 782px) {
+	.sflmcp-seo-status-row {
+		grid-template-columns: 1fr;
+	}
+
+	.sflmcp-seo-meta {
+		grid-template-columns: 1fr;
+	}
+
+	.sflmcp-tool-toggle-banner {
+		align-items: flex-start;
+	}
+
+	.sflmcp-toggle-status {
+		margin-left: 0;
+	}
+}

@@ -42,7 +42,20 @@
 		'#sflmcp_mm_video_aspect':        'video_aspect_ratio',
 		'#sflmcp_mm_video_resolution':    'video_resolution',
 		'#sflmcp_mm_video_poll':          'video_poll_interval',
-		'#sflmcp_mm_video_max_wait':      'video_max_wait'
+		'#sflmcp_mm_video_max_wait':      'video_max_wait',
+		'#sflmcp_mm_search_preferred_bank': 'search_image_preferred_bank',
+		'#sflmcp_mm_search_selection':      'search_image_selection',
+		'#sflmcp_mm_search_orientation':    'search_image_orientation',
+		'#sflmcp_mm_search_language':       'search_image_language',
+		'#sflmcp_mm_search_locale':         'search_image_locale',
+		'#sflmcp_mm_search_timeout':        'search_image_timeout'
+	};
+
+	var checkboxMap = {
+		'#sflmcp_mm_search_safe':              'search_image_safe_search',
+		'#sflmcp_mm_search_unsplash_enabled':  'search_image_unsplash_enabled',
+		'#sflmcp_mm_search_pexels_enabled':    'search_image_pexels_enabled',
+		'#sflmcp_mm_search_pixabay_enabled':   'search_image_pixabay_enabled'
 	};
 
 	// API key fields use data-key attribute for the shared DB key name.
@@ -127,6 +140,13 @@
 		if ($pp.length) {
 			data.pp_enabled = $pp.is(':checked') ? '1' : '0';
 		}
+
+		$.each(checkboxMap, function (sel, key) {
+			var $el = $(sel);
+			if ($el.length) {
+				data[key] = $el.is(':checked') ? '1' : '0';
+			}
+		});
 
 		// API keys — collect from all .sflmcp-shared-apikey inputs,
 		// deduplicate by data-key (first non-masked value wins)
@@ -229,6 +249,13 @@
 			if ($('#sflmcp_mm_pp_quality').length && s.pp_quality) {
 				$('#sflmcp_mm_pp_quality_val').text(s.pp_quality + '%');
 			}
+
+			$.each(checkboxMap, function (sel, key) {
+				var $el = $(sel);
+				if ($el.length && s[key] !== undefined && s[key] !== null) {
+					$el.prop('checked', s[key] === '1');
+				}
+			});
 
 			// Tool toggles
 			$('.sflmcp-mm-tool-toggle').each(function () {
@@ -398,19 +425,24 @@
 		});
 
 		// ── Auto-save: selects → immediate ───────────────────
-		$('#sflmcp-multimedia-form select, #sflmcp-multimedia-form-video select').on('change', function () {
+		$('#sflmcp-multimedia-form select, #sflmcp-multimedia-form-video select, #sflmcp-multimedia-form-search-image select').on('change', function () {
 			console.log('[SFLMCP-indicator] select change:', $(this).attr('id'));
 			triggerSaveImmediate($(this));
 		});
 
+		// ── Auto-save: Search Image checkboxes → immediate ─────
+		$('#sflmcp-multimedia-form-search-image input[type="checkbox"]').on('change', function () {
+			triggerSaveImmediate($(this));
+		});
+
 		// ── Auto-save: text/number/password inputs → debounced
-		$('#sflmcp-multimedia-form, #sflmcp-multimedia-form-video').on('input', 'input[type="text"], input[type="number"], input[type="password"]', function () {
+		$('#sflmcp-multimedia-form, #sflmcp-multimedia-form-video, #sflmcp-multimedia-form-search-image').on('input', 'input[type="text"], input[type="number"], input[type="password"]', function () {
 			console.log('[SFLMCP-indicator] input change:', $(this).attr('id'));
 			triggerSave($(this));
 		});
 
 		// ── Prevent default form submission ──────────────────
-		$('#sflmcp-multimedia-form, #sflmcp-multimedia-form-video').on('submit', function (e) {
+		$('#sflmcp-multimedia-form, #sflmcp-multimedia-form-video, #sflmcp-multimedia-form-search-image').on('submit', function (e) {
 			e.preventDefault();
 			doSave();
 		});

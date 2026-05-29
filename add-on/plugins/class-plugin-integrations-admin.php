@@ -352,8 +352,13 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
                 $stats['discovered_total']++;
 
-                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name comes from get_safe_table_sql().
-                $existing_row = $wpdb->get_row( $wpdb->prepare( "SELECT id, enabled FROM {$table_sql} WHERE ability_name = %s", $ability_name ), ARRAY_A );
+                $ability_cache_key = 'plugin_integration_ability_' . md5( $ability_name );
+                $existing_row = wp_cache_get( $ability_cache_key, 'sflmcp' );
+                if ( false === $existing_row ) {
+                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name comes from get_safe_table_sql().
+                    $existing_row = $wpdb->get_row( $wpdb->prepare( "SELECT id, enabled FROM {$table_sql} WHERE ability_name = %s", $ability_name ), ARRAY_A );
+                    wp_cache_set( $ability_cache_key, null === $existing_row ? array() : $existing_row, 'sflmcp', 5 * MINUTE_IN_SECONDS );
+                }
                 if ( ! empty( $existing_row ) ) {
                     if ( isset( $existing_row['enabled'] ) && intval( $existing_row['enabled'] ) !== 1 ) {
                         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
@@ -367,6 +372,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                             array( '%d', '%s' ),
                             array( '%d' )
                         );
+                        wp_cache_delete( $ability_cache_key, 'sflmcp' );
                         $imported_count++;
                         $stats['reactivated']++;
                     } else {
@@ -407,6 +413,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                 );
 
                 if ( false !== $inserted ) {
+                    wp_cache_delete( $ability_cache_key, 'sflmcp' );
                     $imported_count++;
                     $stats['imported']++;
                 }
@@ -730,8 +737,16 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             $is_enabled = $enabled_by_group && ! isset( $disabled_tools[ $tool_name ] );
 
             if ( $is_enabled ) {
-                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_safe_table_sql().
-                $exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profile_tools_table_sql} WHERE profile_id = %d AND tool_name = %s LIMIT 1", $active_profile_id, $tool_name ) );
+                $profile_tool_cache_key = 'profile_tool_' . md5( $active_profile_id . '|' . $tool_name );
+                $exists = wp_cache_get( $profile_tool_cache_key, 'sflmcp' );
+                if ( false === $exists ) {
+                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_safe_table_sql().
+                    $exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profile_tools_table_sql} WHERE profile_id = %d AND tool_name = %s LIMIT 1", $active_profile_id, $tool_name ) );
+                    wp_cache_set( $profile_tool_cache_key, null === $exists ? '__missing__' : $exists, 'sflmcp', 5 * MINUTE_IN_SECONDS );
+                }
+                if ( '__missing__' === $exists ) {
+                    $exists = null;
+                }
                 if ( ! $exists ) {
                     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
                     $wpdb->insert(
@@ -743,6 +758,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                         ),
                         array( '%d', '%s', '%s' )
                     );
+                    wp_cache_delete( $profile_tool_cache_key, 'sflmcp' );
                 }
             } else {
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plugin-managed table write.
@@ -754,6 +770,7 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
                     ),
                     array( '%d', '%s' )
                 );
+                wp_cache_delete( 'profile_tool_' . md5( $active_profile_id . '|' . $tool_name ), 'sflmcp' );
             }
         }
     }
