@@ -2506,7 +2506,8 @@ class StifliFlexMcp {
 		if ('' === $host) {
 			$host = 'site';
 		}
-		return 'sflmcp_oauth_wk_probe_' . md5($host);
+		$path = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_PATH));
+		return 'sflmcp_oauth_wk_probe_' . md5('v2|' . $host . '|' . $path);
 	}
 
 	private function getOAuthWellKnownDismissOptionKey() {
@@ -2514,7 +2515,8 @@ class StifliFlexMcp {
 		if ('' === $host) {
 			$host = 'site';
 		}
-		return 'sflmcp_oauth_wk_notice_dismissed_' . md5($host);
+		$path = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_PATH));
+		return 'sflmcp_oauth_wk_notice_dismissed_' . md5('v2|' . $host . '|' . $path);
 	}
 
 	private function invalidateOAuthWellKnownProbeCache() {
@@ -2564,6 +2566,60 @@ class StifliFlexMcp {
 		return false;
 	}
 
+	private function probeOAuthMetadataEndpoint($url) {
+		$result = array(
+			'status' => 'unknown',
+			'blocked' => false,
+			'url' => $url,
+			'code' => 0,
+			'message' => '',
+		);
+
+		$response = wp_remote_get($url, array(
+			'timeout' => 8,
+			'redirection' => 2,
+		));
+
+		if (is_wp_error($response)) {
+			$result['status'] = 'unknown';
+			$result['message'] = $response->get_error_message();
+			return $result;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code($response);
+		$body = (string) wp_remote_retrieve_body($response);
+		$result['code'] = $code;
+
+		if (200 === $code) {
+			$bodyHead = strtolower(ltrim($body));
+			foreach (array('<!doctype html', '<html', '<head', '<?xml') as $htmlPrefix) {
+				if (0 === strpos($bodyHead, $htmlPrefix)) {
+					$result['status'] = 'body_is_html';
+					$result['blocked'] = true;
+					$result['message'] = 'The OAuth discovery endpoint returned HTML instead of JSON.';
+					return $result;
+				}
+			}
+
+			$decoded = json_decode($body, true);
+			if (is_array($decoded) && !empty($decoded['authorization_endpoint']) && !empty($decoded['token_endpoint'])) {
+				$result['status'] = 'ok';
+			} else {
+				$result['status'] = 'unexpected';
+				$result['message'] = 'Unexpected payload at OAuth metadata endpoint.';
+			}
+		} elseif (in_array($code, array(403, 404), true)) {
+			$result['status'] = 'blocked';
+			$result['blocked'] = true;
+			$result['message'] = 'Host likely blocks /.well-known/* before WordPress routing.';
+		} else {
+			$result['status'] = 'error';
+			$result['message'] = 'Unexpected HTTP status from oauth-authorization-server endpoint.';
+		}
+
+		return $result;
+	}
+
 	private function getOAuthWellKnownSelfCheckResult() {
 		if ($this->shouldSkipOAuthWellKnownSelfCheck()) {
 			return array(
@@ -2589,48 +2645,22 @@ class StifliFlexMcp {
 			'message' => '',
 		);
 
-		$response = wp_remote_get($url, array(
-			'timeout' => 8,
-			'redirection' => 2,
-		));
+		$primaryProbe = $this->probeOAuthMetadataEndpoint($url);
+		$result['status'] = isset($primaryProbe['status']) ? (string) $primaryProbe['status'] : 'unknown';
+		$result['blocked'] = !empty($primaryProbe['blocked']);
+		$result['code'] = isset($primaryProbe['code']) ? (int) $primaryProbe['code'] : 0;
+		$result['message'] = isset($primaryProbe['message']) ? (string) $primaryProbe['message'] : '';
 
-		if (is_wp_error($response)) {
-			$result['status'] = 'unknown';
-			$result['message'] = $response->get_error_message();
-			set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
-			return $result;
-		}
-
-		$code = (int) wp_remote_retrieve_response_code($response);
-		$body = (string) wp_remote_retrieve_body($response);
-		$result['code'] = $code;
-
-		if (200 === $code) {
-			$bodyHead = strtolower(ltrim($body));
-			foreach (array('<!doctype html', '<html', '<head', '<?xml') as $htmlPrefix) {
-				if (0 === strpos($bodyHead, $htmlPrefix)) {
-					$result['status'] = 'body_is_html';
-					$result['blocked'] = true;
-					$result['message'] = 'The OAuth discovery endpoint returned HTML instead of JSON.';
-					set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
-					return $result;
-				}
-			}
-
-			$decoded = json_decode($body, true);
-			if (is_array($decoded) && !empty($decoded['authorization_endpoint']) && !empty($decoded['token_endpoint'])) {
+		if ('ok' !== $result['status']) {
+			$openidUrl = home_url('/.well-known/openid-configuration');
+			$openidProbe = $this->probeOAuthMetadataEndpoint($openidUrl);
+			if (isset($openidProbe['status']) && 'ok' === (string) $openidProbe['status']) {
 				$result['status'] = 'ok';
-			} else {
-				$result['status'] = 'unexpected';
-				$result['message'] = 'Unexpected payload at oauth-authorization-server endpoint.';
+				$result['blocked'] = false;
+				$result['url'] = $openidUrl;
+				$result['code'] = isset($openidProbe['code']) ? (int) $openidProbe['code'] : 200;
+				$result['message'] = '';
 			}
-		} elseif (in_array($code, array(403, 404), true)) {
-			$result['status'] = 'blocked';
-			$result['blocked'] = true;
-			$result['message'] = 'Host likely blocks /.well-known/* before WordPress routing.';
-		} else {
-			$result['status'] = 'error';
-			$result['message'] = 'Unexpected HTTP status from oauth-authorization-server endpoint.';
 		}
 
 		if ('ok' === $result['status']) {
@@ -6096,6 +6126,10 @@ class StifliFlexMcp {
 					<tr>
 						<td><?php esc_html_e( 'Server Metadata', 'stifli-flex-mcp' ); ?></td>
 						<td><code><?php echo esc_html( home_url( '/.well-known/oauth-authorization-server' ) ); ?></code></td>
+					</tr>
+					<tr>
+						<td><?php esc_html_e( 'OpenID Configuration (fallback)', 'stifli-flex-mcp' ); ?></td>
+						<td><code><?php echo esc_html( home_url( '/.well-known/openid-configuration' ) ); ?></code></td>
 					</tr>
 					<tr>
 						<td><?php esc_html_e( 'Client Registration', 'stifli-flex-mcp' ); ?></td>
