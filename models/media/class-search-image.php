@@ -191,6 +191,7 @@ class StifliFlexMcp_Search_Image {
 		}
 
 		if ( ! isset( $providers[ $requested ] ) ) {
+			/* translators: %s: requested provider slug (unsplash, pexels, pixabay). */
 			return new WP_Error( 'sflmcp_search_image_provider_not_configured', sprintf( __( 'The %s provider is not enabled or has no API key.', 'stifli-flex-mcp' ), $requested ) );
 		}
 
@@ -464,6 +465,7 @@ class StifliFlexMcp_Search_Image {
 		$payload     = json_decode( $body, true );
 
 		if ( 200 !== intval( $status_code ) || ! is_array( $payload ) ) {
+			/* translators: %s: provider label (Unsplash, Pexels, Pixabay). */
 			$message = sprintf( __( '%s returned an unexpected response.', 'stifli-flex-mcp' ), $provider_label );
 			if ( is_array( $payload ) ) {
 				$message = self::extractProviderErrorMessage( $payload, $message );
@@ -508,9 +510,11 @@ class StifliFlexMcp_Search_Image {
 
 	private static function buildCaption( $author, $provider_label ) {
 		if ( '' === trim( $author ) ) {
+			/* translators: %s: provider label (Unsplash, Pexels, Pixabay). */
 			return sprintf( __( 'Photo from %s', 'stifli-flex-mcp' ), $provider_label );
 		}
 
+		/* translators: 1: author name, 2: provider label (Unsplash, Pexels, Pixabay). */
 		return sprintf( __( 'Photo by %1$s on %2$s', 'stifli-flex-mcp' ), $author, $provider_label );
 	}
 
@@ -537,10 +541,6 @@ class StifliFlexMcp_Search_Image {
 	}
 
 	private static function randomInt( $min, $max ) {
-		if ( function_exists( 'wp_rand' ) ) {
-			return wp_rand( $min, $max );
-		}
-
-		return mt_rand( $min, $max );
+		return wp_rand( $min, $max );
 	}
 }
