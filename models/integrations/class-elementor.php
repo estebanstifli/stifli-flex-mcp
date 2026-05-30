@@ -11,8 +11,30 @@ class StifliFlexMcp_Elementor {
 
     const TEMPLATE_POST_TYPE = 'elementor_library';
 
+    private static function is_elementor_plugin_active() {
+        if ( function_exists( 'is_plugin_active' ) && is_plugin_active( 'elementor/elementor.php' ) ) {
+            return true;
+        }
+
+        $active_plugins = (array) get_option( 'active_plugins', array() );
+        if ( in_array( 'elementor/elementor.php', $active_plugins, true ) ) {
+            return true;
+        }
+
+        if ( is_multisite() ) {
+            $network_active = (array) get_site_option( 'active_sitewide_plugins', array() );
+            if ( isset( $network_active['elementor/elementor.php'] ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function isAvailable() {
-        return class_exists( 'Elementor\\Plugin' );
+        return class_exists( 'Elementor\\Plugin' )
+            || defined( 'ELEMENTOR_VERSION' )
+            || self::is_elementor_plugin_active();
     }
 
     public static function getTools() {

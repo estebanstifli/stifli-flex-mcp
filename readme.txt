@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.8
 Tested up to: 7.0
-Stable tag: 3.3.6
+Stable tag: 3.3.7
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -28,7 +28,7 @@ https://youtu.be/AcmvwRzoOSM
 
 **📚 Documentation**
 
-https://andromedanova.com/stifli-flex-mcp.html
+[StifLi Flex MCP Documentation](https://andromedanova.com/stifli-flex-mcp.html)
 
 Released in December 2025, **StifLi Flex MCP** was the first MCP plugin for WordPress and remains the most complete WordPress MCP platform for ChatGPT, Claude Desktop, and other MCP clients.
 It starts with 122+ built-in MCP tools, and with supported integrations such as All Sources Images, Stifli Backup Tools, AiPatch Security Scanner, Notification for Telegram, WPCode, Code Snippets, Woody Snippets, Advanced Custom Fields, Yoast SEO, Rank Math, WPForms, Gravity Forms, Forminator, The Events Calendar, and Elementor, it can exceed 200 total tools depending on the plugins you install.
@@ -103,6 +103,7 @@ The AI agent understands context, chains multiple operations, and works with you
 Generate stunning images and videos directly from your AI agent or the dedicated Multimedia Settings page:
 
 * **Image Generation** — "Generate a hero image for my blog post about AI" using OpenAI (GPT Image family + DALL·E 2/3) or Google Gemini (Gemini Image + Imagen 4)
+* **Image Search** — "Find a real stock image for my post" with `wp_search_image` (Unsplash, Pexels, Pixabay) including attribution metadata
 * **Video Generation** — "Create a 5-second product showcase video" using OpenAI Sora or Google Veo 2/3
 
 
@@ -318,6 +319,24 @@ Yes! The `wp_generate_image` tool supports multiple providers:
 
 Just ask your AI agent "Generate an image of..." or configure defaults in **StifLi Flex MCP → Multimedia Settings → Images**.
 
+= Can the AI search stock images too? =
+
+Yes! The optional `wp_search_image` tool can search Unsplash, Pexels, and Pixabay and return one image with rich attribution metadata.
+
+The tool response includes both text JSON and structured output with fields such as:
+
+* `url`, `thumbnail_url`, `caption`, `alt_text`
+* `author`, `author_url`, `source_url`
+* image dimensions, license/metadata fields, and provider-specific fields like Unsplash `download_location`
+
+Configure everything in **StifLi Flex MCP → Multimedia Settings → Search Image**:
+
+* Global enable/disable toggle for `wp_search_image`
+* Per-provider enable + API keys (Unsplash, Pexels, Pixabay)
+* Preferred Image Bank (specific provider or random)
+* Image Selection mode: `most_relevant`, `random_top10`, `random_top20`
+* Extra parameters: orientation, safe search, Pixabay language, Pexels locale, and timeout
+
 = Can the AI generate videos? =
 
 Yes! The `wp_generate_video` tool supports:
@@ -407,6 +426,11 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.7 =
+* New: Added optional `wp_search_image` module (`class-search-image.php`) with lazy loading from the model only when enabled in `sflmcp_tools`, protected by `upload_files` capability.
+* New: `wp_search_image` now returns MCP-friendly output in both text JSON and `structuredContent`, including URL, thumbnail URL, caption, alt text, author, author URL, source URL, dimensions, license/metadata, and provider-specific fields such as Unsplash `download_location`.
+* New: Added a dedicated **Search Image** tab in Multimedia Settings with tool toggle, provider toggles + API keys (Unsplash/Pexels/Pixabay), preferred bank, image selection mode (`most_relevant`, `random_top10`, `random_top20`), and extra search parameters (orientation, safe search, language/locale, timeout).
+
 = 3.3.6 =
 * New: Added SEO optimization tools for GSC-backed post context, title/meta suggestions, and safe Yoast/Rank Math metadata updates with rollback support.
 * New: Added MCP resources for site info, post types, recent posts, and SEO summary through resources/list and resources/read.

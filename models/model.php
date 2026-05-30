@@ -24,12 +24,43 @@ class StifliFlexMcpModel {
         return $this->maybeLoadFile( 'snippets/snippets.php', 'StifliFlexMcp_Snippets' );
     }
 
+    private function isPluginMarkedActive( $plugin_file ) {
+        $plugin_file = is_string( $plugin_file ) ? trim( $plugin_file ) : '';
+        if ( '' === $plugin_file ) {
+            return false;
+        }
+
+        if ( function_exists( 'is_plugin_active' ) && is_plugin_active( $plugin_file ) ) {
+            return true;
+        }
+
+        $active_plugins = (array) get_option( 'active_plugins', array() );
+        if ( in_array( $plugin_file, $active_plugins, true ) ) {
+            return true;
+        }
+
+        if ( is_multisite() ) {
+            $network_active = (array) get_site_option( 'active_sitewide_plugins', array() );
+            if ( isset( $network_active[ $plugin_file ] ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isElementorRuntimeAvailable() {
+        return class_exists( 'Elementor\\Plugin' )
+            || defined( 'ELEMENTOR_VERSION' )
+            || $this->isPluginMarkedActive( 'elementor/elementor.php' );
+    }
+
     private function maybeLoadElementorIntegrationModule() {
         if ( class_exists( 'StifliFlexMcp_Elementor' ) ) {
             return true;
         }
 
-        if ( ! class_exists( 'Elementor\\Plugin' ) ) {
+        if ( ! $this->isElementorRuntimeAvailable() ) {
             return false;
         }
 
@@ -492,9 +523,14 @@ class StifliFlexMcpModel {
             // Abilities are already filtered by enabled=1 in getImportedAbilities()
             // So if the tool starts with 'ability_', it's already enabled
             $is_ability = strpos($name, 'ability_') === 0;
+
+            // Integration-managed tools can be enabled via the Plugins tab state,
+            // even when a legacy install is missing their rows in sflmcp_tools.
+            $is_integration_tool = class_exists( 'StifliFlexMcp_Plugin_Integrations_Registry' )
+                && ! empty( StifliFlexMcp_Plugin_Integrations_Registry::get_integrations_for_tool( $name ) );
             
             // If table doesn't exist, tool is in enabled list, or it's a custom tool/ability, include it
-            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_custom_tool || $is_ability) {
+            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_custom_tool || $is_ability || $is_integration_tool) {
                 // Categoría
                 if (in_array($name, array('search', 'fetch'), true)) {
                     $tool['category'] = 'Core: OpenAI';
@@ -6705,7 +6741,7 @@ class StifliFlexMcpModel {
                     if ( ! $this->maybeLoadElementorIntegrationModule() ) {
                         $r['error'] = array(
                             'code' => -32603,
-                            'message' => class_exists( 'Elementor\\Plugin' )
+                            'message' => $this->isElementorRuntimeAvailable()
                                 ? 'Elementor integration module is not available.'
                                 : 'Elementor plugin is not active.',
                         );
