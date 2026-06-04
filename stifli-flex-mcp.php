@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.3.7
+Version: 3.3.8
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// define debug constant
+// define debug constant 
 if ( ! defined( 'SFLMCP_DEBUG' ) ) {
 	define( 'SFLMCP_DEBUG', false );	
 }
@@ -350,6 +350,276 @@ function stifli_flex_mcp_upsert_tool_row( $tool, $now ) {
 
 	return false !== $wpdb->query( $query );
 }
+
+if ( ! function_exists( 'stifli_flex_mcp_is_rule_enabled' ) ) {
+	function stifli_flex_mcp_is_rule_enabled( $value ) {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+		if ( is_numeric( $value ) ) {
+			return intval( $value ) > 0;
+		}
+		if ( is_string( $value ) ) {
+			return in_array( strtolower( trim( $value ) ), array( '1', 'true', 'yes', 'on' ), true );
+		}
+
+		return ! empty( $value );
+	}
+}
+
+if ( ! function_exists( 'stifli_flex_mcp_normalize_scoped_css_rules' ) ) {
+	function stifli_flex_mcp_normalize_scoped_css_rules( $rules ) {
+		if ( ! is_array( $rules ) ) {
+			return array();
+		}
+
+		$valid_scope_types = array( 'page', 'post', 'post_type', 'category', 'tag', 'taxonomy_term', 'url_path' );
+		$normalized = array();
+		$seen_ids = array();
+
+		foreach ( $rules as $index => $rule ) {
+			if ( ! is_array( $rule ) ) {
+				continue;
+			}
+
+			$scope_type = sanitize_key( (string) ( $rule['scope_type'] ?? '' ) );
+			$scope_value = sanitize_text_field( (string) ( $rule['scope_value'] ?? '' ) );
+			$css = isset( $rule['css'] ) ? trim( (string) $rule['css'] ) : '';
+
+			if ( '' === $scope_type || '' === $scope_value || '' === $css ) {
+				continue;
+			}
+			if ( ! in_array( $scope_type, $valid_scope_types, true ) ) {
+				continue;
+			}
+			if ( 'taxonomy_term' === $scope_type && false === strpos( $scope_value, ':' ) ) {
+				continue;
+			}
+
+			$rule_id = sanitize_key( (string) ( $rule['id'] ?? '' ) );
+			if ( '' === $rule_id ) {
+				$rule_id = sanitize_key( 'cssr_' . substr( md5( $scope_type . '|' . $scope_value . '|' . (string) $index ), 0, 16 ) );
+			}
+			if ( isset( $seen_ids[ $rule_id ] ) ) {
+				continue;
+			}
+
+			$seen_ids[ $rule_id ] = true;
+			$priority = intval( $rule['priority'] ?? 10 );
+			$priority = max( 1, min( 999, $priority ) );
+
+			$normalized[] = array(
+				'id' => $rule_id,
+				'scope_type' => $scope_type,
+				'scope_value' => $scope_value,
+				'css' => $css,
+				'enabled' => stifli_flex_mcp_is_rule_enabled( $rule['enabled'] ?? true ),
+				'priority' => $priority,
+				'media_query' => sanitize_text_field( (string) ( $rule['media_query'] ?? '' ) ),
+				'created_gmt' => sanitize_text_field( (string) ( $rule['created_gmt'] ?? '' ) ),
+				'updated_gmt' => sanitize_text_field( (string) ( $rule['updated_gmt'] ?? '' ) ),
+			);
+		}
+
+		usort(
+			$normalized,
+			static function( $a, $b ) {
+				$ap = isset( $a['priority'] ) ? (int) $a['priority'] : 10;
+				$bp = isset( $b['priority'] ) ? (int) $b['priority'] : 10;
+				if ( $ap === $bp ) {
+					$aid = isset( $a['id'] ) ? (string) $a['id'] : '';
+					$bid = isset( $b['id'] ) ? (string) $b['id'] : '';
+					return strcmp( $aid, $bid );
+				}
+
+				return ( $ap < $bp ) ? -1 : 1;
+			}
+		);
+
+		return array_values( $normalized );
+	}
+}
+
+if ( ! function_exists( 'stifli_flex_mcp_normalize_scoped_path' ) ) {
+	function stifli_flex_mcp_normalize_scoped_path( $path ) {
+		$path = is_string( $path ) ? trim( $path ) : '';
+		if ( '' === $path ) {
+			return '/';
+		}
+
+		$path = preg_replace( '#\?.*$#', '', $path );
+		if ( ! is_string( $path ) || '' === $path ) {
+			return '/';
+		}
+
+		$path = '/' . ltrim( $path, '/' );
+		$path = preg_replace( '#/{2,}#', '/', $path );
+		if ( ! is_string( $path ) || '' === $path ) {
+			return '/';
+		}
+
+		if ( '/' !== $path && '/' === substr( $path, -1 ) ) {
+			$path = rtrim( $path, '/' );
+		}
+
+		return '' === $path ? '/' : $path;
+	}
+}
+
+if ( ! function_exists( 'stifli_flex_mcp_scoped_css_rule_matches' ) ) {
+	function stifli_flex_mcp_scoped_css_rule_matches( $rule ) {
+		if ( ! is_array( $rule ) ) {
+			return false;
+		}
+
+		$scope_type = isset( $rule['scope_type'] ) ? (string) $rule['scope_type'] : '';
+		$scope_value = isset( $rule['scope_value'] ) ? (string) $rule['scope_value'] : '';
+		if ( '' === $scope_type || '' === $scope_value ) {
+			return false;
+		}
+
+		$queried_id = get_queried_object_id();
+
+		switch ( $scope_type ) {
+			case 'page':
+				if ( ! is_page() ) {
+					return false;
+				}
+				if ( (string) $queried_id === $scope_value ) {
+					return true;
+				}
+				$page = $queried_id ? get_post( $queried_id ) : null;
+				return ( $page && isset( $page->post_name ) && (string) $page->post_name === $scope_value );
+
+			case 'post':
+				if ( ! is_single() ) {
+					return false;
+				}
+				if ( (string) $queried_id === $scope_value ) {
+					return true;
+				}
+				$post = $queried_id ? get_post( $queried_id ) : null;
+				return ( $post && isset( $post->post_name ) && (string) $post->post_name === $scope_value );
+
+			case 'post_type':
+				$scope_value = sanitize_key( $scope_value );
+				if ( '' === $scope_value ) {
+					return false;
+				}
+				return is_singular( $scope_value ) || is_post_type_archive( $scope_value );
+
+			case 'category':
+				if ( is_category( $scope_value ) ) {
+					return true;
+				}
+				if ( $queried_id && is_singular() ) {
+					return has_category( $scope_value, $queried_id );
+				}
+				return false;
+
+			case 'tag':
+				if ( is_tag( $scope_value ) ) {
+					return true;
+				}
+				if ( $queried_id && is_singular() ) {
+					return has_tag( $scope_value, $queried_id );
+				}
+				return false;
+
+			case 'taxonomy_term':
+				$parts = explode( ':', $scope_value, 2 );
+				if ( 2 !== count( $parts ) ) {
+					return false;
+				}
+
+				$taxonomy = sanitize_key( $parts[0] );
+				$term = sanitize_title( $parts[1] );
+				if ( '' === $taxonomy || '' === $term ) {
+					return false;
+				}
+
+				if ( is_tax( $taxonomy, $term ) ) {
+					return true;
+				}
+				if ( $queried_id && is_singular() ) {
+					return has_term( $term, $taxonomy, $queried_id );
+				}
+				return false;
+
+			case 'url_path':
+				$rule_path = stifli_flex_mcp_normalize_scoped_path( $scope_value );
+				$request_path = '/';
+
+				global $wp;
+				if ( isset( $wp ) && isset( $wp->request ) ) {
+					$request_path = stifli_flex_mcp_normalize_scoped_path( '/' . ltrim( (string) $wp->request, '/' ) );
+				} else {
+					$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+					$request_path = stifli_flex_mcp_normalize_scoped_path( (string) wp_parse_url( $request_uri, PHP_URL_PATH ) );
+				}
+
+				if ( '*' === substr( $rule_path, -1 ) ) {
+					$prefix = rtrim( substr( $rule_path, 0, -1 ), '/' );
+					if ( '' === $prefix ) {
+						return true;
+					}
+					return $request_path === $prefix || 0 === strpos( $request_path, $prefix . '/' );
+				}
+
+				return $request_path === $rule_path;
+		}
+
+		return false;
+	}
+}
+
+if ( ! function_exists( 'stifli_flex_mcp_render_scoped_css' ) ) {
+	function stifli_flex_mcp_render_scoped_css() {
+		if ( is_admin() || wp_doing_ajax() ) {
+			return;
+		}
+
+		$rules = get_option( 'sflmcp_scoped_css_rules', array() );
+		$rules = stifli_flex_mcp_normalize_scoped_css_rules( $rules );
+		if ( empty( $rules ) ) {
+			return;
+		}
+
+		$chunks = array();
+		foreach ( $rules as $rule ) {
+			if ( ! stifli_flex_mcp_is_rule_enabled( $rule['enabled'] ?? true ) ) {
+				continue;
+			}
+			if ( ! stifli_flex_mcp_scoped_css_rule_matches( $rule ) ) {
+				continue;
+			}
+
+			$css = isset( $rule['css'] ) ? trim( (string) $rule['css'] ) : '';
+			if ( '' === $css ) {
+				continue;
+			}
+
+			$media_query = isset( $rule['media_query'] ) ? trim( (string) $rule['media_query'] ) : '';
+			if ( '' !== $media_query ) {
+				$css = '@media ' . $media_query . " {\n" . $css . "\n}";
+			}
+
+			$safe_css = preg_replace( '/<\/style/i', '<\\/style', $css );
+			if ( ! is_string( $safe_css ) || '' === trim( $safe_css ) ) {
+				continue;
+			}
+
+			$chunks[] = $safe_css;
+		}
+
+		if ( empty( $chunks ) ) {
+			return;
+		}
+
+		echo "<style id=\"sflmcp-scoped-css\">\n" . implode( "\n\n", $chunks ) . "\n</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- controlled CSS rules managed by admin-only tool with lint safeguards.
+	}
+}
+add_action( 'wp_head', 'stifli_flex_mcp_render_scoped_css', 99 );
 
 add_action( 'sflmcp_process_generated_image_attachment', 'stifli_flex_mcp_process_generated_image_attachment', 10, 1 );
 function stifli_flex_mcp_process_generated_image_attachment( $attachment_id ) {
@@ -801,6 +1071,9 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_reorder_menu_items', 'Reorder items in a navigation menu (batch update menu_order/parent).', 'WordPress - Menus', 1),
 		
 		// Options y Meta
+		array('wp_css_get_global', 'Get the active theme Additional CSS (Customizer) with optional metadata and stats.', 'WordPress - Design', 1),
+		array('wp_css_set_global', 'Update active theme Additional CSS (Customizer) with replace/append/prepend and internal CSS validation.', 'WordPress - Design', 1),
+		array('wp_css_set_scoped', 'Create/update/disable/delete scoped CSS rules (page, category, tag, post type, taxonomy term, url path) with internal CSS validation.', 'WordPress - Design', 1),
 		array('wp_get_option', 'Get a WordPress option by key.', 'WordPress - Options', 1),
 		array('wp_get_plugin_settings', 'Safely inspect plugin-related wp_options by plugin_slug/prefixes with recursive secret redaction.', 'WordPress - Options', 1),
 		array('wp_update_option', 'Update a WordPress option.', 'WordPress - Options', 1),
@@ -1079,7 +1352,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.05.27.1' );
+	define( 'SFLMCP_DB_VERSION', '2026.06.04.1' );
 }
 
 /**
@@ -1112,6 +1385,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_tec_seed_tools();
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
+	stifli_flex_mcp_upgrade_338_seed_css_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
 }
@@ -1707,6 +1981,99 @@ function stifli_flex_mcp_upgrade_gsc_tools() {
 }
 
 /**
+ * Upgrade routine (3.3.8): seed CSS design tools and attach them to
+ * relevant system profiles for existing installs.
+ */
+function stifli_flex_mcp_upgrade_338_seed_css_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_338_seed_css_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'wp_css_get_global', 'Get the active theme Additional CSS (Customizer) with optional metadata and stats.', 'WordPress - Design', 1 ),
+		array( 'wp_css_set_global', 'Update active theme Additional CSS (Customizer) with replace/append/prepend and internal CSS validation.', 'WordPress - Design', 1 ),
+		array( 'wp_css_set_scoped', 'Create/update/disable/delete scoped CSS rules (page, category, tag, post type, taxonomy term, url path) with internal CSS validation.', 'WordPress - Design', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	if ( stifli_flex_mcp_table_exists( $profiles_table ) && stifli_flex_mcp_table_exists( $profile_tools_table ) ) {
+		$read_tools = array( 'wp_css_get_global' );
+		$all_tools = array( 'wp_css_get_global', 'wp_css_set_global', 'wp_css_set_scoped' );
+
+		$profile_map = array(
+			'WordPress Read Only' => $read_tools,
+			'WordPress Full Management' => $all_tools,
+			'Safe Mode' => $read_tools,
+			'Development/Debug' => $read_tools,
+			'Complete Site' => $all_tools,
+		);
+
+		foreach ( $profile_map as $profile_name => $tool_names ) {
+			$profile_id = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+					$profile_name
+				)
+			);
+			if ( ! $profile_id ) {
+				continue;
+			}
+
+			foreach ( $tool_names as $tool_name ) {
+				$linked = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+						$profile_id,
+						$tool_name
+					)
+				);
+				if ( ! $linked ) {
+					$wpdb->insert(
+						$profile_tools_table,
+						array(
+							'profile_id' => (int) $profile_id,
+							'tool_name' => $tool_name,
+							'created_at' => $now,
+						),
+						array( '%d', '%s', '%s' )
+					);
+				}
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
  * Upgrade routine: remove Rank Math tools from system profiles.
  * Rank Math tools are controlled from the Plugins tab, not the main profiles.
  */
@@ -1795,6 +2162,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Plugins & Themes
 				'wp_list_plugins',
 				'wp_get_themes',
+				// Design
+				'wp_css_get_global',
 			),
 		),
 		array(
@@ -1830,6 +2199,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Menus (4)
 				'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_create_nav_menu', 'wp_reorder_menu_items',
 				// Options (3)
+				'wp_css_get_global', 'wp_css_set_global', 'wp_css_set_scoped',
 				'wp_get_option', 'wp_get_plugin_settings', 'wp_update_option',
 				// Post Meta (3)
 				'wp_get_post_meta', 'wp_update_post_meta', 'wp_delete_post_meta',
@@ -1936,6 +2306,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_post_revisions',
 				'wp_list_plugins',
 				'wp_get_themes',
+				'wp_css_get_global',
 				// WooCommerce READ operations (sin sensitive)
 				'wc_get_products', 'wc_get_product_variations', 'wc_get_variation',
 				'wc_get_product_attributes', 'wc_get_attribute_terms',
@@ -1962,6 +2333,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_post_types',
 				'wp_get_settings',
 				'wp_get_option',
+				'wp_css_get_global',
 				'wp_list_plugins',
 				'wp_get_themes',
 				'wc_get_system_status',

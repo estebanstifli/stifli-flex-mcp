@@ -233,6 +233,45 @@ class StifliFlexMcp_ChangeTracker {
 			return $this->snapshotBefore( $meta[0], $meta[1], $meta[2], $args );
 		}
 
+		if ( 'wp_css_set_global' === $tool ) {
+			$stylesheet = isset( $args['stylesheet'] ) ? sanitize_key( (string) $args['stylesheet'] ) : '';
+			if ( '' === $stylesheet ) {
+				$stylesheet = get_stylesheet();
+			}
+
+			$css = function_exists( 'wp_get_custom_css' ) ? (string) wp_get_custom_css( $stylesheet ) : '';
+
+			return array(
+				'operation_type' => 'update',
+				'object_type'    => 'theme_css',
+				'object_id'      => $stylesheet,
+				'object_subtype' => $stylesheet,
+				'before_state'   => array(
+					'stylesheet' => $stylesheet,
+					'css'        => $css,
+				),
+			);
+		}
+
+		if ( 'wp_css_set_scoped' === $tool ) {
+			$option_name = 'sflmcp_scoped_css_rules';
+			$option_value = get_option( $option_name, array() );
+			if ( function_exists( 'stifli_flex_mcp_normalize_scoped_css_rules' ) ) {
+				$option_value = stifli_flex_mcp_normalize_scoped_css_rules( $option_value );
+			}
+
+			return array(
+				'operation_type' => 'update',
+				'object_type'    => 'option',
+				'object_id'      => $option_name,
+				'object_subtype' => 'wp_options',
+				'before_state'   => array(
+					'option_name'  => $option_name,
+					'option_value' => $option_value,
+				),
+			);
+		}
+
 		if ( class_exists( 'StifliFlexMcp_TheEventsCalendar' ) && method_exists( 'StifliFlexMcp_TheEventsCalendar', 'getChangeTrackerSnapshot' ) ) {
 			$snapshot = StifliFlexMcp_TheEventsCalendar::getChangeTrackerSnapshot( $tool, $args );
 			if ( is_array( $snapshot ) ) {
@@ -841,6 +880,21 @@ class StifliFlexMcp_ChangeTracker {
 			case 'option':
 				return array( 'option_name' => $object_id, 'option_value' => get_option( $object_id ) );
 
+			case 'theme_css':
+				$stylesheet = is_string( $object_id ) ? sanitize_key( $object_id ) : '';
+				if ( '' === $stylesheet ) {
+					$stylesheet = isset( $args['stylesheet'] ) ? sanitize_key( (string) $args['stylesheet'] ) : get_stylesheet();
+				}
+				if ( '' === $stylesheet ) {
+					$stylesheet = get_stylesheet();
+				}
+
+				$css = function_exists( 'wp_get_custom_css' ) ? (string) wp_get_custom_css( $stylesheet ) : '';
+				return array(
+					'stylesheet' => $stylesheet,
+					'css'        => $css,
+				);
+
 			case 'post_meta':
 				$mk = isset( $args['meta_key'] ) ? $args['meta_key'] : null;
 				if ( $mk ) {
@@ -1139,6 +1193,24 @@ class StifliFlexMcp_ChangeTracker {
 					return array( 'success' => true, 'message' => "Restored option '{$before['option_name']}'." );
 				}
 				return array( 'success' => false, 'message' => 'Incomplete option before-state.' );
+
+			case 'theme_css':
+				if ( ! function_exists( 'wp_update_custom_css_post' ) ) {
+					return array( 'success' => false, 'message' => 'wp_update_custom_css_post is unavailable in this runtime.' );
+				}
+
+				$stylesheet = isset( $before['stylesheet'] ) ? sanitize_key( (string) $before['stylesheet'] ) : sanitize_key( (string) $obj_id );
+				if ( '' === $stylesheet ) {
+					$stylesheet = get_stylesheet();
+				}
+				$css = isset( $before['css'] ) ? (string) $before['css'] : '';
+
+				$updated = wp_update_custom_css_post( $css, array( 'stylesheet' => $stylesheet ) );
+				if ( is_wp_error( $updated ) ) {
+					return array( 'success' => false, 'message' => 'Failed to restore theme CSS: ' . $updated->get_error_message() );
+				}
+
+				return array( 'success' => true, 'message' => "Restored theme Additional CSS for stylesheet '{$stylesheet}'." );
 
 			case 'post_meta':
 				if ( isset( $before['meta_key'] ) ) {
@@ -1441,6 +1513,24 @@ class StifliFlexMcp_ChangeTracker {
 					return array( 'success' => true, 'message' => "Re-applied option '{$state['option_name']}'." );
 				}
 				break;
+
+			case 'theme_css':
+				if ( ! function_exists( 'wp_update_custom_css_post' ) ) {
+					return array( 'success' => false, 'message' => 'wp_update_custom_css_post is unavailable in this runtime.' );
+				}
+
+				$stylesheet = isset( $state['stylesheet'] ) ? sanitize_key( (string) $state['stylesheet'] ) : sanitize_key( (string) $obj_id );
+				if ( '' === $stylesheet ) {
+					$stylesheet = get_stylesheet();
+				}
+				$css = isset( $state['css'] ) ? (string) $state['css'] : '';
+
+				$updated = wp_update_custom_css_post( $css, array( 'stylesheet' => $stylesheet ) );
+				if ( is_wp_error( $updated ) ) {
+					return array( 'success' => false, 'message' => 'Failed to re-apply theme CSS: ' . $updated->get_error_message() );
+				}
+
+				return array( 'success' => true, 'message' => "Re-applied theme Additional CSS for stylesheet '{$stylesheet}'." );
 
 			case 'product':
 			case 'product_stock':

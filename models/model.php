@@ -365,6 +365,8 @@ class StifliFlexMcpModel {
             'wp_generate_video',
             // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
             'wp_update_option',
+            'wp_css_set_global',
+            'wp_css_set_scoped',
             'wp_update_post_meta','wp_delete_post_meta',
             'wp_create_term','wp_delete_term',
             'wp_update_term',
@@ -1045,6 +1047,55 @@ class StifliFlexMcpModel {
                 ),
 
                 // Opciones / Meta (lectura sensible + escritura)
+                'wp_css_get_global' => array(
+                    'name' => 'wp_css_get_global',
+                    'description' => 'Get the active theme Additional CSS content (Customizer). Supports optional stylesheet selection and metadata/statistics output.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'stylesheet' => array('type' => 'string', 'description' => 'Theme stylesheet slug. Defaults to active stylesheet.'),
+                            'include_meta' => array('type' => 'boolean', 'description' => 'Include source post metadata when available. Default true.'),
+                            'include_stats' => array('type' => 'boolean', 'description' => 'Include bytes/lines/hash statistics. Default true.'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_css_set_global' => array(
+                    'name' => 'wp_css_set_global',
+                    'description' => 'Update active theme Additional CSS (Customizer). Supports replace/append/prepend modes, optional hash guard, and validate_only dry-run.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'css' => array('type' => 'string', 'description' => 'CSS content to apply.'),
+                            'mode' => array('type' => 'string', 'description' => 'replace (default), append, or prepend.'),
+                            'validate_only' => array('type' => 'boolean', 'description' => 'If true, validates/lints but does not persist changes.'),
+                            'expected_hash' => array('type' => 'string', 'description' => 'Optional SHA-256 hash of current CSS for optimistic concurrency control.'),
+                            'stylesheet' => array('type' => 'string', 'description' => 'Theme stylesheet slug. Defaults to active stylesheet.'),
+                            'reason' => array('type' => 'string', 'description' => 'Optional audit note.'),
+                        ),
+                        'required' => array('css'),
+                    ),
+                ),
+                'wp_css_set_scoped' => array(
+                    'name' => 'wp_css_set_scoped',
+                    'description' => 'Create/update/append/disable/delete scoped CSS rules managed by this plugin. Rules are applied conditionally on the frontend without snippet plugins.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'scope_type' => array('type' => 'string', 'description' => 'Scope type: page, post, post_type, category, tag, taxonomy_term, url_path.'),
+                            'scope_value' => array('type' => 'string', 'description' => 'Scope target value (ID/slug/path). taxonomy_term format: taxonomy:term.'),
+                            'css' => array('type' => 'string', 'description' => 'CSS content for upsert/append.'),
+                            'mode' => array('type' => 'string', 'description' => 'upsert (default), append, disable, or delete.'),
+                            'rule_id' => array('type' => 'string', 'description' => 'Optional existing rule ID. Recommended for precise updates.'),
+                            'priority' => array('type' => 'integer', 'description' => 'Render priority, lower renders earlier. Default 10.'),
+                            'media_query' => array('type' => 'string', 'description' => 'Optional media query wrapper (without @media keyword).'),
+                            'validate_only' => array('type' => 'boolean', 'description' => 'If true, validates/lints but does not persist changes.'),
+                            'expected_hash' => array('type' => 'string', 'description' => 'Optional SHA-256 hash of current scoped-rules payload for optimistic concurrency control.'),
+                            'reason' => array('type' => 'string', 'description' => 'Optional audit note.'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
                 'wp_get_option' => array(
                     'name' => 'wp_get_option',
                     'description' => 'Get a WordPress option value by name.',
@@ -2237,6 +2288,8 @@ class StifliFlexMcpModel {
             'wp_switch_theme' => 'switch_themes',
             // options/meta/settings
             'wp_update_option' => 'manage_options',
+            'wp_css_set_global' => 'edit_theme_options',
+            'wp_css_set_scoped' => 'manage_options',
             'wp_get_plugin_settings' => 'manage_options',
             'wp_update_post_meta' => 'manage_options',
             'wp_delete_post_meta' => 'manage_options',
@@ -2354,6 +2407,61 @@ class StifliFlexMcpModel {
                 return in_array(strtolower(trim($value)), array('1', 'true', 'yes', 'on'), true);
             }
             return !empty($value);
+        };
+        $lintCss = function($css) {
+            $css = is_string($css) ? $css : '';
+            $out = array(
+                'ok' => true,
+                'errors' => array(),
+                'warnings' => array(),
+                'stats' => array(
+                    'bytes' => strlen($css),
+                    'lines' => '' === $css ? 0 : (substr_count($css, "\n") + 1),
+                    'rules_estimate' => substr_count($css, '{'),
+                ),
+            );
+
+            if ( '' === trim($css) ) {
+                $out['warnings'][] = 'CSS content is empty.';
+                return $out;
+            }
+
+            if ( substr_count($css, '/*') !== substr_count($css, '*/') ) {
+                $out['errors'][] = 'Unbalanced CSS comments (/* ... */).';
+            }
+
+            $without_strings = preg_replace('/"[^"\\\\]*(?:\\\\.[^"\\\\]*)*"|\'[^\'\\\\]*(?:\\\\.[^\'\\\\]*)*\'/s', '', $css);
+            if ( ! is_string($without_strings) ) {
+                $without_strings = $css;
+            }
+            $open_braces = substr_count($without_strings, '{');
+            $close_braces = substr_count($without_strings, '}');
+            if ( $open_braces !== $close_braces ) {
+                $out['errors'][] = 'Unbalanced braces in CSS.';
+            }
+
+            if ( preg_match('/<\/?\s*script\b/i', $css) ) {
+                $out['errors'][] = 'Script tags are not allowed in CSS.';
+            }
+
+            if ( false !== strpos($css, '<?') ) {
+                $out['errors'][] = 'PHP tags are not allowed in CSS.';
+            }
+
+            if ( preg_match('/@import\b/i', $css) ) {
+                $out['warnings'][] = 'Detected @import. Consider inline bundling for better performance.';
+            }
+
+            if ( strlen($css) > 120000 ) {
+                $out['warnings'][] = 'Large CSS payload detected (>120KB).';
+            }
+
+            if ( preg_match('/<\s*[a-z][^>]*>/i', $css) ) {
+                $out['warnings'][] = 'HTML-like tags detected in CSS payload.';
+            }
+
+            $out['ok'] = empty($out['errors']);
+            return $out;
         };
         $buildPaginationMeta = function($totalItems, $limit, $offset = 0, $paged = 1) {
             $limit = max(1, (int) $limit);
@@ -6169,6 +6277,394 @@ class StifliFlexMcpModel {
                 } else {
                     $addResultText($r, 'No se eliminó el metadato (' . $meta_key . ') para post ' . $post_id);
                 }
+                break;
+            case 'wp_css_get_global':
+                if (!current_user_can('edit_theme_options')) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para leer CSS global del tema.');
+                    break;
+                }
+
+                $stylesheet = sanitize_key((string) $utils::getArrayValue($args, 'stylesheet', get_stylesheet()));
+                if ('' === $stylesheet) {
+                    $stylesheet = get_stylesheet();
+                }
+                $theme = wp_get_theme($stylesheet);
+                if (!$theme || !$theme->exists()) {
+                    $r['error'] = array('code' => 'invalid_params', 'message' => 'stylesheet inválido o tema no encontrado.');
+                    break;
+                }
+
+                $include_meta = $isTruthy($utils::getArrayValue($args, 'include_meta', true));
+                $include_stats = $isTruthy($utils::getArrayValue($args, 'include_stats', true));
+
+                $css = function_exists('wp_get_custom_css') ? (string) wp_get_custom_css($stylesheet) : '';
+                $payload = array(
+                    'stylesheet' => $stylesheet,
+                    'css' => $css,
+                    'hash_sha256' => hash('sha256', $css),
+                );
+
+                if ($include_meta && function_exists('wp_get_custom_css_post')) {
+                    $css_post = wp_get_custom_css_post($stylesheet);
+                    if ($css_post instanceof WP_Post) {
+                        $payload['source_post_id'] = (int) $css_post->ID;
+                        $payload['source_post_status'] = $css_post->post_status;
+                        $payload['updated_gmt'] = $css_post->post_modified_gmt;
+                    }
+                }
+
+                if ($include_stats) {
+                    $payload['css_bytes'] = strlen($css);
+                    $payload['css_lines'] = '' === $css ? 0 : (substr_count($css, "\n") + 1);
+                    $payload['rules_estimate'] = substr_count($css, '{');
+                }
+
+                $payload_json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if (false === $payload_json) {
+                    $payload_json = '{}';
+                }
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => $payload_json),
+                    ),
+                    'structuredContent' => $payload,
+                );
+                break;
+            case 'wp_css_set_global':
+                if (!current_user_can('edit_theme_options')) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para actualizar CSS global del tema.');
+                    break;
+                }
+
+                $stylesheet = sanitize_key((string) $utils::getArrayValue($args, 'stylesheet', get_stylesheet()));
+                if ('' === $stylesheet) {
+                    $stylesheet = get_stylesheet();
+                }
+                $theme = wp_get_theme($stylesheet);
+                if (!$theme || !$theme->exists()) {
+                    $r['error'] = array('code' => 'invalid_params', 'message' => 'stylesheet inválido o tema no encontrado.');
+                    break;
+                }
+
+                $mode = sanitize_key((string) $utils::getArrayValue($args, 'mode', 'replace'));
+                if (!in_array($mode, array('replace', 'append', 'prepend'), true)) {
+                    $mode = 'replace';
+                }
+
+                $validate_only = $isTruthy($utils::getArrayValue($args, 'validate_only', false));
+                $expected_hash = strtolower(trim((string) $utils::getArrayValue($args, 'expected_hash', '')));
+                $reason = sanitize_text_field((string) $utils::getArrayValue($args, 'reason', ''));
+
+                $new_css = array_key_exists('css', $args) ? (string) $args['css'] : '';
+                if ('' === trim($new_css)) {
+                    $r['error'] = array('code' => 'invalid_params', 'message' => 'css es obligatorio.');
+                    break;
+                }
+
+                $current_css = function_exists('wp_get_custom_css') ? (string) wp_get_custom_css($stylesheet) : '';
+                $previous_hash = hash('sha256', $current_css);
+                if ('' !== $expected_hash && $expected_hash !== $previous_hash) {
+                    $r['error'] = array(
+                        'code' => 'conflict',
+                        'message' => 'Hash de CSS global no coincide. El contenido cambió desde la última lectura.',
+                        'data' => array(
+                            'expected_hash' => $expected_hash,
+                            'current_hash' => $previous_hash,
+                        ),
+                    );
+                    break;
+                }
+
+                if ('append' === $mode) {
+                    $candidate_css = '' === trim($current_css) ? $new_css : (rtrim($current_css) . "\n\n" . ltrim($new_css));
+                } elseif ('prepend' === $mode) {
+                    $candidate_css = '' === trim($current_css) ? $new_css : (rtrim($new_css) . "\n\n" . ltrim($current_css));
+                } else {
+                    $candidate_css = $new_css;
+                }
+
+                $lint = $lintCss($candidate_css);
+                if (!$lint['ok']) {
+                    $r['error'] = array(
+                        'code' => 'css_lint_failed',
+                        'message' => 'La validación CSS falló. No se aplicaron cambios.',
+                        'data' => $lint,
+                    );
+                    break;
+                }
+
+                $payload = array(
+                    'applied' => false,
+                    'validate_only' => $validate_only,
+                    'mode' => $mode,
+                    'stylesheet' => $stylesheet,
+                    'previous_hash' => $previous_hash,
+                    'new_hash' => hash('sha256', $candidate_css),
+                    'bytes_before' => strlen($current_css),
+                    'bytes_after' => strlen($candidate_css),
+                    'lint_warnings' => isset($lint['warnings']) ? $lint['warnings'] : array(),
+                    'reason' => $reason,
+                );
+
+                if ($validate_only) {
+                    $payload['_skip_change_tracking'] = true;
+                }
+
+                if (!$validate_only) {
+                    if (!function_exists('wp_update_custom_css_post')) {
+                        $r['error'] = array('code' => -32603, 'message' => 'wp_update_custom_css_post no está disponible en este entorno.');
+                        break;
+                    }
+
+                    $updated = wp_update_custom_css_post($candidate_css, array('stylesheet' => $stylesheet));
+                    if (is_wp_error($updated)) {
+                        $r['error'] = array('code' => -32603, 'message' => $updated->get_error_message());
+                        break;
+                    }
+
+                    if ($updated instanceof WP_Post) {
+                        $payload['source_post_id'] = (int) $updated->ID;
+                        $payload['updated_gmt'] = $updated->post_modified_gmt;
+                    }
+                    $payload['applied'] = true;
+                }
+
+                $payload_json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if (false === $payload_json) {
+                    $payload_json = '{}';
+                }
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => $payload_json),
+                    ),
+                    'structuredContent' => $payload,
+                );
+                break;
+            case 'wp_css_set_scoped':
+                if (!current_user_can('manage_options')) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para gestionar reglas CSS scoped.');
+                    break;
+                }
+
+                $rules_option = 'sflmcp_scoped_css_rules';
+                $rules = get_option($rules_option, array());
+                if (function_exists('stifli_flex_mcp_normalize_scoped_css_rules')) {
+                    $rules = stifli_flex_mcp_normalize_scoped_css_rules($rules);
+                } elseif (!is_array($rules)) {
+                    $rules = array();
+                }
+                $rules = array_values($rules);
+
+                $rules_json_before = wp_json_encode($rules, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if (false === $rules_json_before) {
+                    $rules_json_before = '[]';
+                }
+                $current_hash = hash('sha256', $rules_json_before);
+
+                $expected_hash = strtolower(trim((string) $utils::getArrayValue($args, 'expected_hash', '')));
+                if ('' !== $expected_hash && $expected_hash !== $current_hash) {
+                    $r['error'] = array(
+                        'code' => 'conflict',
+                        'message' => 'Hash de reglas scoped no coincide. El contenido cambió desde la última lectura.',
+                        'data' => array(
+                            'expected_hash' => $expected_hash,
+                            'current_hash' => $current_hash,
+                        ),
+                    );
+                    break;
+                }
+
+                $mode = sanitize_key((string) $utils::getArrayValue($args, 'mode', 'upsert'));
+                if (!in_array($mode, array('upsert', 'append', 'disable', 'delete'), true)) {
+                    $mode = 'upsert';
+                }
+
+                $rule_id = sanitize_key((string) $utils::getArrayValue($args, 'rule_id', ''));
+                $scope_type = sanitize_key((string) $utils::getArrayValue($args, 'scope_type', ''));
+                $scope_value = sanitize_text_field((string) $utils::getArrayValue($args, 'scope_value', ''));
+                $media_query = sanitize_text_field((string) $utils::getArrayValue($args, 'media_query', ''));
+                $priority = intval($utils::getArrayValue($args, 'priority', 10));
+                $priority = max(1, min(999, $priority));
+                $validate_only = $isTruthy($utils::getArrayValue($args, 'validate_only', false));
+                $reason = sanitize_text_field((string) $utils::getArrayValue($args, 'reason', ''));
+                $css_input = array_key_exists('css', $args) ? (string) $args['css'] : '';
+
+                $valid_scope_types = array('page', 'post', 'post_type', 'category', 'tag', 'taxonomy_term', 'url_path');
+
+                $target_index = null;
+                if ('' !== $rule_id) {
+                    foreach ($rules as $idx => $rule) {
+                        if (isset($rule['id']) && (string) $rule['id'] === $rule_id) {
+                            $target_index = $idx;
+                            break;
+                        }
+                    }
+                }
+                if (null === $target_index && '' !== $scope_type && '' !== $scope_value) {
+                    foreach ($rules as $idx => $rule) {
+                        $rule_scope_type = isset($rule['scope_type']) ? (string) $rule['scope_type'] : '';
+                        $rule_scope_value = isset($rule['scope_value']) ? (string) $rule['scope_value'] : '';
+                        $rule_media_query = isset($rule['media_query']) ? (string) $rule['media_query'] : '';
+                        if ($rule_scope_type === $scope_type && $rule_scope_value === $scope_value && $rule_media_query === $media_query) {
+                            $target_index = $idx;
+                            break;
+                        }
+                    }
+                }
+
+                $now_gmt = gmdate('Y-m-d H:i:s');
+                $payload = array(
+                    'applied' => false,
+                    'validate_only' => $validate_only,
+                    'mode' => $mode,
+                    'previous_hash' => $current_hash,
+                    'reason' => $reason,
+                );
+
+                if (in_array($mode, array('upsert', 'append'), true)) {
+                    if (!in_array($scope_type, $valid_scope_types, true)) {
+                        $r['error'] = array('code' => 'invalid_params', 'message' => 'scope_type inválido.');
+                        break;
+                    }
+                    if ('' === $scope_value) {
+                        $r['error'] = array('code' => 'invalid_params', 'message' => 'scope_value es obligatorio para este mode.');
+                        break;
+                    }
+                    if ('taxonomy_term' === $scope_type && false === strpos($scope_value, ':')) {
+                        $r['error'] = array('code' => 'invalid_params', 'message' => 'taxonomy_term requiere formato taxonomy:term.');
+                        break;
+                    }
+                    if ('' === trim($css_input)) {
+                        $r['error'] = array('code' => 'invalid_params', 'message' => 'css es obligatorio para mode upsert/append.');
+                        break;
+                    }
+
+                    $existing_css = '';
+                    $existing_rule = null;
+                    if (null !== $target_index && isset($rules[$target_index]) && is_array($rules[$target_index])) {
+                        $existing_rule = $rules[$target_index];
+                        $existing_css = isset($existing_rule['css']) ? (string) $existing_rule['css'] : '';
+                    }
+
+                    if ('append' === $mode && '' !== trim($existing_css)) {
+                        $candidate_css = rtrim($existing_css) . "\n\n" . ltrim($css_input);
+                    } else {
+                        $candidate_css = $css_input;
+                    }
+
+                    $lint = $lintCss($candidate_css);
+                    if (!$lint['ok']) {
+                        $r['error'] = array(
+                            'code' => 'css_lint_failed',
+                            'message' => 'La validación CSS falló. No se aplicaron cambios.',
+                            'data' => $lint,
+                        );
+                        break;
+                    }
+
+                    $resolved_rule_id = '' !== $rule_id
+                        ? $rule_id
+                        : (null !== $target_index && isset($rules[$target_index]['id']) ? sanitize_key((string) $rules[$target_index]['id']) : sanitize_key('cssr_' . wp_generate_uuid4()));
+
+                    $new_rule = array(
+                        'id' => $resolved_rule_id,
+                        'scope_type' => $scope_type,
+                        'scope_value' => $scope_value,
+                        'css' => $candidate_css,
+                        'enabled' => true,
+                        'priority' => $priority,
+                        'media_query' => $media_query,
+                        'created_gmt' => (null !== $target_index && isset($rules[$target_index]['created_gmt'])) ? $rules[$target_index]['created_gmt'] : $now_gmt,
+                        'updated_gmt' => $now_gmt,
+                    );
+
+                    $payload['rule_id'] = $resolved_rule_id;
+                    $payload['scope_type'] = $scope_type;
+                    $payload['scope_value'] = $scope_value;
+                    $payload['enabled'] = true;
+                    $payload['lint_warnings'] = isset($lint['warnings']) ? $lint['warnings'] : array();
+
+                    if (!$validate_only) {
+                        if (null !== $target_index) {
+                            $rules[$target_index] = $new_rule;
+                        } else {
+                            $rules[] = $new_rule;
+                        }
+                        if (function_exists('stifli_flex_mcp_normalize_scoped_css_rules')) {
+                            $rules = stifli_flex_mcp_normalize_scoped_css_rules($rules);
+                        }
+                        update_option($rules_option, array_values($rules), false);
+                        $payload['applied'] = true;
+                    }
+                } elseif ('disable' === $mode) {
+                    if (null === $target_index || !isset($rules[$target_index])) {
+                        $r['error'] = array('code' => 'not_found', 'message' => 'No se encontró la regla a desactivar (usa rule_id o scope exacto).');
+                        break;
+                    }
+
+                    $rule = $rules[$target_index];
+                    $payload['rule_id'] = isset($rule['id']) ? $rule['id'] : '';
+                    $payload['scope_type'] = isset($rule['scope_type']) ? $rule['scope_type'] : '';
+                    $payload['scope_value'] = isset($rule['scope_value']) ? $rule['scope_value'] : '';
+                    $payload['enabled'] = false;
+
+                    if (!$validate_only) {
+                        $rules[$target_index]['enabled'] = false;
+                        $rules[$target_index]['updated_gmt'] = $now_gmt;
+                        if (function_exists('stifli_flex_mcp_normalize_scoped_css_rules')) {
+                            $rules = stifli_flex_mcp_normalize_scoped_css_rules($rules);
+                        }
+                        update_option($rules_option, array_values($rules), false);
+                        $payload['applied'] = true;
+                    }
+                } else {
+                    if (null === $target_index || !isset($rules[$target_index])) {
+                        $r['error'] = array('code' => 'not_found', 'message' => 'No se encontró la regla a eliminar (usa rule_id o scope exacto).');
+                        break;
+                    }
+
+                    $rule = $rules[$target_index];
+                    $payload['rule_id'] = isset($rule['id']) ? $rule['id'] : '';
+                    $payload['scope_type'] = isset($rule['scope_type']) ? $rule['scope_type'] : '';
+                    $payload['scope_value'] = isset($rule['scope_value']) ? $rule['scope_value'] : '';
+                    $payload['deleted'] = true;
+
+                    if (!$validate_only) {
+                        unset($rules[$target_index]);
+                        $rules = array_values($rules);
+                        if (function_exists('stifli_flex_mcp_normalize_scoped_css_rules')) {
+                            $rules = stifli_flex_mcp_normalize_scoped_css_rules($rules);
+                        }
+                        update_option($rules_option, $rules, false);
+                        $payload['applied'] = true;
+                    }
+                }
+
+                $rules_after = $rules;
+                if (!$validate_only && function_exists('stifli_flex_mcp_normalize_scoped_css_rules')) {
+                    $rules_after = stifli_flex_mcp_normalize_scoped_css_rules($rules_after);
+                }
+                $rules_json_after = wp_json_encode($rules_after, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if (false === $rules_json_after) {
+                    $rules_json_after = '[]';
+                }
+                $payload['new_hash'] = hash('sha256', $rules_json_after);
+                $payload['rules_total'] = is_array($rules_after) ? count($rules_after) : 0;
+
+                if ($validate_only) {
+                    $payload['_skip_change_tracking'] = true;
+                }
+
+                $payload_json = wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                if (false === $payload_json) {
+                    $payload_json = '{}';
+                }
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => $payload_json),
+                    ),
+                    'structuredContent' => $payload,
+                );
                 break;
             case 'wp_get_option':
                 if (!current_user_can('manage_options')) {
