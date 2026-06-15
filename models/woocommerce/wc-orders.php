@@ -240,13 +240,16 @@ class StifliFlexMcp_WC_Orders {
     
     public static function getCapabilities() {
         return array(
+            'wc_get_orders' => 'edit_shop_orders',
             'wc_create_order' => 'edit_shop_orders',
             'wc_update_order' => 'edit_shop_orders',
             'wc_delete_order' => 'delete_shop_orders',
             'wc_batch_update_orders' => 'edit_shop_orders',
+            'wc_get_order_notes' => 'edit_shop_orders',
             'wc_create_order_note' => 'edit_shop_orders',
             'wc_delete_order_note' => 'edit_shop_orders',
             // Refunds capabilities
+            'wc_get_refunds' => 'edit_shop_orders',
             'wc_create_refund' => 'edit_shop_orders',
             'wc_delete_refund' => 'delete_shop_orders',
         );

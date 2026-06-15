@@ -2824,6 +2824,87 @@ class StifliFlexMcpModel {
             }
         };
 
+        $acf_normalize_value = function( $acf_value ) use ( &$acf_normalize_value ) {
+            if ( is_array( $acf_value ) ) {
+                $acf_normalized = array();
+                foreach ( $acf_value as $acf_key => $acf_item ) {
+                    $acf_normalized[ $acf_key ] = $acf_normalize_value( $acf_item );
+                }
+                return $acf_normalized;
+            }
+            if ( $acf_value instanceof WP_Post ) {
+                return array(
+                    'ID'          => (int) $acf_value->ID,
+                    'post_type'   => $acf_value->post_type,
+                    'post_title'  => get_the_title( $acf_value ),
+                    'post_status' => $acf_value->post_status,
+                    'permalink'   => get_permalink( $acf_value ),
+                );
+            }
+            if ( $acf_value instanceof WP_User ) {
+                return array(
+                    'ID'           => (int) $acf_value->ID,
+                    'user_login'   => $acf_value->user_login,
+                    'display_name' => $acf_value->display_name,
+                    'roles'        => $acf_value->roles,
+                );
+            }
+            if ( $acf_value instanceof WP_Term ) {
+                return array(
+                    'term_id'  => (int) $acf_value->term_id,
+                    'taxonomy' => $acf_value->taxonomy,
+                    'name'     => $acf_value->name,
+                    'slug'     => $acf_value->slug,
+                );
+            }
+            if ( $acf_value instanceof DateTimeInterface ) {
+                return $acf_value->format( DATE_ATOM );
+            }
+            if ( is_object( $acf_value ) ) {
+                if ( method_exists( $acf_value, 'to_array' ) ) {
+                    return $acf_normalize_value( $acf_value->to_array() );
+                }
+                $acf_object = array( 'object_type' => get_class( $acf_value ) );
+                if ( method_exists( $acf_value, 'get_id' ) ) {
+                    $acf_object['id'] = $acf_value->get_id();
+                }
+                if ( method_exists( $acf_value, 'get_name' ) ) {
+                    $acf_object['name'] = $acf_value->get_name();
+                }
+                return $acf_object;
+            }
+            return $acf_value;
+        };
+        $acf_format_field = function( $acf_field, $acf_include_value = false ) use ( &$acf_format_field, $acf_normalize_value ) {
+            if ( ! is_array( $acf_field ) ) {
+                return array();
+            }
+            $acf_meta = array();
+            foreach ( array( 'key', 'name', 'label', 'type', 'parent', 'instructions', 'return_format', 'required', 'menu_order' ) as $acf_meta_key ) {
+                if ( array_key_exists( $acf_meta_key, $acf_field ) ) {
+                    $acf_meta[ $acf_meta_key ] = $acf_normalize_value( $acf_field[ $acf_meta_key ] );
+                }
+            }
+            if ( array_key_exists( 'required', $acf_meta ) ) {
+                $acf_meta['required'] = (bool) $acf_meta['required'];
+            }
+            foreach ( array( 'choices', 'default_value', 'placeholder', 'prepend', 'append', 'min', 'max', 'step', 'maxlength', 'multiple', 'allow_null', 'ui', 'layout', 'button_label', 'min_size', 'max_size', 'mime_types' ) as $acf_config_key ) {
+                if ( array_key_exists( $acf_config_key, $acf_field ) && '' !== $acf_field[ $acf_config_key ] && null !== $acf_field[ $acf_config_key ] ) {
+                    $acf_meta[ $acf_config_key ] = $acf_normalize_value( $acf_field[ $acf_config_key ] );
+                }
+            }
+            if ( $acf_include_value && array_key_exists( 'value', $acf_field ) ) {
+                $acf_meta['value'] = $acf_normalize_value( $acf_field['value'] );
+            }
+            if ( ! empty( $acf_field['sub_fields'] ) && is_array( $acf_field['sub_fields'] ) ) {
+                $acf_meta['sub_fields'] = array();
+                foreach ( $acf_field['sub_fields'] as $acf_sub_field ) {
+                    $acf_meta['sub_fields'][] = $acf_format_field( $acf_sub_field, $acf_include_value );
+                }
+            }
+            return $acf_meta;
+        };
+
         switch ($tool) {
             case 'wp_search_image':
                 if ( $this->maybeLoadSearchImageModule() && class_exists( 'StifliFlexMcp_Search_Image' ) ) {
@@ -5949,15 +6030,32 @@ class StifliFlexMcpModel {
                 $acf_groups = acf_get_field_groups();
                 $acf_out = array();
                 foreach ( $acf_groups as $acf_g ) {
-                    $acf_out[] = array(
-                        'key'       => $acf_g['key'],
-                        'title'     => $acf_g['title'],
-                        'active'    => $acf_g['active'],
-                        'location'  => $acf_g['location'],
-                        'menu_order' => $acf_g['menu_order'],
+                    $acf_group_key = isset( $acf_g['key'] ) ? (string) $acf_g['key'] : '';
+                    $acf_group_out = array(
+                        'key'        => $acf_group_key,
+                        'title'      => isset( $acf_g['title'] ) ? $acf_g['title'] : '',
+                        'active'     => ! empty( $acf_g['active'] ),
+                        'location'   => isset( $acf_g['location'] ) ? $acf_g['location'] : array(),
+                        'menu_order' => isset( $acf_g['menu_order'] ) ? (int) $acf_g['menu_order'] : 0,
+                        'fields'     => array(),
                     );
+                    if ( '' !== $acf_group_key && function_exists( 'acf_get_fields' ) ) {
+                        $acf_group_fields = acf_get_fields( $acf_group_key );
+                        if ( is_array( $acf_group_fields ) ) {
+                            foreach ( $acf_group_fields as $acf_group_field ) {
+                                $acf_group_out['fields'][] = $acf_format_field( $acf_group_field );
+                            }
+                        }
+                    }
+                    $acf_group_out['field_count'] = count( $acf_group_out['fields'] );
+                    $acf_out[] = $acf_group_out;
                 }
-                $addResultText( $r, wp_json_encode( $acf_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                $r['result'] = array(
+                    'content' => array(
+                        array( 'type' => 'text', 'text' => wp_json_encode( $acf_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ),
+                    ),
+                    'structuredContent' => array( 'field_groups' => $acf_out ),
+                );
                 break;
             case 'acf_get_fields':
                 if ( ! function_exists( 'get_fields' ) ) {
@@ -5969,11 +6067,60 @@ class StifliFlexMcpModel {
                     $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: post_id' );
                     break;
                 }
-                $acf_fields = get_fields( $acf_post_id );
-                if ( false === $acf_fields ) {
-                    $acf_fields = array();
+                $acf_out = array(
+                    'post_id'      => $acf_post_id,
+                    'field_groups' => array(),
+                    'fields'       => array(),
+                );
+                if ( function_exists( 'acf_get_field_groups' ) ) {
+                    $acf_groups = acf_get_field_groups( array( 'post_id' => $acf_post_id ) );
+                    if ( is_array( $acf_groups ) ) {
+                        foreach ( $acf_groups as $acf_g ) {
+                            $acf_group_key = isset( $acf_g['key'] ) ? (string) $acf_g['key'] : '';
+                            $acf_group_fields = array();
+                            if ( '' !== $acf_group_key && function_exists( 'acf_get_fields' ) ) {
+                                $acf_fields_for_group = acf_get_fields( $acf_group_key );
+                                if ( is_array( $acf_fields_for_group ) ) {
+                                    foreach ( $acf_fields_for_group as $acf_group_field ) {
+                                        $acf_group_fields[] = $acf_format_field( $acf_group_field );
+                                    }
+                                }
+                            }
+                            $acf_out['field_groups'][] = array(
+                                'key'         => $acf_group_key,
+                                'title'       => isset( $acf_g['title'] ) ? $acf_g['title'] : '',
+                                'active'      => ! empty( $acf_g['active'] ),
+                                'location'    => isset( $acf_g['location'] ) ? $acf_g['location'] : array(),
+                                'menu_order'  => isset( $acf_g['menu_order'] ) ? (int) $acf_g['menu_order'] : 0,
+                                'field_count' => count( $acf_group_fields ),
+                                'fields'      => $acf_group_fields,
+                            );
+                        }
+                    }
                 }
-                $addResultText( $r, wp_json_encode( $acf_fields, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                $acf_field_objects = function_exists( 'get_field_objects' ) ? get_field_objects( $acf_post_id, true, true ) : false;
+                if ( is_array( $acf_field_objects ) ) {
+                    foreach ( $acf_field_objects as $acf_field_object ) {
+                        $acf_out['fields'][] = $acf_format_field( $acf_field_object, true );
+                    }
+                } else {
+                    $acf_fields = get_fields( $acf_post_id );
+                    if ( is_array( $acf_fields ) ) {
+                        foreach ( $acf_fields as $acf_field_name => $acf_field_value ) {
+                            $acf_out['fields'][] = array(
+                                'name'  => (string) $acf_field_name,
+                                'value' => $acf_normalize_value( $acf_field_value ),
+                            );
+                        }
+                    }
+                }
+                $acf_out['field_count'] = count( $acf_out['fields'] );
+                $r['result'] = array(
+                    'content' => array(
+                        array( 'type' => 'text', 'text' => wp_json_encode( $acf_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ),
+                    ),
+                    'structuredContent' => $acf_out,
+                );
                 break;
             case 'acf_update_field':
                 if ( ! function_exists( 'update_field' ) ) {

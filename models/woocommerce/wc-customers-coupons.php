@@ -141,6 +141,9 @@ class StifliFlexMcp_WC_Coupons {
     
     public static function getCapabilities() {
         return array(
+            'wc_get_coupons' => 'edit_shop_coupons',
+            'wc_get_coupon' => 'edit_shop_coupons',
+            'wc_get_coupon_count' => 'edit_shop_coupons',
             'wc_create_coupon' => 'edit_shop_coupons',
             'wc_update_coupon' => 'edit_shop_coupons',
             'wc_delete_coupon' => 'delete_shop_coupons',
