@@ -3,9 +3,9 @@
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
-Requires at least: 5.8
+Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.3.9
+Stable tag: 3.3.11
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -426,6 +426,18 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.11 =
+* New: Added `elementor_add_widget`, a structural Elementor write tool for inserting widgets or containers into existing Elementor pages.
+* Improvement: Supports raw Elementor settings for registered widget slugs and curated flat parameters for container, heading, text-editor, button, image, image-box, icon-box, icon-list, video, divider, and spacer widgets.
+* Security: Validates `edit_post` on the target page, validates parent containers/sections/columns when `parent_id` is supplied, and rejects unknown non-curated widget types unless Elementor's registry is unavailable.
+
+= 3.3.10 =
+* Security: Added object-level `edit_post` and `delete_post` checks to post, page, and media MCP tools before mutating or deleting specific content.
+* Improvement: Single-object post, media, post meta, and SEO tools now accept common ID aliases (`ID`, `id`, `post_id`, and `attachment_id` where relevant) for better MCP client compatibility.
+* Improvement: Post, page, media, and term update tools now preserve existing text fields when optional text arguments are sent as empty strings.
+* Improvement: Rank Math and Yoast SEO tools now read and update the WordPress slug, returning the slug actually saved by WordPress.
+* Cleanup: Expanded uninstall cleanup to remove OAuth, automation, event, ability, changelog, and dynamic plugin options across single-site and multisite installs.
+
 = 3.3.9 =
 * Security: Added explicit WordPress capability enforcement for sensitive WooCommerce read tools, including orders, order notes, refunds, reports, taxes, shipping, payment gateways, system status, settings, webhooks, and coupons.
 * Improvement: Enriched ACF MCP responses with field group metadata, field definitions, labels, types, return formats, nested sub-fields, structuredContent, and normalized object values for posts, users, terms, dates, and plugin objects.

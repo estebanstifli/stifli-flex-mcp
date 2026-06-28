@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.3.9
+Version: 3.3.11
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1908,6 +1908,7 @@ function stifli_flex_mcp_upgrade_elementor_integration_tools() {
 		array( 'elementor_get_page_outline', 'Get a compact Elementor page outline with widget types and text snippets.', 'Plugins - Elementor', 1 ),
 		array( 'elementor_list_local_templates', 'List saved Elementor templates from the local template library.', 'Plugins - Elementor', 1 ),
 		array( 'elementor_import_template', 'Create a local Elementor template from exported JSON or an elements array.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_add_widget', 'Add a widget or container to an existing Elementor page using curated flat params or raw Elementor settings.', 'Plugins - Elementor', 1 ),
 	);
 
 	foreach ( $new_tools as $tool ) {
@@ -1928,6 +1929,45 @@ function stifli_flex_mcp_upgrade_elementor_integration_tools() {
 				array( '%s', '%s', '%s', '%d', '%s', '%s' )
 			);
 		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.3.11): seed elementor_add_widget for existing installs.
+ */
+function stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_3311_elementor_add_widget_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$tool_name = 'elementor_add_widget';
+	$description = 'Add a widget or container to an existing Elementor page using curated flat params or raw Elementor settings.';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+	$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool_name ) );
+	if ( ! $exists ) {
+		$now = current_time( 'mysql', true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$tools_table,
+			array(
+				'tool_name' => $tool_name,
+				'tool_description' => $description,
+				'category' => 'Plugins - Elementor',
+				'enabled' => 1,
+				'created_at' => $now,
+				'updated_at' => $now,
+			),
+			array( '%s', '%s', '%s', '%d', '%s', '%s' )
+		);
 	}
 
 	update_option( $flag, '1' );
@@ -3549,6 +3589,49 @@ function stifli_flex_mcp_abilities_available() {
 	return function_exists('wp_get_abilities');
 }
 
+/**
+ * Get all registered WordPress abilities via a compatibility-safe dynamic call.
+ *
+ * @return array
+ */
+function stifli_flex_mcp_get_abilities_safe() {
+	if ( ! stifli_flex_mcp_abilities_available() ) {
+		return array();
+	}
+
+	$get_abilities = 'wp_get_abilities';
+	if ( ! function_exists( $get_abilities ) ) {
+		return array();
+	}
+
+	$abilities = $get_abilities();
+	return is_array( $abilities ) ? $abilities : array();
+}
+
+/**
+ * Get a single WordPress ability via a compatibility-safe dynamic call.
+ *
+ * @param string $ability_name Ability slug.
+ * @return mixed|null
+ */
+function stifli_flex_mcp_get_ability_safe( $ability_name ) {
+	if ( ! stifli_flex_mcp_abilities_available() ) {
+		return null;
+	}
+
+	$ability_name = is_string( $ability_name ) ? trim( $ability_name ) : '';
+	if ( '' === $ability_name ) {
+		return null;
+	}
+
+	$get_ability = 'wp_get_ability';
+	if ( ! function_exists( $get_ability ) ) {
+		return null;
+	}
+
+	return $get_ability( $ability_name );
+}
+
 // ============================================================
 // Automation Tasks Tables
 // ============================================================
@@ -3994,6 +4077,7 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_maybe_upgrade_db();
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
+	stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
@@ -4101,22 +4185,20 @@ function stifli_flex_mcp_discover_abilities_by_prefixes( $prefixes = array() ) {
 	};
 
 	// Primary source: WordPress Abilities API registry.
-	if ( function_exists( 'wp_get_abilities' ) ) {
-		$all_abilities = wp_get_abilities();
-		if ( is_array( $all_abilities ) ) {
-			foreach ( $all_abilities as $ability_key => $ability ) {
-				$ability_name = '';
-				if ( is_object( $ability ) && method_exists( $ability, 'get_name' ) ) {
-					$ability_name = (string) $ability->get_name();
-				} elseif ( is_string( $ability ) ) {
-					$ability_name = $ability;
-				} elseif ( is_string( $ability_key ) ) {
-					$ability_name = $ability_key;
-				}
+	$all_abilities = stifli_flex_mcp_get_abilities_safe();
+	if ( ! empty( $all_abilities ) ) {
+		foreach ( $all_abilities as $ability_key => $ability ) {
+			$ability_name = '';
+			if ( is_object( $ability ) && method_exists( $ability, 'get_name' ) ) {
+				$ability_name = (string) $ability->get_name();
+			} elseif ( is_string( $ability ) ) {
+				$ability_name = $ability;
+			} elseif ( is_string( $ability_key ) ) {
+				$ability_name = $ability_key;
+			}
 
-				if ( $matches_prefix( $ability_name ) ) {
-					$discovered[] = $ability_name;
-				}
+			if ( $matches_prefix( $ability_name ) ) {
+				$discovered[] = $ability_name;
 			}
 		}
 	}
@@ -4254,6 +4336,7 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_upgrade_rankmath_tools();
 	stifli_flex_mcp_upgrade_plugin_integration_tools();
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
+	stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_rankmath_profile_detach();
 	stifli_flex_mcp_apply_plugin_integration_overrides();

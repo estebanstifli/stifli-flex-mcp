@@ -605,16 +605,18 @@ class StifliFlexMcpModel {
                 ),
                 'wp_get_post' => array(
                     'name' => 'wp_get_post',
-                    'description' => 'Get a single post by ID. Optional enrichments: author, featured media, and taxonomies.',
+                    'description' => 'Get a single post by ID. Accepts ID, id, or post_id. Optional enrichments: author, featured media, and taxonomies.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
+                            'post_id' => array('type' => 'integer'),
                             'include_author' => array('type' => 'boolean'),
                             'include_featured_media' => array('type' => 'boolean'),
                             'include_taxonomies' => array('type' => 'boolean'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
 
@@ -643,18 +645,20 @@ class StifliFlexMcpModel {
                 ),
                 'wp_update_post' => array(
                     'name' => 'wp_update_post',
-                    'description' => 'Update a post by ID. The "fields" object should use the standard parameters accepted by the WordPress wp_update_post() function. Supports taxonomy updates with fields.post_category / fields.tax_input (or top-level post_category / tax_input). Optional top-level featured_media (attachment ID) sets the featured image.',
+                    'description' => 'Update a post by ID, id, or post_id. The "fields" object should use the standard parameters accepted by the WordPress wp_update_post() function. Empty text fields preserve existing values. Supports taxonomy updates with fields.post_category / fields.tax_input (or top-level post_category / tax_input). Optional top-level featured_media (attachment ID) sets the featured image.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
+                            'post_id' => array('type' => 'integer'),
                             'fields' => array('type' => 'object'),
                             'post_category'=> array('type' => 'array', 'items' => array('type' => 'integer')),
                             'tax_input'    => array('type' => 'object'),
                             'meta_input' => array('type' => 'object'),
                             'featured_media' => array('type' => 'integer', 'description' => 'Attachment ID to set as featured image.'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
                 'wp_set_featured_image' => array(
@@ -671,14 +675,16 @@ class StifliFlexMcpModel {
                 ),
                 'wp_delete_post' => array(
                     'name' => 'wp_delete_post',
-                    'description' => 'Delete a post by ID.',
+                    'description' => 'Delete a post by ID, id, or post_id.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID'    => array('type' => 'integer'),
+                            'id'    => array('type' => 'integer'),
+                            'post_id' => array('type' => 'integer'),
                             'force' => array('type' => 'boolean'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
 
@@ -781,13 +787,16 @@ class StifliFlexMcpModel {
                 ),
                 'wp_get_media_item' => array(
                     'name' => 'wp_get_media_item',
-                    'description' => 'Get media item details by ID.',
+                    'description' => 'Get media item details by ID, id, post_id, or attachment_id.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
+                            'post_id' => array('type' => 'integer'),
+                            'attachment_id' => array('type' => 'integer'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
                 'wp_upload_image_from_url' => array(
@@ -1140,41 +1149,47 @@ class StifliFlexMcpModel {
                 // wp_delete_option intentionally removed for safety: cannot be reliably undone.
                 'wp_get_post_meta' => array(
                     'name' => 'wp_get_post_meta',
-                    'description' => 'Get post meta (post_id, meta_key, single).',
+                    'description' => 'Get post meta (post_id/ID/id, meta_key, single).',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id'  => array('type' => 'integer'),
+                            'ID'       => array('type' => 'integer'),
+                            'id'       => array('type' => 'integer'),
                             'meta_key' => array('type' => 'string'),
                             'single'   => array('type' => 'boolean'),
                         ),
-                        'required' => array('post_id','meta_key'),
+                        'required' => array('meta_key'),
                     ),
                 ),
                 'wp_update_post_meta' => array(
                     'name' => 'wp_update_post_meta',
-                    'description' => 'Update post meta (post_id, meta_key, meta_value).',
+                    'description' => 'Update post meta (post_id/ID/id, meta_key, meta_value).',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id'    => array('type' => 'integer'),
+                            'ID'         => array('type' => 'integer'),
+                            'id'         => array('type' => 'integer'),
                             'meta_key'   => array('type' => 'string'),
                             'meta_value' => array('type' => 'string'),
                         ),
-                        'required' => array('post_id','meta_key','meta_value'),
+                        'required' => array('meta_key','meta_value'),
                     ),
                 ),
                 'wp_delete_post_meta' => array(
                     'name' => 'wp_delete_post_meta',
-                    'description' => 'Delete post meta (post_id, meta_key, meta_value optional).',
+                    'description' => 'Delete post meta (post_id/ID/id, meta_key, meta_value optional).',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id'    => array('type' => 'integer'),
+                            'ID'         => array('type' => 'integer'),
+                            'id'         => array('type' => 'integer'),
                             'meta_key'   => array('type' => 'string'),
                             'meta_value' => array('type' => 'string'),
                         ),
-                        'required' => array('post_id','meta_key'),
+                        'required' => array('meta_key'),
                     ),
                 ),
 
@@ -1243,22 +1258,28 @@ class StifliFlexMcpModel {
                 ),
                 'wp_rm_get_post_seo' => array(
                     'name' => 'wp_rm_get_post_seo',
-                    'description' => 'Get Rank Math SEO post meta fields for a post ID.',
+                    'description' => 'Get Rank Math SEO post meta fields and WordPress slug for a post ID.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id' => array('type' => 'integer'),
+                            'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
                         ),
-                        'required' => array('post_id'),
+                        'required' => array(),
                     ),
                 ),
                 'wp_rm_update_post_seo' => array(
                     'name' => 'wp_rm_update_post_seo',
-                    'description' => 'Update Rank Math SEO post meta fields for a post ID.',
+                    'description' => 'Update Rank Math SEO post meta fields and WordPress slug for a post ID.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id' => array('type' => 'integer'),
+                            'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
+                            'slug' => array('type' => 'string'),
+                            'post_name' => array('type' => 'string'),
                             'title' => array('type' => 'string'),
                             'description' => array('type' => 'string'),
                             'focus_keyword' => array('type' => 'string'),
@@ -1270,29 +1291,35 @@ class StifliFlexMcpModel {
                             'twitter_description' => array('type' => 'string'),
                             'twitter_image' => array('type' => 'string'),
                         ),
-                        'required' => array('post_id'),
+                        'required' => array(),
                     ),
                 ),
 
                 // Yoast SEO
                 'yoast_get_meta' => array(
                     'name' => 'yoast_get_meta',
-                    'description' => 'Get Yoast SEO meta fields for a post (title, description, focus keyword, canonical, robots, OG, Twitter). Requires Yoast SEO plugin active.',
+                    'description' => 'Get Yoast SEO meta fields and WordPress slug for a post (title, description, focus keyword, canonical, robots, OG, Twitter). Requires Yoast SEO plugin active.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id' => array('type' => 'integer', 'description' => 'Post ID to read Yoast meta from'),
+                            'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
                         ),
-                        'required' => array('post_id'),
+                        'required' => array(),
                     ),
                 ),
                 'yoast_set_meta' => array(
                     'name' => 'yoast_set_meta',
-                    'description' => 'Set Yoast SEO meta fields for a post. Accepts title, description, focus_keyword, canonical, noindex, nofollow, facebook_title, facebook_description, facebook_image, twitter_title, twitter_description, twitter_image. Requires Yoast SEO plugin active.',
+                    'description' => 'Set Yoast SEO meta fields and WordPress slug for a post. Accepts title, description, focus_keyword, slug/post_name, canonical, noindex, nofollow, facebook_title, facebook_description, facebook_image, twitter_title, twitter_description, twitter_image. Requires Yoast SEO plugin active.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id'              => array('type' => 'integer'),
+                            'ID'                   => array('type' => 'integer'),
+                            'id'                   => array('type' => 'integer'),
+                            'slug'                 => array('type' => 'string'),
+                            'post_name'            => array('type' => 'string'),
                             'title'                => array('type' => 'string'),
                             'description'          => array('type' => 'string'),
                             'focus_keyword'        => array('type' => 'string'),
@@ -1306,7 +1333,7 @@ class StifliFlexMcpModel {
                             'twitter_description'  => array('type' => 'string'),
                             'twitter_image'        => array('type' => 'string'),
                         ),
-                        'required' => array('post_id'),
+                        'required' => array(),
                     ),
                 ),
                 'yoast_reindex' => array(
@@ -1533,11 +1560,13 @@ class StifliFlexMcpModel {
                 ),
                 'wp_update_page' => array(
                     'name' => 'wp_update_page',
-                    'description' => 'Update a page by ID (post_title, post_content, post_status, post_author, post_parent, menu_order, meta_input).',
+                    'description' => 'Update a page by ID, id, or post_id (post_title, post_content, post_status, post_author, post_parent, menu_order, meta_input). Empty text fields preserve existing values.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID'           => array('type' => 'integer'),
+                            'id'           => array('type' => 'integer'),
+                            'post_id'      => array('type' => 'integer'),
                             'post_title'   => array('type' => 'string'),
                             'post_content' => array('type' => 'string'),
                             'post_status'  => array('type' => 'string'),
@@ -1546,19 +1575,21 @@ class StifliFlexMcpModel {
                             'menu_order'   => array('type' => 'integer'),
                             'meta_input'   => array('type' => 'object'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
                 'wp_delete_page' => array(
                     'name' => 'wp_delete_page',
-                    'description' => 'Delete a page by ID. Pass force=true to skip trash.',
+                    'description' => 'Delete a page by ID, id, or post_id. Pass force=true to skip trash.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID'    => array('type' => 'integer'),
+                            'id'    => array('type' => 'integer'),
+                            'post_id' => array('type' => 'integer'),
                             'force' => array('type' => 'boolean'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
                 
@@ -1714,28 +1745,34 @@ class StifliFlexMcpModel {
                 // Media
                 'wp_update_media_item' => array(
                     'name' => 'wp_update_media_item',
-                    'description' => 'Update media item metadata (ID required, post_title, post_content, post_excerpt).',
+                    'description' => 'Update media item metadata (ID, id, post_id, or attachment_id required; post_title, post_content, post_excerpt). Empty text fields preserve existing values.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID'           => array('type' => 'integer'),
+                            'id'           => array('type' => 'integer'),
+                            'post_id'      => array('type' => 'integer'),
+                            'attachment_id'=> array('type' => 'integer'),
                             'post_title'   => array('type' => 'string'),
                             'post_content' => array('type' => 'string'),
                             'post_excerpt' => array('type' => 'string'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
                 'wp_delete_media_item' => array(
                     'name' => 'wp_delete_media_item',
-                    'description' => 'Delete a media item by ID. Pass force=true to delete permanently.',
+                    'description' => 'Delete a media item by ID, id, post_id, or attachment_id. Pass force=true to delete permanently.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'ID'    => array('type' => 'integer'),
+                            'id'    => array('type' => 'integer'),
+                            'post_id' => array('type' => 'integer'),
+                            'attachment_id' => array('type' => 'integer'),
                             'force' => array('type' => 'boolean'),
                         ),
-                        'required' => array('ID'),
+                        'required' => array(),
                     ),
                 ),
                 
@@ -2408,6 +2445,38 @@ class StifliFlexMcpModel {
             }
             return !empty($value);
         };
+        $resolveObjectId = function(array $source, array $keys = array('ID', 'id', 'post_id')) {
+            foreach ($keys as $key) {
+                if (!array_key_exists($key, $source)) {
+                    continue;
+                }
+                $value = $source[$key];
+                if (!is_scalar($value) && null !== $value) {
+                    continue;
+                }
+                $id_value = intval($value);
+                if ($id_value > 0) {
+                    return $id_value;
+                }
+            }
+            return 0;
+        };
+        $isEmptyTextUpdate = function($value) {
+            return is_string($value) && '' === $value;
+        };
+        $resolveSlugUpdate = function(array $source) use ($isEmptyTextUpdate) {
+            foreach (array('slug', 'post_name') as $key) {
+                if (!array_key_exists($key, $source) || $isEmptyTextUpdate($source[$key])) {
+                    continue;
+                }
+                if (!is_scalar($source[$key]) && null !== $source[$key]) {
+                    continue;
+                }
+                $slug = sanitize_title((string) $source[$key]);
+                return '' === $slug ? null : $slug;
+            }
+            return null;
+        };
         $lintCss = function($css) {
             $css = is_string($css) ? $css : '';
             $out = array(
@@ -3040,11 +3109,12 @@ class StifliFlexMcpModel {
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
                 break;
             case 'wp_get_post':
-                if (empty($args['ID'])) {
+                $get_post_id = $resolveObjectId($args);
+                if (!$get_post_id) {
                     $r['error'] = array('code' => -42602, 'message' => 'ID required');
                     break;
                 }
-                $p = get_post(intval($args['ID']));
+                $p = get_post($get_post_id);
                 if (!$p) {
                     $r['error'] = array('code' => -42600, 'message' => 'Post not found');
                     break;
@@ -3305,11 +3375,15 @@ class StifliFlexMcpModel {
                 }
                 break;
             case 'wp_update_post':
-                if (empty($args['ID'])) {
+                $up_id = $resolveObjectId($args);
+                if (!$up_id) {
                     $r['error'] = array('code' => -42602, 'message' => 'ID required');
                     break;
                 }
-                $up_id = intval($args['ID']);
+                if (!current_user_can('edit_post', $up_id)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to edit this post.');
+                    break;
+                }
                 $up_existing = get_post($up_id);
                 if (!$up_existing) {
                     $r['error'] = array('code' => -42600, 'message' => 'Post not found');
@@ -3321,6 +3395,9 @@ class StifliFlexMcpModel {
                 $up_tax_input = array();
                 if (!empty($args['fields']) && is_array($args['fields'])) {
                     foreach ($args['fields'] as $k => $v) {
+                        if ($isEmptyTextUpdate($v) && in_array($k, array('post_title', 'post_content', 'post_excerpt', 'post_name', 'post_status'), true)) {
+                            continue;
+                        }
                         // Validate post_type change
                         if ('post_type' === $k) {
                             $new_pt = sanitize_key($v);
@@ -3367,7 +3444,11 @@ class StifliFlexMcpModel {
                             }
                             continue;
                         }
-                        $c[$k] = in_array($k, array('post_content', 'post_excerpt'), true) ? wp_slash((string) $v) : sanitize_text_field($v);
+                        if ('post_name' === $k) {
+                            $c[$k] = sanitize_title($v);
+                        } else {
+                            $c[$k] = in_array($k, array('post_content', 'post_excerpt'), true) ? wp_slash((string) $v) : sanitize_text_field($v);
+                        }
                     }
                 }
 
@@ -3451,13 +3532,23 @@ class StifliFlexMcpModel {
                 }
                 break;
             case 'wp_delete_post':
-                if (empty($args['ID'])) {
+                $delete_post_id = $resolveObjectId($args);
+                if (!$delete_post_id) {
                     $r['error'] = array('code' => -42602, 'message' => 'ID required');
                     break;
                 }
-                $del = wp_delete_post(intval($args['ID']), !empty($args['force']));
+                if (!current_user_can('delete_post', $delete_post_id)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to delete this post.');
+                    break;
+                }
+                $delete_post = get_post($delete_post_id);
+                if (!$delete_post) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Post not found');
+                    break;
+                }
+                $del = wp_delete_post($delete_post_id, !empty($args['force']));
                 if ($del) {
-                    $addResultText($r, 'Post #' . $args['ID'] . ' deleted');
+                    $addResultText($r, 'Post #' . $delete_post_id . ' deleted');
                 } else {
                     $r['error'] = array('code' => -42603, 'message' => 'Deletion failed');
                 }
@@ -3520,13 +3611,26 @@ class StifliFlexMcpModel {
                 }
                 break;
             case 'wp_update_page':
-                if (empty($args['ID'])) {
+                $page_id = $resolveObjectId($args);
+                if (!$page_id) {
                     $r['error'] = array('code' => -42602, 'message' => 'ID required');
                     break;
                 }
-                $pdata = array('ID' => intval($args['ID']), 'post_type' => 'page');
+                if (!current_user_can('edit_post', $page_id)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to edit this page.');
+                    break;
+                }
+                $page_post = get_post($page_id);
+                if (!$page_post || 'page' !== $page_post->post_type) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Page not found');
+                    break;
+                }
+                $pdata = array('ID' => $page_id, 'post_type' => 'page');
                 foreach (array('post_title', 'post_content', 'post_status', 'post_author', 'post_parent', 'menu_order') as $k) {
                     if (isset($args[$k])) {
+                        if ($isEmptyTextUpdate($args[$k]) && in_array($k, array('post_title', 'post_content', 'post_status'), true)) {
+                            continue;
+                        }
                         if ('post_content' === $k) {
                             $pdata[$k] = wp_slash((string) $args[$k]);
                         } elseif ('post_title' === $k) {
@@ -3551,13 +3655,23 @@ class StifliFlexMcpModel {
                 $addResultText($r, 'Page #' . $u . ' updated');
                 break;
             case 'wp_delete_page':
-                if (empty($args['ID'])) {
+                $delete_page_id = $resolveObjectId($args);
+                if (!$delete_page_id) {
                     $r['error'] = array('code' => -42602, 'message' => 'ID required');
                     break;
                 }
-                $del = wp_delete_post(intval($args['ID']), !empty($args['force']));
+                if (!current_user_can('delete_post', $delete_page_id)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to delete this page.');
+                    break;
+                }
+                $delete_page = get_post($delete_page_id);
+                if (!$delete_page || 'page' !== $delete_page->post_type) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Page not found');
+                    break;
+                }
+                $del = wp_delete_post($delete_page_id, !empty($args['force']));
                 if ($del) {
-                    $addResultText($r, 'Page #' . $args['ID'] . ' deleted');
+                    $addResultText($r, 'Page #' . $delete_page_id . ' deleted');
                 } else {
                     $r['error'] = array('code' => -42603, 'message' => 'Deletion failed');
                 }
@@ -3840,8 +3954,9 @@ class StifliFlexMcpModel {
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
                 break;
             case 'wp_get_media_item':
-                if (empty($args['ID'])) { $r['error'] = array('code' => -42602, 'message' => 'ID required'); break; }
-                $att = get_post(intval($args['ID']));
+                $media_id = $resolveObjectId($args, array('ID', 'id', 'post_id', 'attachment_id'));
+                if (!$media_id) { $r['error'] = array('code' => -42602, 'message' => 'ID required'); break; }
+                $att = get_post($media_id);
                 if (!$att || 'attachment' !== $att->post_type) { $r['error'] = array('code' => -42600, 'message' => 'Media not found'); break; }
                 $meta = wp_get_attachment_metadata($att->ID);
                 $out = array('ID' => $att->ID, 'post_title' => $att->post_title, 'mime_type' => get_post_mime_type($att), 'url' => wp_get_attachment_url($att->ID), 'meta' => $meta);
@@ -4110,23 +4225,27 @@ class StifliFlexMcpModel {
                 $addResultText($r, 'Image uploaded successfully. Attachment ID: ' . $att_id . ', URL: ' . $att_url);
                 break;
             case 'wp_update_media_item':
-                if (empty($args['ID'])) { $r['error'] = array('code' => -42602, 'message' => 'ID required'); break; }
-                $att = get_post(intval($args['ID']));
+                $media_update_id = $resolveObjectId($args, array('ID', 'id', 'post_id', 'attachment_id'));
+                if (!$media_update_id) { $r['error'] = array('code' => -42602, 'message' => 'ID required'); break; }
+                if (!current_user_can('edit_post', $media_update_id)) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to edit this media item.'); break; }
+                $att = get_post($media_update_id);
                 if (!$att || 'attachment' !== $att->post_type) { $r['error'] = array('code' => -42600, 'message' => 'Media not found'); break; }
-                $upd = array('ID' => intval($args['ID']));
-                if (isset($args['post_title'])) { $upd['post_title'] = sanitize_text_field($args['post_title']); }
-                if (isset($args['post_content'])) { $upd['post_content'] = sanitize_textarea_field($args['post_content']); }
-                if (isset($args['post_excerpt'])) { $upd['post_excerpt'] = sanitize_textarea_field($args['post_excerpt']); }
+                $upd = array('ID' => $media_update_id);
+                if (isset($args['post_title']) && !$isEmptyTextUpdate($args['post_title'])) { $upd['post_title'] = sanitize_text_field($args['post_title']); }
+                if (isset($args['post_content']) && !$isEmptyTextUpdate($args['post_content'])) { $upd['post_content'] = sanitize_textarea_field($args['post_content']); }
+                if (isset($args['post_excerpt']) && !$isEmptyTextUpdate($args['post_excerpt'])) { $upd['post_excerpt'] = sanitize_textarea_field($args['post_excerpt']); }
                 $result = wp_update_post($upd, true);
-                if (is_wp_error($result)) { $r['error'] = array('code' => $result->get_error_code(), 'message' => $result->get_error_message()); } else { $addResultText($r, 'Media item #' . $args['ID'] . ' updated'); }
+                if (is_wp_error($result)) { $r['error'] = array('code' => $result->get_error_code(), 'message' => $result->get_error_message()); } else { $addResultText($r, 'Media item #' . $media_update_id . ' updated'); }
                 break;
             case 'wp_delete_media_item':
-                if (empty($args['ID'])) { $r['error'] = array('code' => -42602, 'message' => 'ID required'); break; }
-                $att = get_post(intval($args['ID']));
+                $media_delete_id = $resolveObjectId($args, array('ID', 'id', 'post_id', 'attachment_id'));
+                if (!$media_delete_id) { $r['error'] = array('code' => -42602, 'message' => 'ID required'); break; }
+                if (!current_user_can('delete_post', $media_delete_id)) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to delete this media item.'); break; }
+                $att = get_post($media_delete_id);
                 if (!$att || 'attachment' !== $att->post_type) { $r['error'] = array('code' => -42600, 'message' => 'Media not found'); break; }
                 $force = isset($args['force']) ? (bool)$args['force'] : false;
-                $deleted = wp_delete_attachment(intval($args['ID']), $force);
-                if ($deleted) { $addResultText($r, 'Media item #' . $args['ID'] . ' deleted'); } else { $r['error'] = array('code' => -42603, 'message' => 'Media deletion failed'); }
+                $deleted = wp_delete_attachment($media_delete_id, $force);
+                if ($deleted) { $addResultText($r, 'Media item #' . $media_delete_id . ' deleted'); } else { $r['error'] = array('code' => -42603, 'message' => 'Media deletion failed'); }
                 break;
             case 'wp_get_taxonomies':
                 $tax = get_taxonomies(array(), 'objects');
@@ -4172,9 +4291,9 @@ class StifliFlexMcpModel {
                 $cap = $tax_obj && !empty($tax_obj->cap->edit_terms) ? $tax_obj->cap->edit_terms : 'manage_categories';
                 if (!current_user_can($cap)) { $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions for taxonomy: ' . $taxonomy); break; }
                 $term_args = array();
-                if (isset($args['name']))        { $term_args['name']        = sanitize_text_field($args['name']); }
-                if (isset($args['slug']))        { $term_args['slug']        = sanitize_title($args['slug']); }
-                if (isset($args['description'])) { $term_args['description'] = sanitize_textarea_field($args['description']); }
+                if (isset($args['name']) && !$isEmptyTextUpdate($args['name'])) { $term_args['name'] = sanitize_text_field($args['name']); }
+                if (isset($args['slug']) && !$isEmptyTextUpdate($args['slug'])) { $term_args['slug'] = sanitize_title($args['slug']); }
+                if (isset($args['description']) && !$isEmptyTextUpdate($args['description'])) { $term_args['description'] = sanitize_textarea_field($args['description']); }
                 if (isset($args['parent']))      { $term_args['parent']      = intval($args['parent']); }
                 $res = wp_update_term($term_id, $taxonomy, $term_args);
                 if (is_wp_error($res)) { $r['error'] = array('code' => $res->get_error_code(), 'message' => $res->get_error_message()); } else { $addResultText($r, 'Term updated: ' . wp_json_encode($res)); }
@@ -5842,12 +5961,17 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => -32603, 'message' => 'Rank Math SEO is not active on this site.');
                     break;
                 }
-                $rm_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $rm_post_id = $resolveObjectId($args);
                 if ( ! $rm_post_id ) {
                     $r['error'] = array('code' => -32602, 'message' => 'Missing required parameter: post_id');
                     break;
                 }
-                if ( ! get_post( $rm_post_id ) ) {
+                if ( ! current_user_can( 'edit_post', $rm_post_id ) ) {
+                    $r['error'] = array('code' => -32603, 'message' => 'You do not have permission to edit this post.');
+                    break;
+                }
+                $rm_post = get_post( $rm_post_id );
+                if ( ! $rm_post ) {
                     $r['error'] = array('code' => -32602, 'message' => 'Post not found.');
                     break;
                 }
@@ -5865,7 +5989,7 @@ class StifliFlexMcpModel {
                     'rank_math_twitter_image',
                     'rank_math_pillar_content',
                 );
-                $rm_data = array( 'post_id' => $rm_post_id );
+                $rm_data = array( 'post_id' => $rm_post_id, 'slug' => $rm_post->post_name );
                 foreach ( $rm_meta_keys as $rm_meta_key ) {
                     $rm_data[ $rm_meta_key ] = get_post_meta( $rm_post_id, $rm_meta_key, true );
                 }
@@ -5876,7 +6000,7 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => -32603, 'message' => 'Rank Math SEO is not active on this site.');
                     break;
                 }
-                $rm_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $rm_post_id = $resolveObjectId($args);
                 if ( ! $rm_post_id ) {
                     $r['error'] = array('code' => -32602, 'message' => 'Missing required parameter: post_id');
                     break;
@@ -5914,8 +6038,19 @@ class StifliFlexMcpModel {
                         }
                     }
                 }
+                $rm_slug = $resolveSlugUpdate($args);
+                if ( null !== $rm_slug ) {
+                    $rm_slug_result = wp_update_post(array('ID' => $rm_post_id, 'post_name' => $rm_slug), true);
+                    if (is_wp_error($rm_slug_result)) {
+                        $r['error'] = array('code' => $rm_slug_result->get_error_code(), 'message' => $rm_slug_result->get_error_message());
+                        break;
+                    }
+                    $rm_updated[] = 'slug';
+                }
+                $rm_saved_post = get_post($rm_post_id);
                 $addResultText( $r, wp_json_encode( array(
                     'post_id' => $rm_post_id,
+                    'slug' => $rm_saved_post ? $rm_saved_post->post_name : '',
                     'updated_fields' => $rm_updated,
                 ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
                 break;
@@ -5925,8 +6060,17 @@ class StifliFlexMcpModel {
                     $r['error'] = array( 'code' => -32603, 'message' => 'Yoast SEO plugin is not active.' );
                     break;
                 }
-                $ys_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
-                if ( ! $ys_post_id || ! get_post( $ys_post_id ) ) {
+                $ys_post_id = $resolveObjectId($args);
+                if ( ! $ys_post_id ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Invalid or missing post_id.' );
+                    break;
+                }
+                if ( ! current_user_can( 'edit_post', $ys_post_id ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'You do not have permission to edit this post.' );
+                    break;
+                }
+                $ys_post = get_post( $ys_post_id );
+                if ( ! $ys_post ) {
                     $r['error'] = array( 'code' => -32602, 'message' => 'Invalid or missing post_id.' );
                     break;
                 }
@@ -5944,7 +6088,7 @@ class StifliFlexMcpModel {
                     '_yoast_wpseo_twitter-description' => 'twitter_description',
                     '_yoast_wpseo_twitter-image'      => 'twitter_image',
                 );
-                $ys_data = array( 'post_id' => $ys_post_id );
+                $ys_data = array( 'post_id' => $ys_post_id, 'slug' => $ys_post->post_name );
                 foreach ( $ys_keys as $ys_meta_key => $ys_field ) {
                     $ys_data[ $ys_field ] = get_post_meta( $ys_post_id, $ys_meta_key, true );
                 }
@@ -5955,9 +6099,13 @@ class StifliFlexMcpModel {
                     $r['error'] = array( 'code' => -32603, 'message' => 'Yoast SEO plugin is not active.' );
                     break;
                 }
-                $ys_post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
+                $ys_post_id = $resolveObjectId($args);
                 if ( ! $ys_post_id || ! get_post( $ys_post_id ) ) {
                     $r['error'] = array( 'code' => -32602, 'message' => 'Invalid or missing post_id.' );
+                    break;
+                }
+                if ( ! current_user_can( 'edit_post', $ys_post_id ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'You do not have permission to edit this post.' );
                     break;
                 }
                 $ys_map = array(
@@ -5992,7 +6140,17 @@ class StifliFlexMcpModel {
                         $ys_updated[] = $ys_arg;
                     }
                 }
-                $addResultText( $r, wp_json_encode( array( 'post_id' => $ys_post_id, 'updated_fields' => $ys_updated ), JSON_PRETTY_PRINT ) );
+                $ys_slug = $resolveSlugUpdate($args);
+                if ( null !== $ys_slug ) {
+                    $ys_slug_result = wp_update_post(array('ID' => $ys_post_id, 'post_name' => $ys_slug), true);
+                    if (is_wp_error($ys_slug_result)) {
+                        $r['error'] = array('code' => $ys_slug_result->get_error_code(), 'message' => $ys_slug_result->get_error_message());
+                        break;
+                    }
+                    $ys_updated[] = 'slug';
+                }
+                $ys_saved_post = get_post($ys_post_id);
+                $addResultText( $r, wp_json_encode( array( 'post_id' => $ys_post_id, 'slug' => $ys_saved_post ? $ys_saved_post->post_name : '', 'updated_fields' => $ys_updated ), JSON_PRETTY_PRINT ) );
                 break;
             case 'yoast_reindex':
                 if ( ! defined( 'WPSEO_VERSION' ) ) {
@@ -6367,7 +6525,7 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
                     break;
                 }
-                $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
+                $post_id = $resolveObjectId($args);
                 $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
                 if (!$post_id || !$meta_key) {
                     $r['error'] = array('code' => 'invalid_params', 'message' => 'Faltan parámetros.');
@@ -6392,7 +6550,7 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
                     break;
                 }
-                $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
+                $post_id = $resolveObjectId($args);
                 $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
                 $meta_value = isset($args['meta_value']) ? maybe_serialize($args['meta_value']) : null;
                 if (!$post_id || !$meta_key) {
@@ -6411,7 +6569,7 @@ class StifliFlexMcpModel {
                     $r['error'] = array('code' => 'permission_denied', 'message' => 'No tienes permisos para manipular meta.');
                     break;
                 }
-                $post_id = isset($args['post_id']) ? intval($args['post_id']) : 0;
+                $post_id = $resolveObjectId($args);
                 $meta_key = isset($args['meta_key']) ? sanitize_text_field($args['meta_key']) : '';
                 $meta_value = isset($args['meta_value']) ? $args['meta_value'] : null;
                 if (!$post_id || !$meta_key) {
@@ -8074,7 +8232,7 @@ class StifliFlexMcpModel {
         $tool = is_string( $tool ) ? $tool : ( is_scalar( $tool ) ? (string) $tool : '' );
 
         // Check if WordPress Abilities API is available
-        if ( ! function_exists( 'wp_get_ability' ) ) {
+        if ( ! function_exists( 'stifli_flex_mcp_abilities_available' ) || ! stifli_flex_mcp_abilities_available() || ! function_exists( 'stifli_flex_mcp_get_ability_safe' ) ) {
             $r['error'] = array(
                 'code' => -32603,
                 'message' => 'WordPress Abilities API not available. Requires WordPress 6.9+',
@@ -8094,8 +8252,7 @@ class StifliFlexMcpModel {
 
         $ability_name = $tools[ $tool ]['_ability_name'];
         
-        // Use wp_get_ability() to get the specific ability
-        $ability = wp_get_ability( $ability_name );
+        $ability = stifli_flex_mcp_get_ability_safe( $ability_name );
         if ( ! $ability ) {
             $r['error'] = array(
                 'code' => -32602,

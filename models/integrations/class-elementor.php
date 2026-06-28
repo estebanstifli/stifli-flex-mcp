@@ -10,6 +10,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 class StifliFlexMcp_Elementor {
 
     const TEMPLATE_POST_TYPE = 'elementor_library';
+    const CURATED_WIDGET_TYPES = array(
+        'container',
+        'heading',
+        'text-editor',
+        'button',
+        'image',
+        'image-box',
+        'icon-box',
+        'icon-list',
+        'video',
+        'divider',
+        'spacer',
+    );
 
     private static function is_elementor_plugin_active() {
         if ( function_exists( 'is_plugin_active' ) && is_plugin_active( 'elementor/elementor.php' ) ) {
@@ -133,6 +146,43 @@ class StifliFlexMcp_Elementor {
                     'required' => array( 'title', 'template_json' ),
                 ),
             ),
+            'elementor_add_widget' => array(
+                'name' => 'elementor_add_widget',
+                'description' => 'Add a widget or container to an existing Elementor post/page. Supports raw settings for any registered widget type and curated flat parameters for container, heading, text-editor, button, image, image-box, icon-box, icon-list, video, divider, and spacer. Containers can include recursive children. Returns the new element ID and Elementor edit URL.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'post_id' => array( 'type' => 'integer', 'description' => 'Target post or page ID with existing Elementor data.' ),
+                        'widget_type' => array( 'type' => 'string', 'description' => 'Elementor widget slug, or container for a Flexbox container.' ),
+                        'settings' => array( 'type' => 'object', 'description' => 'Raw Elementor settings object. When supplied, it takes precedence over curated flat parameters.', 'additionalProperties' => true ),
+                        'parent_id' => array( 'type' => 'string', 'description' => 'Optional parent element ID. Must reference a container, section, or column.' ),
+                        'position' => array( 'type' => 'integer', 'description' => 'Optional zero-based insertion position. Defaults to append.' ),
+                        'flex_direction' => array( 'type' => 'string', 'enum' => array( 'row', 'column' ), 'description' => 'Curated container direction. Defaults to column.' ),
+                        'content_width' => array( 'type' => 'string', 'enum' => array( 'boxed', 'full' ), 'description' => 'Curated container width. Defaults to boxed.' ),
+                        'children' => array( 'type' => 'array', 'items' => array( 'type' => 'object' ), 'description' => 'Curated container children. Each child supports widget_type plus curated params or settings.' ),
+                        'title' => array( 'type' => 'string', 'description' => 'Curated heading text.' ),
+                        'header_size' => array( 'type' => 'string', 'description' => 'Curated heading tag: h1-h6, div, span, or p. Defaults to h2.' ),
+                        'editor' => array( 'type' => 'string', 'description' => 'Curated text-editor HTML content.' ),
+                        'text' => array( 'type' => 'string', 'description' => 'Curated button label.' ),
+                        'link_url' => array( 'type' => 'string', 'description' => 'Curated button/image/image-box/icon-box link URL.' ),
+                        'link_target' => array( 'type' => 'string', 'enum' => array( '_blank', '_self' ), 'description' => 'Curated link target. Defaults to _self.' ),
+                        'image_url' => array( 'type' => 'string', 'description' => 'Curated image or image-box URL.' ),
+                        'image_alt' => array( 'type' => 'string', 'description' => 'Curated image alt text.' ),
+                        'title_text' => array( 'type' => 'string', 'description' => 'Curated image-box or icon-box title.' ),
+                        'description_text' => array( 'type' => 'string', 'description' => 'Curated image-box or icon-box description.' ),
+                        'title_size' => array( 'type' => 'string', 'description' => 'Curated image-box or icon-box title tag. Defaults to h3.' ),
+                        'icon' => array( 'type' => 'string', 'description' => 'Curated icon-box FontAwesome class, such as fas fa-check.' ),
+                        'items' => array( 'type' => 'array', 'items' => array( 'type' => 'object' ), 'description' => 'Curated icon-list items: { text, icon?, link_url? }.' ),
+                        'video_url' => array( 'type' => 'string', 'description' => 'Curated YouTube, Vimeo, or Dailymotion URL.' ),
+                        'aspect_ratio' => array( 'type' => 'string', 'enum' => array( '169', '219', '43', '32', '11', '916' ), 'description' => 'Curated video aspect ratio. Defaults to 169.' ),
+                        'autoplay' => array( 'type' => 'boolean', 'description' => 'Curated video autoplay. Defaults false.' ),
+                        'weight' => array( 'type' => 'integer', 'description' => 'Curated divider weight in pixels. Defaults to 1.' ),
+                        'color' => array( 'type' => 'string', 'description' => 'Curated divider color.' ),
+                        'space' => array( 'type' => 'integer', 'description' => 'Curated spacer height in pixels. Defaults to 50.' ),
+                    ),
+                    'required' => array( 'post_id', 'widget_type' ),
+                ),
+            ),
         );
     }
 
@@ -145,6 +195,7 @@ class StifliFlexMcp_Elementor {
             'elementor_get_page_outline' => 'edit_posts',
             'elementor_list_local_templates' => 'edit_posts',
             'elementor_import_template' => 'edit_posts',
+            'elementor_add_widget' => 'edit_posts',
         );
     }
 
@@ -165,7 +216,7 @@ class StifliFlexMcp_Elementor {
             return self::build_post_snapshot( 'create', self::TEMPLATE_POST_TYPE, 0 );
         }
 
-        if ( in_array( $tool, array( 'elementor_replace_text', 'elementor_replace_image', 'elementor_replace_link' ), true ) ) {
+        if ( in_array( $tool, array( 'elementor_replace_text', 'elementor_replace_image', 'elementor_replace_link', 'elementor_add_widget' ), true ) ) {
             $post_id = self::sanitize_positive_int( self::array_value( $args, 'post_id', 0 ) );
             $post = $post_id > 0 ? get_post( $post_id ) : null;
             return self::build_post_snapshot( 'update', $post ? $post->post_type : 'post', $post_id );
@@ -208,6 +259,9 @@ class StifliFlexMcp_Elementor {
                     break;
                 case 'elementor_import_template':
                     $payload = self::import_template( $args );
+                    break;
+                case 'elementor_add_widget':
+                    $payload = self::add_widget( $args );
                     break;
                 default:
                     return null;
@@ -524,6 +578,451 @@ class StifliFlexMcp_Elementor {
             'template_type' => $template_type,
             'edit_url' => admin_url( 'post.php?post=' . (int) $new_id . '&action=elementor' ),
         );
+    }
+
+    private static function add_widget( $args ) {
+        $args = is_array( $args ) ? $args : array();
+        $post_id = self::require_editable_elementor_post( $args );
+        $widget_type = sanitize_key( (string) self::array_value( $args, 'widget_type', '' ) );
+        if ( '' === $widget_type ) {
+            throw new Exception( 'widget_type is required.' );
+        }
+
+        $tree = self::get_elementor_tree( $post_id, 'Target post' );
+        $new_element = self::build_element_from_widget_args( $args );
+
+        $parent_id_raw = self::array_value( $args, 'parent_id', null );
+        $parent_id = null;
+        if ( is_scalar( $parent_id_raw ) || null === $parent_id_raw ) {
+            $parent_id = trim( (string) $parent_id_raw );
+            if ( '' === $parent_id ) {
+                $parent_id = null;
+            }
+        }
+        $position = array_key_exists( 'position', $args ) ? max( 0, intval( $args['position'] ) ) : null;
+
+        if ( null !== $parent_id ) {
+            $parent = self::find_element_by_id( $tree, $parent_id );
+            if ( null === $parent ) {
+                throw new Exception( 'parent_id not found in this Elementor document.' );
+            }
+            $parent_type = (string) self::array_value( $parent, 'elType', '' );
+            if ( ! in_array( $parent_type, array( 'container', 'section', 'column' ), true ) ) {
+                throw new Exception( 'parent_id must reference a container, section, or column.' );
+            }
+            if ( 'container' === self::array_value( $new_element, 'elType', '' ) && 'container' === $parent_type ) {
+                $new_element['isInner'] = true;
+            }
+        }
+
+        $updated_tree = self::insert_element_into_tree( $tree, $parent_id, $position, $new_element );
+        self::save_elementor_tree( $post_id, $updated_tree );
+        self::clear_elementor_cache( $post_id );
+
+        $payload = array(
+            'success' => true,
+            'post_id' => $post_id,
+            'new_id' => (string) self::array_value( $new_element, 'id', '' ),
+            'widget_type' => $widget_type,
+            'parent_id' => $parent_id,
+            'position' => $position,
+            'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+        );
+
+        if ( self::has_raw_settings( $args ) && self::is_curated_widget_type( $widget_type ) ) {
+            $payload['notice'] = 'Raw settings were supplied for a curated widget_type, so curated flat parameters were ignored.';
+        }
+
+        return $payload;
+    }
+
+    private static function build_element_from_widget_args( $args ) {
+        $widget_type = sanitize_key( (string) self::array_value( $args, 'widget_type', '' ) );
+        if ( '' === $widget_type ) {
+            throw new Exception( 'widget_type is required for every element.' );
+        }
+
+        $is_curated = self::is_curated_widget_type( $widget_type );
+        $has_settings = self::has_raw_settings( $args );
+        if ( ! $is_curated && ! $has_settings ) {
+            throw new Exception( 'Non-curated widget_type requires a settings object.' );
+        }
+        if ( ! $is_curated && ! self::is_registered_or_atomic_widget_type( $widget_type ) ) {
+            throw new Exception( 'widget_type is not registered with Elementor on this site.' );
+        }
+
+        $settings = $has_settings ? (array) $args['settings'] : self::build_curated_widget_settings( $widget_type, $args );
+        $el_type = 'container' === $widget_type ? 'container' : 'widget';
+        $element = array(
+            'id' => self::generate_element_id(),
+            'elType' => $el_type,
+            'settings' => $settings,
+            'elements' => array(),
+            'isInner' => false,
+        );
+        if ( 'widget' === $el_type ) {
+            $element['widgetType'] = $widget_type;
+        }
+
+        $children = self::array_value( $args, 'children', array() );
+        if ( 'container' === $widget_type && is_array( $children ) ) {
+            foreach ( $children as $child_args ) {
+                if ( ! is_array( $child_args ) ) {
+                    continue;
+                }
+                $child = self::build_element_from_widget_args( $child_args );
+                if ( 'container' === self::array_value( $child, 'elType', '' ) ) {
+                    $child['isInner'] = true;
+                }
+                $element['elements'][] = $child;
+            }
+        }
+
+        return $element;
+    }
+
+    private static function has_raw_settings( $args ) {
+        return isset( $args['settings'] ) && is_array( $args['settings'] );
+    }
+
+    private static function is_curated_widget_type( $widget_type ) {
+        return in_array( (string) $widget_type, self::CURATED_WIDGET_TYPES, true );
+    }
+
+    private static function is_registered_or_atomic_widget_type( $widget_type ) {
+        $widget_type = (string) $widget_type;
+        if ( 0 === strpos( $widget_type, 'a-' ) || 0 === strpos( $widget_type, 'e-' ) ) {
+            return true;
+        }
+        if ( ! class_exists( 'Elementor\\Plugin' ) || empty( \Elementor\Plugin::$instance ) ) {
+            return true;
+        }
+        $manager = isset( \Elementor\Plugin::$instance->widgets_manager ) ? \Elementor\Plugin::$instance->widgets_manager : null;
+        if ( ! is_object( $manager ) || ! method_exists( $manager, 'get_widget_types' ) ) {
+            return true;
+        }
+        $registered = $manager->get_widget_types();
+        return is_array( $registered ) && isset( $registered[ $widget_type ] );
+    }
+
+    private static function build_curated_widget_settings( $widget_type, $args ) {
+        switch ( $widget_type ) {
+            case 'container':
+                return self::curated_container_settings( $args );
+            case 'heading':
+                return self::curated_heading_settings( $args );
+            case 'text-editor':
+                return self::curated_text_editor_settings( $args );
+            case 'button':
+                return self::curated_button_settings( $args );
+            case 'image':
+                return self::curated_image_settings( $args );
+            case 'image-box':
+                return self::curated_image_box_settings( $args );
+            case 'icon-box':
+                return self::curated_icon_box_settings( $args );
+            case 'icon-list':
+                return self::curated_icon_list_settings( $args );
+            case 'video':
+                return self::curated_video_settings( $args );
+            case 'divider':
+                return self::curated_divider_settings( $args );
+            case 'spacer':
+                return self::curated_spacer_settings( $args );
+        }
+        throw new Exception( 'No curated builder for widget_type.' );
+    }
+
+    private static function curated_container_settings( $args ) {
+        $direction = (string) self::array_value( $args, 'flex_direction', 'column' );
+        $width = (string) self::array_value( $args, 'content_width', 'boxed' );
+        return array(
+            'content_width' => in_array( $width, array( 'boxed', 'full' ), true ) ? $width : 'boxed',
+            'flex_direction' => in_array( $direction, array( 'row', 'column' ), true ) ? $direction : 'column',
+        );
+    }
+
+    private static function curated_heading_settings( $args ) {
+        $title = wp_kses_post( (string) self::array_value( $args, 'title', '' ) );
+        if ( '' === $title ) {
+            throw new Exception( 'Curated heading requires title.' );
+        }
+        return array(
+            'title' => $title,
+            'header_size' => self::sanitize_html_tag_choice( self::array_value( $args, 'header_size', 'h2' ), 'h2' ),
+        );
+    }
+
+    private static function curated_text_editor_settings( $args ) {
+        $editor = wp_kses_post( (string) self::array_value( $args, 'editor', '' ) );
+        if ( '' === $editor ) {
+            throw new Exception( 'Curated text-editor requires editor.' );
+        }
+        return array( 'editor' => $editor );
+    }
+
+    private static function curated_button_settings( $args ) {
+        $text = sanitize_text_field( (string) self::array_value( $args, 'text', '' ) );
+        $url = esc_url_raw( (string) self::array_value( $args, 'link_url', '' ) );
+        if ( '' === $text || '' === $url ) {
+            throw new Exception( 'Curated button requires text and link_url.' );
+        }
+        return array(
+            'text' => $text,
+            'link' => self::elementor_link_value( $url, self::sanitize_link_target( self::array_value( $args, 'link_target', '_self' ) ) ),
+        );
+    }
+
+    private static function curated_image_settings( $args ) {
+        $image_url = esc_url_raw( (string) self::array_value( $args, 'image_url', '' ) );
+        if ( '' === $image_url ) {
+            throw new Exception( 'Curated image requires image_url.' );
+        }
+        $settings = array(
+            'image' => self::elementor_image_value( $image_url, (string) self::array_value( $args, 'image_alt', '' ) ),
+        );
+        $link_url = esc_url_raw( (string) self::array_value( $args, 'link_url', '' ) );
+        if ( '' !== $link_url ) {
+            $settings['link_to'] = 'custom';
+            $settings['link'] = self::elementor_link_value( $link_url, self::sanitize_link_target( self::array_value( $args, 'link_target', '_self' ) ) );
+        }
+        return $settings;
+    }
+
+    private static function curated_image_box_settings( $args ) {
+        $image_url = esc_url_raw( (string) self::array_value( $args, 'image_url', '' ) );
+        $title = sanitize_text_field( (string) self::array_value( $args, 'title_text', '' ) );
+        if ( '' === $image_url || '' === $title ) {
+            throw new Exception( 'Curated image-box requires image_url and title_text.' );
+        }
+        $settings = array(
+            'image' => self::elementor_image_value( $image_url, (string) self::array_value( $args, 'image_alt', '' ) ),
+            'title_text' => $title,
+            'description_text' => wp_kses_post( (string) self::array_value( $args, 'description_text', '' ) ),
+            'title_size' => self::sanitize_html_tag_choice( self::array_value( $args, 'title_size', 'h3' ), 'h3' ),
+        );
+        $link_url = esc_url_raw( (string) self::array_value( $args, 'link_url', '' ) );
+        if ( '' !== $link_url ) {
+            $settings['link'] = self::elementor_link_value( $link_url, self::sanitize_link_target( self::array_value( $args, 'link_target', '_self' ) ) );
+        }
+        return $settings;
+    }
+
+    private static function curated_icon_box_settings( $args ) {
+        $icon = sanitize_text_field( (string) self::array_value( $args, 'icon', '' ) );
+        $title = sanitize_text_field( (string) self::array_value( $args, 'title_text', '' ) );
+        if ( '' === $icon || '' === $title ) {
+            throw new Exception( 'Curated icon-box requires icon and title_text.' );
+        }
+        $settings = array(
+            'selected_icon' => self::elementor_icon_value( $icon ),
+            'title_text' => $title,
+            'description_text' => wp_kses_post( (string) self::array_value( $args, 'description_text', '' ) ),
+            'title_size' => self::sanitize_html_tag_choice( self::array_value( $args, 'title_size', 'h3' ), 'h3' ),
+        );
+        $link_url = esc_url_raw( (string) self::array_value( $args, 'link_url', '' ) );
+        if ( '' !== $link_url ) {
+            $settings['link'] = self::elementor_link_value( $link_url, self::sanitize_link_target( self::array_value( $args, 'link_target', '_self' ) ) );
+        }
+        return $settings;
+    }
+
+    private static function curated_icon_list_settings( $args ) {
+        $items = self::array_value( $args, 'items', array() );
+        if ( empty( $items ) || ! is_array( $items ) ) {
+            throw new Exception( 'Curated icon-list requires items.' );
+        }
+        $icon_list = array();
+        foreach ( $items as $item ) {
+            if ( ! is_array( $item ) || '' === trim( (string) self::array_value( $item, 'text', '' ) ) ) {
+                throw new Exception( 'Each icon-list item requires text.' );
+            }
+            $icon = sanitize_text_field( (string) self::array_value( $item, 'icon', 'fas fa-check' ) );
+            $row = array(
+                '_id' => self::generate_repeater_id(),
+                'text' => sanitize_text_field( (string) self::array_value( $item, 'text', '' ) ),
+                'selected_icon' => self::elementor_icon_value( $icon ),
+            );
+            $link_url = esc_url_raw( (string) self::array_value( $item, 'link_url', '' ) );
+            if ( '' !== $link_url ) {
+                $row['link'] = self::elementor_link_value( $link_url, '_self' );
+            }
+            $icon_list[] = $row;
+        }
+        return array(
+            'icon_list' => $icon_list,
+            'view' => 'traditional',
+        );
+    }
+
+    private static function curated_video_settings( $args ) {
+        $video_url = esc_url_raw( (string) self::array_value( $args, 'video_url', '' ) );
+        if ( '' === $video_url ) {
+            throw new Exception( 'Curated video requires video_url.' );
+        }
+        $video = self::route_video_url( $video_url );
+        $ratio = (string) self::array_value( $args, 'aspect_ratio', '169' );
+        if ( ! in_array( $ratio, array( '169', '219', '43', '32', '11', '916' ), true ) ) {
+            $ratio = '169';
+        }
+        $settings = array(
+            'video_type' => $video['type'],
+            $video['field'] => $video['url'],
+            'aspect_ratio' => $ratio,
+        );
+        if ( self::is_truthy( self::array_value( $args, 'autoplay', false ) ) ) {
+            $settings['autoplay'] = 'yes';
+        }
+        return $settings;
+    }
+
+    private static function curated_divider_settings( $args ) {
+        $settings = array( 'style' => 'solid' );
+        if ( array_key_exists( 'weight', $args ) ) {
+            $settings['weight'] = self::elementor_slider_px( intval( $args['weight'] ) );
+        }
+        $color = sanitize_hex_color( (string) self::array_value( $args, 'color', '' ) );
+        if ( is_string( $color ) && '' !== $color ) {
+            $settings['color'] = $color;
+        }
+        return $settings;
+    }
+
+    private static function curated_spacer_settings( $args ) {
+        $space = array_key_exists( 'space', $args ) ? intval( $args['space'] ) : 50;
+        return array( 'space' => self::elementor_slider_px( max( 0, $space ) ) );
+    }
+
+    private static function elementor_link_value( $url, $target = '_self', $nofollow = false ) {
+        return array(
+            'url' => (string) $url,
+            'is_external' => '_blank' === $target ? 'on' : '',
+            'nofollow' => $nofollow ? 'on' : '',
+        );
+    }
+
+    private static function elementor_image_value( $url, $alt = '' ) {
+        return array(
+            'url' => (string) $url,
+            'id' => '',
+            'alt' => sanitize_text_field( (string) $alt ),
+            'source' => 'library',
+            'size' => '',
+        );
+    }
+
+    private static function elementor_icon_value( $icon ) {
+        $icon = sanitize_text_field( (string) $icon );
+        return array(
+            'value' => $icon,
+            'library' => self::derive_icon_library( $icon ),
+        );
+    }
+
+    private static function elementor_slider_px( $size ) {
+        return array(
+            'size' => (int) $size,
+            'unit' => 'px',
+        );
+    }
+
+    private static function derive_icon_library( $icon ) {
+        $icon = trim( (string) $icon );
+        if ( 0 === strpos( $icon, 'fab ' ) ) {
+            return 'fa-brands';
+        }
+        if ( 0 === strpos( $icon, 'far ' ) ) {
+            return 'fa-regular';
+        }
+        return 'fa-solid';
+    }
+
+    private static function route_video_url( $url ) {
+        if ( preg_match( '#(?:youtube\.com|youtu\.be)#i', $url ) ) {
+            return array( 'type' => 'youtube', 'field' => 'youtube_url', 'url' => (string) $url );
+        }
+        if ( preg_match( '#vimeo\.com#i', $url ) ) {
+            return array( 'type' => 'vimeo', 'field' => 'vimeo_url', 'url' => (string) $url );
+        }
+        if ( preg_match( '#dailymotion\.com#i', $url ) ) {
+            return array( 'type' => 'dailymotion', 'field' => 'dailymotion_url', 'url' => (string) $url );
+        }
+        throw new Exception( 'Curated video supports YouTube, Vimeo, and Dailymotion URLs. Use raw settings for self-hosted video.' );
+    }
+
+    private static function sanitize_html_tag_choice( $value, $default ) {
+        $value = strtolower( sanitize_key( (string) $value ) );
+        return in_array( $value, array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'div', 'span', 'p' ), true ) ? $value : $default;
+    }
+
+    private static function sanitize_link_target( $value ) {
+        $value = (string) $value;
+        return in_array( $value, array( '_blank', '_self' ), true ) ? $value : '_self';
+    }
+
+    private static function generate_repeater_id() {
+        try {
+            return substr( bin2hex( random_bytes( 4 ) ), 0, 7 );
+        } catch ( Exception $e ) {
+            return substr( md5( wp_generate_uuid4() . wp_rand() ), 0, 7 );
+        }
+    }
+
+    private static function find_element_by_id( $elements, $element_id ) {
+        if ( ! is_array( $elements ) ) {
+            return null;
+        }
+        foreach ( $elements as $element ) {
+            if ( ! is_array( $element ) ) {
+                continue;
+            }
+            if ( isset( $element['id'] ) && (string) $element['id'] === (string) $element_id ) {
+                return $element;
+            }
+            if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+                $found = self::find_element_by_id( $element['elements'], $element_id );
+                if ( null !== $found ) {
+                    return $found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static function insert_element_into_tree( $elements, $parent_id, $position, $new_element ) {
+        if ( null === $parent_id ) {
+            return self::insert_element_at_position( is_array( $elements ) ? $elements : array(), $position, $new_element );
+        }
+
+        $out = array();
+        foreach ( is_array( $elements ) ? $elements : array() as $element ) {
+            if ( ! is_array( $element ) ) {
+                $out[] = $element;
+                continue;
+            }
+            if ( isset( $element['id'] ) && (string) $element['id'] === (string) $parent_id ) {
+                $children = isset( $element['elements'] ) && is_array( $element['elements'] ) ? $element['elements'] : array();
+                $element['elements'] = self::insert_element_at_position( $children, $position, $new_element );
+            } elseif ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+                $element['elements'] = self::insert_element_into_tree( $element['elements'], $parent_id, $position, $new_element );
+            }
+            $out[] = $element;
+        }
+        return $out;
+    }
+
+    private static function insert_element_at_position( $elements, $position, $new_element ) {
+        $elements = is_array( $elements ) ? $elements : array();
+        if ( null === $position || $position >= count( $elements ) ) {
+            $elements[] = $new_element;
+            return $elements;
+        }
+        if ( $position <= 0 ) {
+            array_unshift( $elements, $new_element );
+            return $elements;
+        }
+        array_splice( $elements, $position, 0, array( $new_element ) );
+        return $elements;
     }
 
     private static function get_elementor_tree( $post_id, $label ) {

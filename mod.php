@@ -4689,11 +4689,11 @@ class StifliFlexMcp {
 	 * @return int|WP_Error
 	 */
 	private function importAbilityRecord( $ability_name ) {
-		if ( ! stifli_flex_mcp_abilities_available() ) {
+		if ( ! stifli_flex_mcp_abilities_available() || ! function_exists( 'stifli_flex_mcp_get_ability_safe' ) ) {
 			return new WP_Error( 'abilities_unavailable', __( 'WordPress Abilities API not available', 'stifli-flex-mcp' ) );
 		}
 
-		$ability = wp_get_ability( $ability_name );
+		$ability = stifli_flex_mcp_get_ability_safe( $ability_name );
 		if ( ! $ability ) {
 			return new WP_Error( 'ability_not_found', __( 'Ability not found', 'stifli-flex-mcp' ) );
 		}
@@ -4748,8 +4748,9 @@ class StifliFlexMcp {
 			wp_send_json_error(array('message' => __('WordPress Abilities API not available. Requires WordPress 6.9+', 'stifli-flex-mcp')));
 		}
 
-		// Get all registered abilities using wp_get_abilities()
-		$all_abilities = wp_get_abilities();
+		$all_abilities = function_exists( 'stifli_flex_mcp_get_abilities_safe' )
+			? stifli_flex_mcp_get_abilities_safe()
+			: array();
 		if (empty($all_abilities)) {
 			wp_send_json_success(array(
 				'abilities' => array(),
