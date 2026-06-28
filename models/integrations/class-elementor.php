@@ -148,13 +148,13 @@ class StifliFlexMcp_Elementor {
             ),
             'elementor_add_widget' => array(
                 'name' => 'elementor_add_widget',
-                'description' => 'Add a widget or container to an existing Elementor post/page. Supports raw settings for any registered widget type and curated flat parameters for container, heading, text-editor, button, image, image-box, icon-box, icon-list, video, divider, and spacer. Containers can include recursive children. Returns the new element ID and Elementor edit URL.',
+                'description' => 'Add a widget or container to an existing Elementor post/page. Supports raw settings for registered widget types only when the caller has unfiltered_html, and curated flat parameters for container, heading, text-editor, button, image, image-box, icon-box, icon-list, video, divider, and spacer. Containers can include recursive children. Returns the new element ID and Elementor edit URL.',
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
                         'post_id' => array( 'type' => 'integer', 'description' => 'Target post or page ID with existing Elementor data.' ),
                         'widget_type' => array( 'type' => 'string', 'description' => 'Elementor widget slug, or container for a Flexbox container.' ),
-                        'settings' => array( 'type' => 'object', 'description' => 'Raw Elementor settings object. When supplied, it takes precedence over curated flat parameters.', 'additionalProperties' => true ),
+                        'settings' => array( 'type' => 'object', 'description' => 'Raw Elementor settings object. Requires unfiltered_html capability and takes precedence over curated flat parameters.', 'additionalProperties' => true ),
                         'parent_id' => array( 'type' => 'string', 'description' => 'Optional parent element ID. Must reference a container, section, or column.' ),
                         'position' => array( 'type' => 'integer', 'description' => 'Optional zero-based insertion position. Defaults to append.' ),
                         'flex_direction' => array( 'type' => 'string', 'enum' => array( 'row', 'column' ), 'description' => 'Curated container direction. Defaults to column.' ),
@@ -651,7 +651,7 @@ class StifliFlexMcp_Elementor {
             throw new Exception( 'widget_type is not registered with Elementor on this site.' );
         }
 
-        $settings = $has_settings ? (array) $args['settings'] : self::build_curated_widget_settings( $widget_type, $args );
+        $settings = self::resolve_widget_settings( $widget_type, $args, $has_settings );
         $el_type = 'container' === $widget_type ? 'container' : 'widget';
         $element = array(
             'id' => self::generate_element_id(),
@@ -685,6 +685,20 @@ class StifliFlexMcp_Elementor {
         return isset( $args['settings'] ) && is_array( $args['settings'] );
     }
 
+    private static function resolve_widget_settings( $widget_type, $args, $has_settings = null ) {
+        $has_settings = is_bool( $has_settings ) ? $has_settings : self::has_raw_settings( $args );
+        if ( $has_settings ) {
+            if ( ! current_user_can( 'unfiltered_html' ) ) {
+                throw new Exception( 'Raw Elementor settings require unfiltered_html capability. Use curated parameters instead.' );
+            }
+
+            $raw_settings = self::array_value( $args, 'settings', array() );
+            return is_array( $raw_settings ) ? $raw_settings : array();
+        }
+
+        return self::build_curated_widget_settings( $widget_type, $args );
+    }
+
     private static function is_curated_widget_type( $widget_type ) {
         return in_array( (string) $widget_type, self::CURATED_WIDGET_TYPES, true );
     }
@@ -695,11 +709,11 @@ class StifliFlexMcp_Elementor {
             return true;
         }
         if ( ! class_exists( 'Elementor\\Plugin' ) || empty( \Elementor\Plugin::$instance ) ) {
-            return true;
+            return false;
         }
         $manager = isset( \Elementor\Plugin::$instance->widgets_manager ) ? \Elementor\Plugin::$instance->widgets_manager : null;
         if ( ! is_object( $manager ) || ! method_exists( $manager, 'get_widget_types' ) ) {
-            return true;
+            return false;
         }
         $registered = $manager->get_widget_types();
         return is_array( $registered ) && isset( $registered[ $widget_type ] );

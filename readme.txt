@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.3.11
+Stable tag: 3.3.12
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -426,6 +426,11 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.12 =
+* Security: Hardened `elementor_add_widget` raw settings path by requiring `unfiltered_html` before accepting caller-supplied raw `settings`.
+* Security: Tightened non-curated widget validation to fail closed when Elementor widget registry is unavailable, preventing permissive fallback acceptance.
+* Improvement: Updated tool schema/docs to explicitly state the raw settings capability requirement.
+
 = 3.3.11 =
 * New: Added `elementor_add_widget`, a structural Elementor write tool for inserting widgets or containers into existing Elementor pages.
 * Improvement: Supports raw Elementor settings for registered widget slugs and curated flat parameters for container, heading, text-editor, button, image, image-box, icon-box, icon-list, video, divider, and spacer widgets.
