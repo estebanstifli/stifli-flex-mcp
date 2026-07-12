@@ -617,18 +617,6 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
             echo '</details>';
         }
 
-        echo '<details class="sflmcp-plugins-advanced">';
-        echo '<summary class="sflmcp-plugins-advanced-summary">' . esc_html__( 'Advanced: Custom Tools (legacy)', 'stifli-flex-mcp' ) . '</summary>';
-        echo '<div class="sflmcp-plugins-advanced-body">';
-
-        if ( is_object( $host ) && method_exists( $host, 'renderCustomToolsTab' ) ) {
-            $host->renderCustomToolsTab( true );
-        } else {
-            echo '<p class="description">' . esc_html__( 'Custom tools panel unavailable.', 'stifli-flex-mcp' ) . '</p>';
-        }
-
-        echo '</div>';
-        echo '</details>';
     }
 
     private function get_tool_mode( $model, $tool_name ) {

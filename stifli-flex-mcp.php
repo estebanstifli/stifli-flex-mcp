@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.3.12
+Version: 3.3.13
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1352,7 +1352,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.06.04.1' );
+	define( 'SFLMCP_DB_VERSION', '2026.07.12.1' );
 }
 
 /**
@@ -1387,7 +1387,25 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_338_seed_css_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
+	stifli_flex_mcp_upgrade_retire_custom_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
+}
+
+/**
+ * Retire legacy Custom Tools by disabling existing rows.
+ * Custom extensions should use WordPress Abilities instead.
+ */
+function stifli_flex_mcp_upgrade_retire_custom_tools() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'sflmcp_custom_tools';
+	if ( ! stifli_flex_mcp_table_exists( $table ) ) {
+		return;
+	}
+
+	$table_safe = StifliFlexMcpUtils::getPrefixedTable( 'sflmcp_custom_tools' );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- plugin-managed table and no user input.
+	$wpdb->query( "UPDATE {$table_safe} SET enabled = 0 WHERE enabled <> 0" );
+	delete_option( 'sflmcp_custom_tools_examples_seed_hash' );
 }
 
 /**
@@ -4043,7 +4061,6 @@ function stifli_flex_mcp_install_schema() {
 	stifli_flex_mcp_maybe_create_queue_table();
 	stifli_flex_mcp_maybe_create_tools_table();
 	stifli_flex_mcp_maybe_add_tools_token_column();
-	stifli_flex_mcp_maybe_create_custom_tools_table();
 	stifli_flex_mcp_maybe_create_abilities_table();
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
@@ -4073,7 +4090,6 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_seed_event_triggers();
 	
 	stifli_flex_mcp_seed_initial_tools();
-	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_maybe_upgrade_db();
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
@@ -4227,95 +4243,6 @@ function stifli_flex_mcp_clean_changelog() {
 
 /* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 
-// ============================================================
-// Custom Tool Actions - Handlers for sflmcp_* actions
-// These provide results for our custom actions. Other actions
-// (like woocommerce_cancel_unpaid_orders) are native WP/plugin hooks
-// ============================================================
-
-/**
- * Maintenance mode toggle
- * 
- * LIMITATION: Once maintenance mode is enabled, the MCP API becomes inaccessible (WordPress
- * returns 503 before plugins load). You must disable maintenance mode manually by deleting
- * the .maintenance file in WordPress root, or via wp-cli: wp maintenance-mode deactivate
- */
-add_action('sflmcp_maintenance_mode', function($args) {
-    $enable = isset($args['enable']) ? (bool) $args['enable'] : false;
-    $maintenance_file = ABSPATH . '.maintenance';
-    
-    if ($enable) {
-        $content = '<?php $upgrading = ' . time() . '; ?>';
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-        file_put_contents($maintenance_file, $content);
-    } else {
-        if (file_exists($maintenance_file)) {
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
-            unlink($maintenance_file);
-        }
-    }
-});
-
-add_filter('sflmcp_action_result', function($result, $action, $args) {
-    if ($action === 'sflmcp_maintenance_mode') {
-        $enable = isset($args['enable']) ? (bool) $args['enable'] : false;
-        return $enable ? 'Maintenance mode ENABLED. Site now shows maintenance message to visitors. WARNING: MCP API will be inaccessible until maintenance mode is disabled manually.' : 'Maintenance mode DISABLED. Site is now accessible.';
-    }
-    return $result;
-}, 10, 3);
-
-/**
- * Send admin notification email
- */
-add_action('sflmcp_admin_notify', function($args) {
-    $subject = isset($args['subject']) ? sanitize_text_field($args['subject']) : 'MCP Notification';
-    $message = isset($args['message']) ? sanitize_textarea_field($args['message']) : '';
-    
-    if (empty($message)) {
-        return;
-    }
-    
-    $admin_email = get_option('admin_email');
-    $full_message = "Notification from StifLi Flex MCP:\n\n" . $message;
-    $full_message .= "\n\n---\nSite: " . get_bloginfo('name') . "\nTime: " . current_time('mysql');
-    
-    wp_mail($admin_email, $subject, $full_message);
-});
-
-add_filter('sflmcp_action_result', function($result, $action, $args) {
-    if ($action === 'sflmcp_admin_notify') {
-        $message = isset($args['message']) ? $args['message'] : '';
-        if (empty($message)) {
-            return 'Error: Message cannot be empty.';
-        }
-        return 'Notification sent to admin: ' . get_option('admin_email');
-    }
-    return $result;
-}, 10, 3);
-
-/**
- * Result handlers for native WordPress actions
- */
-add_filter('sflmcp_action_result', function($result, $action, $args) {
-    switch ($action) {
-        case 'flush_rewrite_rules':
-            return 'Rewrite rules (permalinks) flushed successfully.';
-        case 'wp_cron':
-            return 'WordPress cron triggered. Pending scheduled tasks have been executed.';
-        case 'woocommerce_cancel_unpaid_orders':
-            return 'WooCommerce unpaid orders check completed.';
-        case 'woocommerce_cleanup_sessions':
-            return 'WooCommerce session cleanup completed.';
-        case 'wpseo_reindex':
-            return 'Yoast SEO reindex triggered.';
-        case 'wp_cache_clear_cache':
-            return 'WP Super Cache cleared.';
-        case 'w3tc_flush_all':
-            return 'W3 Total Cache flushed.';
-    }
-    return $result;
-}, 5, 3);
-
 // Global instance variable to prevent garbage collection
 global $stifli_flex_mcp_instance;
 global $stifliFlexMcp;
@@ -4328,7 +4255,6 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_install_schema();
 	
 	stifli_flex_mcp_seed_event_triggers();
-	stifli_flex_mcp_seed_custom_tools_examples();
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_upgrade_302();

@@ -190,152 +190,10 @@ class StifliFlexMcpModel {
      * Dispatch a Custom Tool (Webhook/API call or WordPress Action)
      */
     private function dispatchCustomTool($toolName, $args, $rpcId, $response) {
-        global $wpdb;
-        $table = $wpdb->prefix . 'sflmcp_custom_tools';
-        
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name safe, toolName is sanitized input.
-        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM `$table` WHERE tool_name = %s AND enabled = 1", $toolName));
-        
-        if (!$row) {
-             $response['error'] = array('code' => -32601, 'message' => 'Custom tool not found or disabled: ' . $toolName);
-             return $response;
-        }
-        
-        $method = strtoupper($row->method);
-        $endpoint = $row->endpoint;
-        
-        // =====================================================
-        // TYPE: ACTION - Execute WordPress do_action()
-        // Allows calling ANY WordPress/plugin action hook
-        // =====================================================
-        if ($method === 'ACTION') {
-            // The endpoint is the action name (sanitized)
-            $action_name = sanitize_key($endpoint);
-            
-            if (empty($action_name)) {
-                $response['error'] = array('code' => -32602, 'message' => 'Action name cannot be empty');
-                return $response;
-            }
-            
-            // Check if this action has any registered callbacks
-            $has_action = has_action($action_name);
-            
-            // If no handlers, check if it's a known plugin action and warn accordingly
-            $warning_msg = '';
-            if (!$has_action) {
-                $known_plugins = array(
-                    'woocommerce_' => array('WooCommerce', 'woocommerce/woocommerce.php'),
-                    'w3tc_' => array('W3 Total Cache', 'w3-total-cache/w3-total-cache.php'),
-                    'wp_super_cache_' => array('WP Super Cache', 'wp-super-cache/wp-cache.php'),
-                    'wpcf7_' => array('Contact Form 7', 'contact-form-7/wp-contact-form-7.php'),
-                    'yoast_' => array('Yoast SEO', 'wordpress-seo/wp-seo.php'),
-                    'rank_math_' => array('Rank Math', 'seo-by-rank-math/rank-math.php'),
-                    'jetpack_' => array('Jetpack', 'jetpack/jetpack.php'),
-                    'wpml_' => array('WPML', 'sitepress-multilingual-cms/sitepress.php'),
-                );
-                
-                foreach ($known_plugins as $prefix => $plugin_info) {
-                    if (strpos($action_name, $prefix) === 0) {
-                        $plugin_name = $plugin_info[0];
-                        $plugin_file = $plugin_info[1];
-                        if (!is_plugin_active($plugin_file)) {
-                            $warning_msg = sprintf('Plugin "%s" is not active. ', $plugin_name);
-                        } else {
-                            $warning_msg = sprintf('Plugin "%s" is active but this hook has no handlers. The hook may only be available in specific contexts (admin, frontend, cron). ', $plugin_name);
-                        }
-                        break;
-                    }
-                }
-                
-                if (empty($warning_msg)) {
-                    $warning_msg = 'No handlers registered for this action. It may be a custom hook that requires your own handler. ';
-                }
-            }
-            
-            // Allow filter to capture/modify results from actions
-            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- sflmcp is the plugin prefix
-            $result = apply_filters( 'sflmcp_action_result', null, $action_name, $args );
-            
-            // Execute the WordPress action with args
-            // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- intentionally calling dynamic action hooks as per Custom Tools feature
-            do_action( $action_name, $args );
-            
-            // Build response
-            if ($result !== null) {
-                $response['result'] = array('content' => array(array('type' => 'text', 'text' => is_string($result) ? $result : wp_json_encode($result))));
-            } else {
-                if ($has_action) {
-                    $status = 'Action executed successfully: ' . $action_name;
-                } else {
-                    $status = 'Warning: ' . $warning_msg . 'Action triggered: ' . $action_name;
-                }
-                $response['result'] = array('content' => array(array('type' => 'text', 'text' => $status)));
-            }
-            
-            return $response;
-        }
-        
-        // =====================================================
-        // TYPE: HTTP (GET/POST/PUT/DELETE) - Remote Request
-        // =====================================================
-        $url = $endpoint;
-        $headers_raw = $row->headers;
-        
-        // Parse headers from newline-separated format
-        $headers = array();
-        if (!empty($headers_raw)) {
-            $lines = explode("\n", $headers_raw);
-            foreach ($lines as $line) {
-                $line = trim($line);
-                if (strpos($line, ':') !== false) {
-                    list($key, $val) = explode(':', $line, 2);
-                    $headers[trim($key)] = trim($val);
-                }
-            }
-        }
-        
-        // Replace {placeholder} in URL with args
-        if (is_array($args)) {
-            foreach ($args as $key => $value) {
-                $url = str_replace('{' . $key . '}', rawurlencode((string) $value), $url);
-            }
-        }
-        
-        // Execute request
-        $request_args = array(
-            'method' => $method,
-            'headers' => $headers,
-            'timeout' => 30,
-            'user-agent' => 'StifLi-Flex-MCP/1.0.5; ' . get_bloginfo('url')
+        $response['error'] = array(
+            'code' => -32601,
+            'message' => 'Legacy Custom Tools have been removed. Use WordPress Abilities for custom MCP extensions.',
         );
-        
-        if (in_array($method, array('POST', 'PUT', 'PATCH'), true)) {
-            $request_args['body'] = wp_json_encode($args);
-            if (!isset($headers['Content-Type'])) {
-                $request_args['headers']['Content-Type'] = 'application/json';
-            }
-        }
-        
-        $remote_response = wp_remote_request($url, $request_args);
-        
-        if (is_wp_error($remote_response)) {
-            $response['error'] = array('code' => -32000, 'message' => 'External tool error: ' . $remote_response->get_error_message());
-            return $response;
-        }
-        
-        $code = wp_remote_retrieve_response_code($remote_response);
-        $body = wp_remote_retrieve_body($remote_response);
-        
-        // Try to parse JSON response
-        $decoded = json_decode($body, true);
-        $final_content = ($decoded !== null) ? wp_json_encode($decoded, JSON_PRETTY_PRINT) : $body;
-        
-        if ($code >= 400) {
-             $response['result'] = array('content' => array( array('type' => 'text', 'text' => "Error $code: $final_content") ), 'isError' => true);
-        } else {
-             $response['result'] = array('content' => array( array('type' => 'text', 'text' => $final_content) ));
-        }
-        
         return $response;
     }
 
@@ -518,10 +376,6 @@ class StifliFlexMcpModel {
                 continue;
             }
             
-            // Custom tools are already filtered by enabled=1 in getCustomTools()
-            // So if the tool starts with 'custom_', it's already enabled
-            $is_custom_tool = strpos($name, 'custom_') === 0;
-            
             // Abilities are already filtered by enabled=1 in getImportedAbilities()
             // So if the tool starts with 'ability_', it's already enabled
             $is_ability = strpos($name, 'ability_') === 0;
@@ -531,13 +385,11 @@ class StifliFlexMcpModel {
             $is_integration_tool = class_exists( 'StifliFlexMcp_Plugin_Integrations_Registry' )
                 && ! empty( StifliFlexMcp_Plugin_Integrations_Registry::get_integrations_for_tool( $name ) );
             
-            // If table doesn't exist, tool is in enabled list, or it's a custom tool/ability, include it
-            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_custom_tool || $is_ability || $is_integration_tool) {
+            // If table doesn't exist, tool is in enabled list, or it's an ability/integration tool, include it
+            if (!$table_exists || array_key_exists($name, $enabled_tools) || $is_ability || $is_integration_tool) {
                 // Categoría
                 if (in_array($name, array('search', 'fetch'), true)) {
                     $tool['category'] = 'Core: OpenAI';
-                } elseif ($is_custom_tool) {
-                    $tool['category'] = 'Custom';
                 } elseif ($is_ability) {
                     $tool['category'] = isset($tool['category']) ? $tool['category'] : 'Abilities';
                 } else {
@@ -547,7 +399,7 @@ class StifliFlexMcpModel {
                 $meta = $this->getIntentForTool($name);
                 $tool['intent'] = $meta['intent']; // read | sensitive_read | write
                 $tool['requires_confirmation'] = $meta['requires_confirmation']; // bool
-                if ($table_exists && !$is_custom_tool && !$is_ability) {
+                if ($table_exists && !$is_ability) {
                     $tool['tokenEstimate'] = isset($enabled_tools[$name]) ? (int) $enabled_tools[$name] : StifliFlexMcpUtils::estimateToolTokenUsage($tool);
                 } else {
                     $tool['tokenEstimate'] = StifliFlexMcpUtils::estimateToolTokenUsage($tool);
@@ -1991,18 +1843,6 @@ class StifliFlexMcpModel {
             $this->tools = $tools;
         }
         
-        // Add Custom Tools
-        $custom_tools = $this->getCustomTools();
-        if (!empty($custom_tools)) {
-            foreach ($custom_tools as $tool) {
-                // Ensure proper structure
-                if ( ! is_array( $tool ) || ! isset( $tool['name'] ) || ! isset( $tool['inputSchema'] ) ) continue;
-                $tool_name = $tool['name'];
-                if ( ! is_string( $tool_name ) || '' === $tool_name ) continue;
-                $this->tools[ $tool_name ] = $tool;
-            }
-        }
-        
         // Add WordPress Abilities (WordPress 6.9+)
         $abilities = $this->getImportedAbilities();
         if (!empty($abilities)) {
@@ -2111,44 +1951,7 @@ class StifliFlexMcpModel {
      * Get defined custom tools from database
      */
     private function getCustomTools() {
-        global $wpdb;
-        $table = $wpdb->prefix . 'sflmcp_custom_tools';
-        
-        // Check if table exists first (during updates it might not exist yet)
-        $like = $wpdb->esc_like($table);
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- schema check requires direct query.
-        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $like ) ) !== $table ) {
-            return array();
-        }
-        
-        $tools = array();
-        
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- cache disabled for fresh tools, table name is safe.
-        $results = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM `$table` WHERE enabled = %d", 1 ) );
-        
-        if (!$results) return array();
-        
-        foreach ($results as $row) {
-            $schema = json_decode($row->arguments, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                $schema = array('type' => 'object', 'properties' => (object) array(), 'required' => array());
-            }
-            $schema = StifliFlexMcpUtils::normalizeToolInputSchema( $schema );
-            
-            $tools[] = array(
-                'name' => $row->tool_name,
-                'description' => $row->tool_description,
-                'inputSchema' => $schema,
-                'method' => $row->method,
-                'endpoint' => $row->endpoint,
-                'headers' => $row->headers,
-                'category' => 'Custom',
-                'intent' => 'sensitive_read', // Default safe intent
-                'requires_confirmation' => true, // Always require confirmation for external calls
-            );
-        }
-        
-        return $tools;
+        return array();
     }
 
     /**
@@ -2279,6 +2082,10 @@ class StifliFlexMcpModel {
      * Capacidades WP para tools de escritura (lecturas sensibles se chequean en dispatch).
      */
     public function getToolCapability($tool) {
+        if ( is_string( $tool ) && 0 === strpos( $tool, 'custom_' ) ) {
+            return 'manage_options';
+        }
+
         $map = array(
             // posts
             'wp_create_post' => 'edit_posts',
@@ -7577,10 +7384,9 @@ class StifliFlexMcpModel {
                     }
                 }
 
-                // Try Custom Tools (from sflmcp_custom_tools table)
+                // Legacy Custom Tools were retired in favor of WordPress Abilities.
                 if ( strpos( $tool, 'custom_' ) === 0 ) {
                     $r = $this->dispatchCustomTool( $tool, $args, $id, $r );
-                    $recordChangeIfNeeded();
                     return $r;
                 }
                 

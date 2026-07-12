@@ -48,12 +48,6 @@ class StifliFlexMcp {
 			add_action('wp_ajax_sflmcp_export_profile', array($this, 'ajax_export_profile'));
 			add_action('wp_ajax_sflmcp_import_profile', array($this, 'ajax_import_profile'));
 			add_action('wp_ajax_sflmcp_restore_system_profiles', array($this, 'ajax_restore_system_profiles'));
-			// AJAX handlers for custom tools
-			add_action('wp_ajax_sflmcp_get_custom_tools', array($this, 'ajax_get_custom_tools'));
-			add_action('wp_ajax_sflmcp_save_custom_tool', array($this, 'ajax_save_custom_tool'));
-			add_action('wp_ajax_sflmcp_delete_custom_tool', array($this, 'ajax_delete_custom_tool'));
-			add_action('wp_ajax_sflmcp_test_custom_tool', array($this, 'ajax_test_custom_tool'));
-			add_action('wp_ajax_sflmcp_toggle_custom_tool', array($this, 'ajax_toggle_custom_tool'));
 			// AJAX handlers for WordPress/WooCommerce tools
 			add_action('wp_ajax_sflmcp_toggle_tool', array($this, 'ajax_toggle_tool'));
 			add_action('wp_ajax_sflmcp_bulk_toggle_tools', array($this, 'ajax_bulk_toggle_tools'));
@@ -2960,6 +2954,8 @@ class StifliFlexMcp {
 	 * Enqueue assets used by the Custom Tools UI.
 	 */
 	public function enqueueCustomToolsAssets() {
+		return;
+
 		wp_enqueue_style(
 			'sflmcp-admin-custom-tools',
 			plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.css',
@@ -3922,6 +3918,13 @@ class StifliFlexMcp {
 	 */
 	public function renderCustomToolsTab($embedded = false) {
 		?>
+		<div class="notice notice-warning inline">
+			<p><strong><?php echo esc_html__('Custom Tools have been retired.', 'stifli-flex-mcp'); ?></strong></p>
+			<p><?php echo esc_html__('Legacy Custom Tools no longer run or appear in MCP tool discovery. Use WordPress Abilities to expose custom plugin capabilities with explicit permission callbacks.', 'stifli-flex-mcp'); ?></p>
+		</div>
+		<?php
+		return;
+		?>
 		<?php if (!$embedded) : ?>
 			<h2><?php echo esc_html__('🔌 Custom Tools (Webhooks & Actions)', 'stifli-flex-mcp'); ?></h2>
 			<p>
@@ -4061,6 +4064,9 @@ class StifliFlexMcp {
 	// AJAX Handlers for Custom Tools
 
 	public function ajax_get_custom_tools() {
+		wp_send_json_error(array('message' => __('Legacy Custom Tools have been retired. Use WordPress Abilities instead.', 'stifli-flex-mcp')), 410);
+		return;
+
 		check_ajax_referer('sflmcp_custom_tools', 'nonce');
 		if (!current_user_can('manage_options')) wp_send_json_error();
 		
@@ -4073,6 +4079,9 @@ class StifliFlexMcp {
 	}
 
 	public function ajax_save_custom_tool() {
+		wp_send_json_error(array('message' => __('Legacy Custom Tools have been retired. Use WordPress Abilities instead.', 'stifli-flex-mcp')), 410);
+		return;
+
 		check_ajax_referer('sflmcp_custom_tools', 'nonce');
 		if (!current_user_can('manage_options')) wp_send_json_error();
 		
@@ -4123,6 +4132,9 @@ class StifliFlexMcp {
 	}
 
 	public function ajax_delete_custom_tool() {
+		wp_send_json_error(array('message' => __('Legacy Custom Tools have been retired. Use WordPress Abilities instead.', 'stifli-flex-mcp')), 410);
+		return;
+
 		check_ajax_referer('sflmcp_custom_tools', 'nonce');
 		if (!current_user_can('manage_options')) wp_send_json_error();
 		
@@ -4140,6 +4152,9 @@ class StifliFlexMcp {
 	}
 
 	public function ajax_toggle_custom_tool() {
+		wp_send_json_error(array('message' => __('Legacy Custom Tools have been retired. Use WordPress Abilities instead.', 'stifli-flex-mcp')), 410);
+		return;
+
 		check_ajax_referer('sflmcp_custom_tools', 'nonce');
 		if (!current_user_can('manage_options')) {
 			wp_send_json_error(array('message' => __('Permission denied', 'stifli-flex-mcp')));
@@ -4171,6 +4186,9 @@ class StifliFlexMcp {
 	}
 
 	public function ajax_test_custom_tool() {
+		wp_send_json_error(array('message' => __('Legacy Custom Tools have been retired. Use WordPress Abilities instead.', 'stifli-flex-mcp')), 410);
+		return;
+
 		check_ajax_referer('sflmcp_custom_tools', 'nonce');
 		if (!current_user_can('manage_options')) wp_send_json_error();
 		
@@ -6570,11 +6588,7 @@ class StifliFlexMcp {
 				<ul>
 					<li><a href="#overview">🎯 <?php esc_html_e('What is MCP?', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#builtin-tools">🔧 <?php esc_html_e('Built-in Tools (117+)', 'stifli-flex-mcp'); ?></a></li>
-					<li><a href="#custom-tools">🔌 <?php esc_html_e('Custom Tools Overview', 'stifli-flex-mcp'); ?></a></li>
-					<li><a href="#action-hooks">⚡ <?php esc_html_e('WordPress Action Hooks', 'stifli-flex-mcp'); ?></a></li>
-					<li><a href="#find-actions">🔍 <?php esc_html_e('Finding Plugin Actions', 'stifli-flex-mcp'); ?></a></li>
-					<li><a href="#webhooks">🌐 <?php esc_html_e('Webhooks & External APIs', 'stifli-flex-mcp'); ?></a></li>
-					<li><a href="#internal-api">🏠 <?php esc_html_e('Internal WordPress REST API', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#custom-extensions">🔌 <?php esc_html_e('Custom Extensions with Abilities', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#use-cases">💡 <?php esc_html_e('Use Cases & Examples', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#security">🔐 <?php esc_html_e('Security Considerations', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#troubleshooting">🔧 <?php esc_html_e('Troubleshooting', 'stifli-flex-mcp'); ?></a></li>
@@ -6606,6 +6620,14 @@ class StifliFlexMcp {
 			</table>
 			<p><?php esc_html_e('Manage these tools in the "WordPress Tools" and "WooCommerce Tools" tabs.', 'stifli-flex-mcp'); ?></p>
 
+			<!-- SECTION: Custom Extensions -->
+			<h2 id="custom-extensions">🔌 <?php esc_html_e('Custom Extensions with WordPress Abilities', 'stifli-flex-mcp'); ?></h2>
+			<div class="card warning">
+				<p><strong><?php esc_html_e('Legacy Custom Tools have been retired.', 'stifli-flex-mcp'); ?></strong></p>
+				<p><?php esc_html_e('Use WordPress Abilities to expose custom plugin functionality to MCP clients. Abilities provide explicit schemas and permission callbacks, which is safer than generic HTTP/webhook/action-hook execution.', 'stifli-flex-mcp'); ?></p>
+			</div>
+
+			<?php if ( false ) : ?>
 			<!-- SECTION: Custom Tools Overview -->
 			<h2 id="custom-tools">🔌 <?php esc_html_e('Custom Tools Overview', 'stifli-flex-mcp'); ?></h2>
 			<p><?php esc_html_e('Custom Tools extend the AI\'s capabilities beyond the built-in functions. There are two types:', 'stifli-flex-mcp'); ?></p>
@@ -6802,6 +6824,8 @@ do_action('plugin_prefix_after_delete', $id);</code></pre>
 					<li><?php esc_html_e('"Send SMS notification"', 'stifli-flex-mcp'); ?> → Twilio API</li>
 				</ul>
 			</div>
+
+			<?php endif; ?>
 
 			<!-- SECTION: Security -->
 			<h2 id="security">🔐 <?php esc_html_e('Security Considerations', 'stifli-flex-mcp'); ?></h2>

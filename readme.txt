@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.3.12
+Stable tag: 3.3.13
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -304,7 +304,7 @@ Yes! The plugin includes 61 WooCommerce tools. They activate automatically when 
 
 = Can I create my own tools? =
 
-Absolutely! Go to **MCP Server → Custom Tools** and create PHP-powered tools that expose any plugin's functionality to your AI agent. Built-in examples included.
+Yes, through WordPress Abilities. Legacy Custom Tools have been retired for security reasons; use plugins that register WordPress Abilities with explicit schemas and permission callbacks, then import them from the Abilities tab.
 
 = What happens if the AI makes a mistake? =
 
@@ -426,6 +426,11 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.3.13 =
+* Security: Retired legacy Custom Tools runtime execution to prevent lower-privileged users from invoking administrator-defined custom workflows through tool execution endpoints.
+* Security: Existing legacy Custom Tools are disabled automatically during upgrade, and `custom_*` tool calls now return a deprecation error instead of dispatching HTTP requests or WordPress action hooks.
+* Improvement: Removed Custom Tools from MCP tool discovery and admin surfaces. Use WordPress Abilities for custom MCP extensions with explicit permission callbacks.
+
 = 3.3.12 =
 * Security: Hardened `elementor_add_widget` raw settings path by requiring `unfiltered_html` before accepting caller-supplied raw `settings`.
 * Security: Tightened non-curated widget validation to fail closed when Elementor widget registry is unavailable, preventing permissive fallback acceptance.
