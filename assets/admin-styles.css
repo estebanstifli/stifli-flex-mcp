@@ -250,6 +250,78 @@
     background: #f9f5fc;
 }
 
+/* Add-on layer selector */
+.sflmcp-addon-setup {
+    max-width: 960px;
+}
+
+.sflmcp-addon-setup > .description {
+    max-width: 720px;
+    font-size: 14px;
+}
+
+.sflmcp-addon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    max-width: 960px;
+    margin: 20px 0 16px;
+}
+
+.sflmcp-addon-card {
+    display: flex;
+    gap: 12px;
+    min-height: 96px;
+    box-sizing: border-box;
+    padding: 16px;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.sflmcp-addon-card:hover,
+.sflmcp-addon-card:focus-within {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+}
+
+.sflmcp-addon-card.is-required {
+    border-color: #8c8f94;
+    background: #f6f7f7;
+    cursor: default;
+}
+
+.sflmcp-addon-card > input {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.sflmcp-addon-card > span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.sflmcp-addon-card strong {
+    font-size: 15px;
+}
+
+.sflmcp-addon-card small {
+    width: fit-content;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #dcdcde;
+    color: #3c434a;
+}
+
+@media screen and (max-width: 600px) {
+    .sflmcp-addon-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .sflmcp-help code {
     background: #f0f0f1;
     padding: 2px 6px;

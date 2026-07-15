@@ -34,7 +34,9 @@ class StifliFlexMcp {
 			add_action('admin_menu', array($this, 'registerAdmin'));
 			add_action('admin_menu', array($this, 'registerMcpServerSubmenu'), 15);
 			add_action('admin_menu', array($this, 'registerMultimediaSubmenu'), 25);
-			add_action('admin_menu', array($this, 'registerSeoSubmenu'), 26);
+			if ( stifli_flex_mcp_addon_enabled( 'seo' ) ) {
+				add_action('admin_menu', array($this, 'registerSeoSubmenu'), 26);
+			}
 			add_action('admin_init', array($this, 'registerSettings'));
 			add_action('admin_init', array($this, 'handleOAuthWellKnownNoticeDismiss'));
 			add_action('admin_notices', array($this, 'renderOAuthWellKnownNotice'));
@@ -2347,12 +2349,13 @@ class StifliFlexMcp {
 	 *   Priority 20: MCP Server (this class → second item)
 	 */
 	public function registerAdmin() {
+		$top_level_callback = stifli_flex_mcp_addon_enabled( 'ai_chat' ) ? '__return_null' : array($this, 'adminPage');
 		add_menu_page(
 			__('StifLi Flex MCP', 'stifli-flex-mcp'),
 			__('StifLi Flex MCP', 'stifli-flex-mcp'),
 			'manage_options',
 			'stifli-flex-mcp',
-			'__return_null',
+			$top_level_callback,
 			'dashicons-rest-api',
 			30
 		);
@@ -2788,8 +2791,8 @@ class StifliFlexMcp {
 			return;
 		}
 
-		// Only load on our MCP Server page
-		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server') {
+		$is_top_level_fallback = 'toplevel_page_stifli-flex-mcp' === $hook && ! stifli_flex_mcp_addon_enabled( 'ai_chat' );
+		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server' && ! $is_top_level_fallback) {
 			return;
 		}
 
@@ -2839,7 +2842,7 @@ class StifliFlexMcp {
 			'sflmcp-admin-styles',
 			plugin_dir_url(__FILE__) . 'assets/admin-styles.css',
 			array(),
-			'1.0.5'
+			'1.0.6'
 		);
 
 		// Enqueue Custom Tools assets for legacy tab.
@@ -2996,6 +2999,7 @@ class StifliFlexMcp {
 		
 		$tabs = array(
 			'settings' => __('Settings', 'stifli-flex-mcp'),
+			'addons' => __('Add-ons', 'stifli-flex-mcp'),
 			'profiles' => __('Profiles', 'stifli-flex-mcp'),
 			'tools' => __('WordPress Tools', 'stifli-flex-mcp'),
 			'wc_tools' => __('WooCommerce Tools', 'stifli-flex-mcp'),
@@ -3022,6 +3026,9 @@ class StifliFlexMcp {
 			$handled = false;
 			if ($active_tab === 'settings') {
 				$this->renderSettingsTab();
+				$handled = true;
+			} elseif ($active_tab === 'addons') {
+				$this->renderAddonsTab();
 				$handled = true;
 			} elseif ($active_tab === 'profiles') {
 				$this->renderProfilesTab();
@@ -3056,6 +3063,20 @@ class StifliFlexMcp {
 			}
 			?>
 		</div>
+		<?php
+	}
+
+	/**
+	 * Render optional product layers managed by the core addon registry.
+	 */
+	private function renderAddonsTab() {
+		if ( isset( $_GET['addons-updated'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Add-ons updated. The new selection is active.', 'stifli-flex-mcp' ) . '</p></div>';
+		}
+		?>
+		<h2><?php esc_html_e( 'Add-ons', 'stifli-flex-mcp' ); ?></h2>
+		<p class="description"><?php esc_html_e( 'Disabled addons do not load their PHP classes, admin hooks, menus, or background jobs.', 'stifli-flex-mcp' ); ?></p>
+		<?php StifliFlexMcp_Addons::render_selector( false ); ?>
 		<?php
 	}
 	

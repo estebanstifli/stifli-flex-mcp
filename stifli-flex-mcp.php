@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.3.13
+Version: 3.4.0
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -156,6 +156,7 @@ if (!function_exists('stifli_flex_mcp_get_log_size')) {
 
 // Bootstrap: load necessary helpers and classes before the main module
 require_once __DIR__ . '/models/utils.php';
+require_once __DIR__ . '/models/class-addons.php';
 require_once __DIR__ . '/models/frame.php';
 require_once __DIR__ . '/models/dispatcher.php';
 require_once __DIR__ . '/models/req.php';
@@ -163,11 +164,20 @@ require_once __DIR__ . '/models/model.php';
 require_once __DIR__ . '/models/class-change-tracker.php';
 require_once __DIR__ . '/controller.php';
 require_once __DIR__ . '/mod.php';
-require_once __DIR__ . '/add-on/plugins/class-plugin-integrations-registry.php';
-require_once __DIR__ . '/add-on/plugins/class-plugin-integrations-admin.php';
+
+StifliFlexMcp_Addons::register_admin_hooks();
+
+if ( stifli_flex_mcp_addon_enabled( 'plugin_integrations' ) ) {
+	require_once __DIR__ . '/add-on/plugins/class-plugin-integrations-registry.php';
+	require_once __DIR__ . '/add-on/plugins/class-plugin-integrations-admin.php';
+}
 
 if ( ! function_exists( 'stifli_flex_mcp_load_google_search_console_module' ) ) {
 	function stifli_flex_mcp_load_google_search_console_module() {
+		if ( ! stifli_flex_mcp_addon_enabled( 'seo' ) ) {
+			return false;
+		}
+
 		if ( class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) ) {
 			return true;
 		}
@@ -261,25 +271,33 @@ if ( ! function_exists( 'stifli_flex_mcp_load_seo_admin_module' ) ) {
 	}
 }
 
-// Load AI Chat Agent
-require_once __DIR__ . '/client/providers/class-provider-base.php';
-require_once __DIR__ . '/client/providers/class-provider-openai.php';
-require_once __DIR__ . '/client/providers/class-provider-claude.php';
-require_once __DIR__ . '/client/providers/class-provider-gemini.php';
-require_once __DIR__ . '/client/providers/class-provider-ai-client.php';
-require_once __DIR__ . '/client/class-client-admin.php';
-require_once __DIR__ . '/client/class-automation-admin.php';
+// Load the shared AI runtime only when an AI-facing addon needs it.
+if ( stifli_flex_mcp_addon_enabled( 'ai_chat' ) || stifli_flex_mcp_addon_enabled( 'copilot' ) || stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+	require_once __DIR__ . '/client/providers/class-provider-base.php';
+	require_once __DIR__ . '/client/providers/class-provider-openai.php';
+	require_once __DIR__ . '/client/providers/class-provider-claude.php';
+	require_once __DIR__ . '/client/providers/class-provider-gemini.php';
+	require_once __DIR__ . '/client/providers/class-provider-ai-client.php';
+}
 
-// Load Event Automations
-require_once __DIR__ . '/client/class-event-trigger-registry.php';
-require_once __DIR__ . '/client/class-event-automation-engine.php';
-require_once __DIR__ . '/client/class-event-automation-admin.php';
+if ( stifli_flex_mcp_addon_enabled( 'ai_chat' ) ) {
+	require_once __DIR__ . '/client/class-client-admin.php';
+}
+
+if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+	require_once __DIR__ . '/client/class-automation-admin.php';
+	require_once __DIR__ . '/client/class-event-trigger-registry.php';
+	require_once __DIR__ . '/client/class-event-automation-engine.php';
+	require_once __DIR__ . '/client/class-event-automation-admin.php';
+}
 
 // Load Logs Admin
 require_once __DIR__ . '/client/class-logs-admin.php';
 
 // Load AI Copilot
-require_once __DIR__ . '/copilot/class-copilot-admin.php';
+if ( stifli_flex_mcp_addon_enabled( 'copilot' ) ) {
+	require_once __DIR__ . '/copilot/class-copilot-admin.php';
+}
 
 // Load OAuth 2.1 Authorization Server
 require_once __DIR__ . '/oauth/class-oauth-storage.php';
@@ -287,14 +305,20 @@ require_once __DIR__ . '/oauth/class-oauth-server.php';
 
 // Initialize Automation Admin
 if ( is_admin() ) {
-	new StifliFlexMcp_Automation_Admin();
-	new StifliFlexMcp_Event_Automation_Admin();
+	if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+		new StifliFlexMcp_Automation_Admin();
+		new StifliFlexMcp_Event_Automation_Admin();
+	}
 	new StifliFlexMcp_Logs_Admin();
-	new StifliFlexMcp_Copilot_Admin();
+	if ( stifli_flex_mcp_addon_enabled( 'copilot' ) ) {
+		new StifliFlexMcp_Copilot_Admin();
+	}
 }
 
 // Initialize Event Automation Engine (for trigger hooks)
-add_action( 'init', 'stifli_flex_mcp_init_event_engine', 20 );
+if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+	add_action( 'init', 'stifli_flex_mcp_init_event_engine', 20 );
+}
 function stifli_flex_mcp_init_event_engine() {
 	if ( class_exists( 'StifliFlexMcp_Event_Automation_Engine' ) ) {
 		$engine = StifliFlexMcp_Event_Automation_Engine::get_instance();
@@ -303,7 +327,9 @@ function stifli_flex_mcp_init_event_engine() {
 }
 
 // Ensure automation cron is always running (for existing installs)
-add_action( 'init', 'stifli_flex_mcp_check_automation_cron', 99 );
+if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+	add_action( 'init', 'stifli_flex_mcp_check_automation_cron', 99 );
+}
 function stifli_flex_mcp_check_automation_cron() {
 	$schedules = wp_get_schedules();
 	if ( ! isset( $schedules['sflmcp_every_minute'] ) ) {
@@ -4036,12 +4062,16 @@ function stifli_flex_mcp_automation_cron_schedules($schedules) {
 	}
 	return $schedules;
 }
-add_filter('cron_schedules', 'stifli_flex_mcp_automation_cron_schedules');
+if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+	add_filter('cron_schedules', 'stifli_flex_mcp_automation_cron_schedules');
+}
 
 /**
  * Process pending automation tasks (cron handler)
  */
-add_action('sflmcp_process_automation_tasks', 'stifli_flex_mcp_run_automation_tasks');
+if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+	add_action('sflmcp_process_automation_tasks', 'stifli_flex_mcp_run_automation_tasks');
+}
 function stifli_flex_mcp_run_automation_tasks() {
 	// Check if engine class exists
 	$engine_file = __DIR__ . '/client/class-automation-engine.php';
@@ -4065,12 +4095,14 @@ function stifli_flex_mcp_install_schema() {
 	stifli_flex_mcp_maybe_create_profiles_table();
 	stifli_flex_mcp_maybe_create_profile_tools_table();
 
-	stifli_flex_mcp_maybe_create_automation_tasks_table();
-	stifli_flex_mcp_maybe_create_automation_logs_table();
-	stifli_flex_mcp_maybe_create_automation_templates_table();
-	stifli_flex_mcp_maybe_create_event_triggers_table();
-	stifli_flex_mcp_maybe_create_event_automations_table();
-	stifli_flex_mcp_maybe_create_event_logs_table();
+	if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+		stifli_flex_mcp_maybe_create_automation_tasks_table();
+		stifli_flex_mcp_maybe_create_automation_logs_table();
+		stifli_flex_mcp_maybe_create_automation_templates_table();
+		stifli_flex_mcp_maybe_create_event_triggers_table();
+		stifli_flex_mcp_maybe_create_event_automations_table();
+		stifli_flex_mcp_maybe_create_event_logs_table();
+	}
 
 	if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
 		StifliFlexMcp_ChangeTracker::createTable();
@@ -4086,8 +4118,11 @@ register_activation_hook(__FILE__, 'stifli_flex_mcp_activate');
 register_deactivation_hook(__FILE__, 'stifli_flex_mcp_deactivate');
 
 function stifli_flex_mcp_activate() {
+	StifliFlexMcp_Addons::initialize_fresh_install();
 	stifli_flex_mcp_install_schema();
-	stifli_flex_mcp_seed_event_triggers();
+	if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+		stifli_flex_mcp_seed_event_triggers();
+	}
 	
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
@@ -4098,7 +4133,9 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
 	stifli_flex_mcp_ensure_clean_changelog_event();
-	stifli_flex_mcp_ensure_automation_cron();
+	if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+		stifli_flex_mcp_ensure_automation_cron();
+	}
 	
 	// Authentication now uses WordPress Application Passwords (no custom token needed)
 }
@@ -4254,7 +4291,9 @@ add_action('plugins_loaded', function() {
 
 	stifli_flex_mcp_install_schema();
 	
-	stifli_flex_mcp_seed_event_triggers();
+	if ( stifli_flex_mcp_addon_enabled( 'automations' ) ) {
+		stifli_flex_mcp_seed_event_triggers();
+	}
 	stifli_flex_mcp_seed_initial_tools();
 	stifli_flex_mcp_seed_system_profiles();
 	stifli_flex_mcp_upgrade_302();

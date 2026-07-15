@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.3.13
+Stable tag: 3.4.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -16,11 +16,14 @@ The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent
 
 **StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect ChatGPT, Claude Desktop, Gemini, and other MCP clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
 
-Three powerful MCP and AI tools in one plugin:
+Choose the layers your site needs without loading the rest:
 
-1. **MCP Server** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site
-2. **AI Copilot** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time
-3. **AI Chat Agent** — A full conversational interface to manage posts, WooCommerce, settings, and more
+1. **MCP Server (always active)** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site. Includes Multimedia and Logs & Roll Back.
+2. **AI Copilot (optional addon)** — A floating assistant inside the Gutenberg and Classic editors that writes, rewrites, and optimizes your content in real time.
+3. **AI Chat Agent (optional addon)** — A full conversational interface to manage posts, WooCommerce, settings, and more.
+4. **Automations, SEO, and Plugin Integrations (optional addons)** — Enable only the workflows and integrations used on your site.
+
+On first activation, a setup screen lets you select the addons to load. The default is the MCP Server layer only. You can change the selection later from **StifLi Flex MCP → MCP Server → Add-ons**.
 
 **🎬 Video: Claude to WordPress MCP Connector in 1 Minute**
 
@@ -207,27 +210,37 @@ StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specific
 
 == Installation ==
 
-= Quick Start (AI Copilot) =
+= Quick Start (MCP Server) =
 
 1. Upload the `stifli-flex-mcp` folder to `/wp-content/plugins/` or install from the WordPress plugin directory
 2. Activate the plugin
-3. Go to **StifLi Flex MCP → AI Copilot** and make sure it’s enabled
-4. Go to **StifLi Flex MCP → AI Chat Agent → Settings** and enter your API key
-5. Open any post or page in the editor — the Copilot widget appears automatically
-6. Start writing with AI!
+3. Choose the addons you want on the first-activation screen. Leave them unchecked for the lightweight MCP Server-only setup.
+4. Continue to **StifLi Flex MCP → MCP Server**
+5. Copy the SSE URL and connect your MCP client through OAuth 2.1
+
+Multimedia tools and Logs & Roll Back are included in the MCP Server layer and are always available. Addons can be changed later from **MCP Server → Add-ons**; disabled addons do not load their PHP classes, menus, hooks, or background jobs.
+
+= Quick Start (AI Copilot) =
+
+1. Enable **AI Copilot** on the first-activation screen or from **MCP Server → Add-ons**
+2. Go to **StifLi Flex MCP → AI Copilot** and make sure it’s enabled
+3. Go to **StifLi Flex MCP → AI Chat Agent → Settings** and enter your API key
+4. Open any post or page in the editor — the Copilot widget appears automatically
+5. Start writing with AI!
 
 = Quick Start (AI Chat Agent) =
 
-1. Go to **StifLi Flex MCP → AI Chat Agent**
-2. Open the **Settings** tab and select your AI provider (OpenAI, Claude, Gemini, or installed WordPress AI Client connectors like OpenRouter/Mistral)
-3. Enter your API key
-4. Start chatting!
+1. Enable **AI Chat Agent** on the first-activation screen or from **MCP Server → Add-ons**
+2. Go to **StifLi Flex MCP → AI Chat Agent**
+3. Open the **Settings** tab and select your AI provider (OpenAI, Claude, Gemini, or installed WordPress AI Client connectors like OpenRouter/Mistral)
+4. Enter your API key
+5. Start chatting!
 
 That's it — no external tools, no complex configuration. Your AI agent is ready.
 
-= Optional: MCP Server for External Clients =
+= Connect External MCP Clients =
 
-If you also want to connect external AI clients (ChatGPT, Claude Desktop, LibreChat):
+To connect external AI clients (ChatGPT, Claude Desktop, LibreChat):
 
 1. Go to **StifLi Flex MCP → MCP Server**
 2. Copy the SSE URL shown on the Settings page
@@ -426,6 +439,11 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.4.0 =
+* New: Added modular installation with a first-activation selector for AI Chat Agent, AI Copilot, Automations, SEO, and Plugin Integrations.
+* Improvement: New installations load only MCP Server by default, including Multimedia and Logs & Roll Back; disabled addons no longer register their PHP classes, menus, hooks, cron workers, or automation tables.
+* Improvement: Added an Add-ons tab under MCP Server settings so administrators can change layers at any time while preserving all modules on existing installations until explicitly changed.
+
 = 3.3.13 =
 * Security: Retired legacy Custom Tools runtime execution to prevent lower-privileged users from invoking administrator-defined custom workflows through tool execution endpoints.
 * Security: Existing legacy Custom Tools are disabled automatically during upgrade, and `custom_*` tool calls now return a deprecation error instead of dispatching HTTP requests or WordPress action hooks.
