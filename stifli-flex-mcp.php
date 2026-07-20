@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.4.0
+Version: 3.4.1
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1104,6 +1104,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_get_plugin_settings', 'Safely inspect plugin-related wp_options by plugin_slug/prefixes with recursive secret redaction.', 'WordPress - Options', 1),
 		array('wp_update_option', 'Update a WordPress option.', 'WordPress - Options', 1),
 		array('wp_get_post_meta', 'Get post meta by post_id and meta_key.', 'WordPress - Meta', 1),
+		array('wp_add_post_meta', 'Add post meta without overwriting existing rows.', 'WordPress - Meta', 1),
 		array('wp_update_post_meta', 'Update post meta.', 'WordPress - Meta', 1),
 		array('wp_delete_post_meta', 'Delete post meta by post_id and meta_key.', 'WordPress - Meta', 1),
 		
@@ -2285,8 +2286,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Options (3)
 				'wp_css_get_global', 'wp_css_set_global', 'wp_css_set_scoped',
 				'wp_get_option', 'wp_get_plugin_settings', 'wp_update_option',
-				// Post Meta (3)
-				'wp_get_post_meta', 'wp_update_post_meta', 'wp_delete_post_meta',
+				// Post Meta (4)
+				'wp_get_post_meta', 'wp_add_post_meta', 'wp_update_post_meta', 'wp_delete_post_meta',
 				// Settings (2)
 				'wp_get_settings', 'wp_update_settings',
 				// Revisions (2)

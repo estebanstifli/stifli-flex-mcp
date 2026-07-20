@@ -33,11 +33,19 @@ class StifliFlexMcpUtils {
 			$schema = array();
 		}
 
-		if ( empty( $schema['type'] ) || ! is_string( $schema['type'] ) ) {
+		if ( isset( $schema['type'] ) && is_array( $schema['type'] ) ) {
+			$valid_types = array( 'string', 'number', 'integer', 'boolean', 'object', 'array', 'null' );
+			$schema['type'] = array_values( array_intersect( array_map( 'strval', $schema['type'] ), $valid_types ) );
+			if ( empty( $schema['type'] ) ) {
+				$schema['type'] = 'object';
+			}
+		} elseif ( empty( $schema['type'] ) || ! is_string( $schema['type'] ) ) {
 			$schema['type'] = 'object';
 		}
 
-		if ( 'object' === $schema['type'] || ! isset( $schema['type'] ) ) {
+		$is_object_schema = 'object' === $schema['type'] || ( is_array( $schema['type'] ) && in_array( 'object', $schema['type'], true ) ) || ! isset( $schema['type'] );
+
+		if ( $is_object_schema ) {
 			if ( isset( $schema['required'] ) && ! is_array( $schema['required'] ) ) {
 				unset( $schema['required'] );
 			}

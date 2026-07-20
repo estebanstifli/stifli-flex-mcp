@@ -16,7 +16,7 @@ class StifliFlexMcp_WC_Orders {
             // Orders
             'wc_get_orders' => array(
                 'name' => 'wc_get_orders',
-                'description' => 'List WooCommerce orders with filters (status, customer/customer_id, product/product_id, limit, offset, paged, orderby, order, after, before). Optional enrichments: items, totals, shipping summary, compact mode, and pagination metadata.',
+                'description' => 'List WooCommerce orders with filters (status, customer/customer_id, product/product_id, limit, offset, paged/page, orderby, order, after, before). Optional enrichments: items, totals, shipping summary, compact mode, and pagination metadata.',
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
@@ -28,6 +28,7 @@ class StifliFlexMcp_WC_Orders {
                         'limit'    => array('type' => 'integer'),
                         'offset'   => array('type' => 'integer'),
                         'paged'    => array('type' => 'integer'),
+                        'page'     => array('type' => 'integer', 'description' => 'Alias for paged.'),
                         'orderby'  => array('type' => 'string'),
                         'order'    => array('type' => 'string'),
                         'after'    => array('type' => 'string'),
@@ -372,7 +373,8 @@ class StifliFlexMcp_WC_Orders {
             case 'wc_get_orders':
                 $limit = intval($utils::getArrayValue($args, 'limit', 10));
                 $limit = $limit > 0 ? $limit : 10;
-                $paged = max(1, intval($utils::getArrayValue($args, 'paged', 1, 1)));
+                $pagedValue = array_key_exists('page', $args) ? $args['page'] : $utils::getArrayValue($args, 'paged', 1, 1);
+                $paged = max(1, intval($pagedValue));
                 $offset = isset($args['offset']) ? max(0, intval($args['offset'])) : (($paged - 1) * $limit);
                 $compact = $isTruthy($utils::getArrayValue($args, 'compact', false));
                 $includeItems = $isTruthy($utils::getArrayValue($args, 'include_items', false));
@@ -437,9 +439,15 @@ class StifliFlexMcp_WC_Orders {
                     if (null === $totalOrders) {
                         $totalOrders = count($result);
                     }
+                    $pagination = $buildPaginationMeta($totalOrders, $limit, $offset, $paged);
                     $payload = array(
                         'items' => $result,
-                        'pagination' => $buildPaginationMeta($totalOrders, $limit, $offset, $paged),
+                        'orders' => $result,
+                        'pagination' => $pagination,
+                        'page' => $pagination['current_page'],
+                        'per_page' => $pagination['per_page'],
+                        'total' => $pagination['total_items'],
+                        'total_pages' => $pagination['total_pages'],
                     );
                 }
                 
