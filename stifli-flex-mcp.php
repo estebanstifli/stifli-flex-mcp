@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.4.1
+Version: 3.4.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1115,6 +1115,8 @@ function stifli_flex_mcp_seed_initial_tools() {
 		// Custom Post Types & Site Health
 		array('wp_get_post_types', 'Get all registered post types.', 'WordPress - Post Types', 1),
 		array('wp_get_site_health', 'Run a WordPress site audit with selectable depth: 0 basic, 1 medium, 2 deep.', 'WordPress - Health', 1),
+		array('wp_get_cron_schedule', 'List scheduled WP-Cron events with next-run time, overdue flag, and optional hook filtering.', 'WordPress - Health', 1),
+		array('wp_get_error_log_tail', 'Read recent lines from wp_debug or plugin logs with optional keyword filtering.', 'WordPress - Health', 1),
 		
 		// Settings
 		array('wp_get_settings', 'Get WordPress settings.', 'WordPress - Settings', 1),
@@ -2296,6 +2298,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wp_get_post_types',
 				// Site Health (1)
 				'wp_get_site_health',
+				'wp_get_cron_schedule',
+				'wp_get_error_log_tail',
 				// Utilities (1) — wp_generate_video excluded by default; enable in Multimedia Settings
 				'wp_generate_image',
 				// Snippets (7) — requires WPCode or Code Snippets plugin
@@ -2415,6 +2419,8 @@ function stifli_flex_mcp_seed_system_profiles() {
 			'tools' => array(
 				'mcp_ping',
 				'wp_get_site_health',
+				'wp_get_cron_schedule',
+				'wp_get_error_log_tail',
 				'wp_get_post_types',
 				'wp_get_settings',
 				'wp_get_option',

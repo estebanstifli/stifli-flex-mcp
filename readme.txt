@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.4.1
+Stable tag: 3.4.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -439,6 +439,11 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.4.2 =
+* New: Added `wp_get_cron_schedule` to inspect scheduled WP-Cron events with next-run timestamps, overdue status, and optional hook filtering.
+* New: Added `wp_get_error_log_tail` to read recent lines from `wp_debug` or plugin logs with optional keyword filtering.
+* Improvement: Added proactive OAuth notices for Plain permalink mode and stale static `.well-known` metadata files that can break connector discovery.
+
 = 3.4.1 =
 * Improvement: Enhanced post and page management tools.
 * Improvement: Improved search results and WooCommerce order listings.

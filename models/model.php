@@ -297,6 +297,8 @@ class StifliFlexMcpModel {
             // WordPress - Additional sensitive reads
             'wp_get_user_meta',     // user privacy data
             'wp_get_site_health',   // system information
+            'wp_get_cron_schedule', // scheduled tasks visibility
+            'wp_get_error_log_tail', // debug log inspection
             'wp_get_term_meta',     // may include private/encoded data
             // WooCommerce sensitive reads (wc_get_customers removed for WordPress.org compliance)
             'wc_get_orders',        // order data privacy
@@ -1757,6 +1759,59 @@ class StifliFlexMcpModel {
                         'required' => array(),
                     ),
                 ),
+                'wp_get_cron_schedule' => array(
+                    'name' => 'wp_get_cron_schedule',
+                    'description' => 'List scheduled WP-Cron events with next-run time and overdue flags. Supports filtering by hook and optional argument details.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'hook' => array(
+                                'type' => 'string',
+                                'description' => 'Optional hook filter. Matches exact hook name or substring.',
+                            ),
+                            'overdue_only' => array(
+                                'type' => 'boolean',
+                                'description' => 'When true, return only overdue events.',
+                            ),
+                            'include_args' => array(
+                                'type' => 'boolean',
+                                'description' => 'When true, include event arguments (secret-redacted). Default false.',
+                            ),
+                            'limit' => array(
+                                'type' => 'integer',
+                                'description' => 'Maximum events to return (1-1000). Default 250.',
+                                'minimum' => 1,
+                                'maximum' => 1000,
+                            ),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'wp_get_error_log_tail' => array(
+                    'name' => 'wp_get_error_log_tail',
+                    'description' => 'Return recent lines from debug logs with optional keyword filtering. Supports wp_debug and plugin log sources.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'source' => array(
+                                'type' => 'string',
+                                'description' => 'Log source: wp_debug (default) or plugin.',
+                                'enum' => array( 'wp_debug', 'plugin' ),
+                            ),
+                            'lines' => array(
+                                'type' => 'integer',
+                                'description' => 'Number of trailing lines to inspect (1-500). Default 120.',
+                                'minimum' => 1,
+                                'maximum' => 500,
+                            ),
+                            'keyword' => array(
+                                'type' => 'string',
+                                'description' => 'Optional keyword filter (case-insensitive) applied after tail extraction.',
+                            ),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
 
                 // Changelog / Audit Log
                 'mcp_get_changelog' => array(
@@ -2174,6 +2229,8 @@ class StifliFlexMcpModel {
             'wp_restore_post_revision' => 'edit_posts',
             // site health
             'wp_get_site_health' => 'manage_options',
+            'wp_get_cron_schedule' => 'manage_options',
+            'wp_get_error_log_tail' => 'manage_options',
             // categories
             'wp_create_category' => 'manage_categories',
             'wp_update_category' => 'manage_categories',
@@ -7497,6 +7554,44 @@ class StifliFlexMcpModel {
                 );
                 break;
 
+            case 'wp_get_cron_schedule':
+                $cron_report = $this->getCronScheduleReport( $args );
+                if ( isset( $cron_report['error'] ) && is_array( $cron_report['error'] ) ) {
+                    $r['error'] = $cron_report['error'];
+                    break;
+                }
+
+                $cron_summary = isset( $cron_report['summary'] ) && is_array( $cron_report['summary'] ) ? $cron_report['summary'] : array();
+                $addResultText(
+                    $r,
+                    sprintf(
+                        'WP-Cron snapshot: %d events returned (%d matching before limit). Overdue: %d.',
+                        intval( $cron_summary['returned'] ?? 0 ),
+                        intval( $cron_summary['matching_total'] ?? 0 ),
+                        intval( $cron_summary['overdue'] ?? 0 )
+                    ) . "\n\n" . wp_json_encode( $cron_report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+                );
+                break;
+
+            case 'wp_get_error_log_tail':
+                $tail_report = $this->getErrorLogTailReport( $args );
+                if ( isset( $tail_report['error'] ) && is_array( $tail_report['error'] ) ) {
+                    $r['error'] = $tail_report['error'];
+                    break;
+                }
+
+                $tail_summary = isset( $tail_report['summary'] ) && is_array( $tail_report['summary'] ) ? $tail_report['summary'] : array();
+                $addResultText(
+                    $r,
+                    sprintf(
+                        'Log tail from %s: %d lines returned (%d inspected).',
+                        isset( $tail_report['source'] ) ? (string) $tail_report['source'] : 'unknown',
+                        intval( $tail_summary['returned'] ?? 0 ),
+                        intval( $tail_summary['inspected'] ?? 0 )
+                    ) . "\n\n" . wp_json_encode( $tail_report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+                );
+                break;
+
             /* ── Changelog / Audit Log Tools ───────────────────── */
 
             case 'mcp_get_changelog':
@@ -7861,6 +7956,345 @@ class StifliFlexMcpModel {
                 'tests'              => $tests,
             ),
         );
+    }
+
+    /**
+     * Build a snapshot of scheduled WP-Cron events.
+     *
+     * @param array $args Tool arguments.
+     * @return array
+     */
+    private function getCronScheduleReport( $args = array() ) {
+        $args = is_array( $args ) ? $args : array();
+        $hook_filter = isset( $args['hook'] ) ? sanitize_text_field( (string) $args['hook'] ) : '';
+        $overdue_only = $this->coerceBooleanArg( $args, 'overdue_only', false );
+        $include_args = $this->coerceBooleanArg( $args, 'include_args', false );
+        $limit = isset( $args['limit'] ) ? intval( $args['limit'] ) : 250;
+        if ( $limit < 1 ) {
+            $limit = 1;
+        }
+        if ( $limit > 1000 ) {
+            $limit = 1000;
+        }
+
+        if ( ! function_exists( '_get_cron_array' ) ) {
+            return array(
+                'error' => array(
+                    'code' => -32603,
+                    'message' => 'WP-Cron internals are not available in this environment.',
+                ),
+            );
+        }
+
+        $cron = _get_cron_array();
+        if ( ! is_array( $cron ) ) {
+            $cron = array();
+        }
+
+        $schedules = wp_get_schedules();
+        $now = time();
+        $events = array();
+
+        foreach ( $cron as $timestamp => $hooks ) {
+            if ( ! is_array( $hooks ) ) {
+                continue;
+            }
+
+            $run_at = intval( $timestamp );
+            $is_overdue = $run_at < $now;
+            if ( $overdue_only && ! $is_overdue ) {
+                continue;
+            }
+
+            foreach ( $hooks as $hook_name => $instances ) {
+                $hook_name = (string) $hook_name;
+                if ( '' !== $hook_filter && $hook_name !== $hook_filter && false === strpos( $hook_name, $hook_filter ) ) {
+                    continue;
+                }
+
+                if ( ! is_array( $instances ) ) {
+                    continue;
+                }
+
+                foreach ( $instances as $instance ) {
+                    if ( ! is_array( $instance ) ) {
+                        continue;
+                    }
+
+                    $schedule = isset( $instance['schedule'] ) ? (string) $instance['schedule'] : '';
+                    $interval = isset( $instance['interval'] ) ? intval( $instance['interval'] ) : 0;
+                    if ( $interval <= 0 && '' !== $schedule && isset( $schedules[ $schedule ]['interval'] ) ) {
+                        $interval = intval( $schedules[ $schedule ]['interval'] );
+                    }
+
+                    $event_args = isset( $instance['args'] ) && is_array( $instance['args'] ) ? $instance['args'] : array();
+                    $row = array(
+                        'hook' => $hook_name,
+                        'next_run_unix' => $run_at,
+                        'next_run_gmt' => gmdate( 'c', $run_at ),
+                        'next_run_local' => wp_date( 'c', $run_at ),
+                        'overdue' => $is_overdue,
+                        'seconds_until_run' => $run_at - $now,
+                        'schedule' => '' !== $schedule ? $schedule : 'single',
+                        'interval_seconds' => $interval,
+                        'recurring' => '' !== $schedule,
+                    );
+
+                    if ( $include_args ) {
+                        $row['args'] = StifliFlexMcpUtils::redactSecrets( $event_args, $hook_name );
+                    } else {
+                        $row['args_keys'] = array_values( array_map( 'strval', array_keys( $event_args ) ) );
+                    }
+
+                    $events[] = $row;
+                }
+            }
+        }
+
+        usort(
+            $events,
+            static function( $a, $b ) {
+                $a_run = isset( $a['next_run_unix'] ) ? intval( $a['next_run_unix'] ) : 0;
+                $b_run = isset( $b['next_run_unix'] ) ? intval( $b['next_run_unix'] ) : 0;
+                if ( $a_run === $b_run ) {
+                    return strcmp( (string) ( $a['hook'] ?? '' ), (string) ( $b['hook'] ?? '' ) );
+                }
+                return $a_run <=> $b_run;
+            }
+        );
+
+        $matching_total = count( $events );
+        $overdue_count = 0;
+        foreach ( $events as $event ) {
+            if ( ! empty( $event['overdue'] ) ) {
+                $overdue_count++;
+            }
+        }
+
+        if ( count( $events ) > $limit ) {
+            $events = array_slice( $events, 0, $limit );
+        }
+
+        return array(
+            'generated_at_gmt' => gmdate( 'c' ),
+            'generated_at_local' => wp_date( 'c' ),
+            'filters' => array(
+                'hook' => $hook_filter,
+                'overdue_only' => $overdue_only,
+                'include_args' => $include_args,
+                'limit' => $limit,
+            ),
+            'summary' => array(
+                'matching_total' => $matching_total,
+                'returned' => count( $events ),
+                'overdue' => $overdue_count,
+            ),
+            'events' => $events,
+        );
+    }
+
+    /**
+     * Return recent lines from runtime logs.
+     *
+     * @param array $args Tool arguments.
+     * @return array
+     */
+    private function getErrorLogTailReport( $args = array() ) {
+        $args = is_array( $args ) ? $args : array();
+        $source = isset( $args['source'] ) ? sanitize_key( (string) $args['source'] ) : 'wp_debug';
+        if ( ! in_array( $source, array( 'wp_debug', 'plugin' ), true ) ) {
+            return array(
+                'error' => array(
+                    'code' => -32602,
+                    'message' => 'Invalid source. Use wp_debug or plugin.',
+                ),
+            );
+        }
+
+        $lines = isset( $args['lines'] ) ? intval( $args['lines'] ) : 120;
+        if ( $lines < 1 ) {
+            $lines = 1;
+        }
+        if ( $lines > 500 ) {
+            $lines = 500;
+        }
+
+        $keyword = isset( $args['keyword'] ) ? sanitize_text_field( (string) $args['keyword'] ) : '';
+        $log_path = $this->resolveLogPathForSource( $source );
+
+        if ( '' === $log_path ) {
+            return array(
+                'source' => $source,
+                'path' => '',
+                'exists' => false,
+                'summary' => array(
+                    'requested_lines' => $lines,
+                    'inspected' => 0,
+                    'returned' => 0,
+                ),
+                'message' => 'No log path is configured for the selected source.',
+                'lines' => array(),
+            );
+        }
+
+        if ( ! file_exists( $log_path ) ) {
+            return array(
+                'source' => $source,
+                'path' => $log_path,
+                'exists' => false,
+                'summary' => array(
+                    'requested_lines' => $lines,
+                    'inspected' => 0,
+                    'returned' => 0,
+                ),
+                'message' => 'Log file not found.',
+                'lines' => array(),
+            );
+        }
+
+        $tail_lines = $this->tailFileLines( $log_path, $lines );
+        $inspected_count = count( $tail_lines );
+
+        if ( '' !== $keyword ) {
+            $needle = strtolower( $keyword );
+            $tail_lines = array_values(
+                array_filter(
+                    $tail_lines,
+                    static function( $line ) use ( $needle ) {
+                        return false !== strpos( strtolower( (string) $line ), $needle );
+                    }
+                )
+            );
+        }
+
+        $clean_lines = array();
+        foreach ( $tail_lines as $line ) {
+            $clean_lines[] = (string) StifliFlexMcpUtils::redactSecrets( (string) $line, $source );
+        }
+
+        return array(
+            'source' => $source,
+            'path' => $log_path,
+            'exists' => true,
+            'file_size_bytes' => @filesize( $log_path ), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- safe fallback for inaccessible log paths.
+            'keyword' => $keyword,
+            'generated_at_gmt' => gmdate( 'c' ),
+            'generated_at_local' => wp_date( 'c' ),
+            'summary' => array(
+                'requested_lines' => $lines,
+                'inspected' => $inspected_count,
+                'returned' => count( $clean_lines ),
+            ),
+            'lines' => $clean_lines,
+        );
+    }
+
+    /**
+     * Resolve a filesystem log path for the requested source.
+     *
+     * @param string $source Log source.
+     * @return string
+     */
+    private function resolveLogPathForSource( $source ) {
+        if ( 'plugin' === $source ) {
+            if ( function_exists( 'stifli_flex_mcp_get_log_file_path' ) ) {
+                return (string) stifli_flex_mcp_get_log_file_path();
+            }
+            return '';
+        }
+
+        if ( defined( 'WP_DEBUG_LOG' ) ) {
+            if ( true === WP_DEBUG_LOG ) {
+                return defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR . '/debug.log' : '';
+            }
+
+            if ( is_string( WP_DEBUG_LOG ) && '' !== WP_DEBUG_LOG ) {
+                $path = (string) WP_DEBUG_LOG;
+                $is_absolute = '/' === substr( $path, 0, 1 ) || preg_match( '/^[A-Za-z]:[\\\/]/', $path );
+                if ( $is_absolute ) {
+                    return $path;
+                }
+                return trailingslashit( ABSPATH ) . ltrim( $path, '/\\' );
+            }
+        }
+
+        return defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR . '/debug.log' : '';
+    }
+
+    /**
+     * Read the last N lines of a file without loading the full file into memory.
+     *
+     * @param string $path File path.
+     * @param int    $max_lines Maximum lines to return.
+     * @return array
+     */
+    private function tailFileLines( $path, $max_lines ) {
+        $max_lines = max( 1, intval( $max_lines ) );
+        $fp = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- graceful fallback when file permissions block reads.
+        if ( ! $fp ) {
+            return array();
+        }
+
+        $buffer = '';
+        $chunk_size = 4096;
+        fseek( $fp, 0, SEEK_END );
+        $position = ftell( $fp );
+
+        while ( $position > 0 && substr_count( $buffer, "\n" ) <= $max_lines ) {
+            $seek = max( 0, $position - $chunk_size );
+            $read = $position - $seek;
+            fseek( $fp, $seek );
+            $chunk = fread( $fp, $read );
+            if ( false === $chunk ) {
+                break;
+            }
+            $buffer = $chunk . $buffer;
+            $position = $seek;
+            if ( 0 === $seek ) {
+                break;
+            }
+        }
+
+        fclose( $fp );
+
+        $lines = preg_split( '/\r\n|\n|\r/', $buffer );
+        if ( ! is_array( $lines ) ) {
+            return array();
+        }
+        if ( ! empty( $lines ) && '' === end( $lines ) ) {
+            array_pop( $lines );
+        }
+
+        return array_slice( $lines, -$max_lines );
+    }
+
+    /**
+     * Convert mixed truthy values into booleans.
+     *
+     * @param array  $args Arguments array.
+     * @param string $key Argument key.
+     * @param bool   $default Default value.
+     * @return bool
+     */
+    private function coerceBooleanArg( $args, $key, $default = false ) {
+        if ( ! is_array( $args ) || ! array_key_exists( $key, $args ) ) {
+            return (bool) $default;
+        }
+
+        $value = $args[ $key ];
+        if ( is_bool( $value ) ) {
+            return $value;
+        }
+        if ( is_numeric( $value ) ) {
+            return intval( $value ) > 0;
+        }
+
+        $value = strtolower( trim( (string) $value ) );
+        if ( '' === $value ) {
+            return false;
+        }
+
+        return in_array( $value, array( '1', 'true', 'yes', 'on' ), true );
     }
 
     /**

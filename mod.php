@@ -2734,6 +2734,123 @@ class StifliFlexMcp {
 			return;
 		}
 
+		$helpUrl = admin_url('admin.php?page=sflmcp-server&tab=help#troubleshooting');
+
+		// Warn when Plain permalinks are enabled because OAuth discovery/connectors can fail under restrictive hosts.
+		$permalink_structure = (string) get_option('permalink_structure', '');
+		if ('' === $permalink_structure) {
+			$permalinksUrl = admin_url('options-permalink.php');
+			?>
+			<div class="notice notice-warning">
+				<p><strong><?php echo esc_html__('Plain permalinks detected.', 'stifli-flex-mcp'); ?></strong></p>
+				<p>
+					<?php echo esc_html__('OAuth and MCP connectors are more reliable with a non-Plain permalink structure. Switch to Post name or another pretty permalink option, then save changes.', 'stifli-flex-mcp'); ?>
+				</p>
+				<p>
+					<a class="button button-secondary" href="<?php echo esc_url($permalinksUrl); ?>"><?php echo esc_html__('Open Permalink Settings', 'stifli-flex-mcp'); ?></a>
+					<a class="button button-link" href="<?php echo esc_url($helpUrl); ?>"><?php echo esc_html__('Troubleshooting guide', 'stifli-flex-mcp'); ?></a>
+				</p>
+			</div>
+			<?php
+		}
+
+		// Warn if stale static .well-known files shadow dynamic OAuth metadata.
+		$normalizeEndpoint = static function($url) {
+			$url = is_string($url) ? trim($url) : '';
+			if ('' === $url) {
+				return '';
+			}
+			$parts = wp_parse_url($url);
+			if (!is_array($parts)) {
+				return $url;
+			}
+			$host = isset($parts['host']) ? strtolower((string) $parts['host']) : '';
+			$path = isset($parts['path']) ? untrailingslashit((string) $parts['path']) : '';
+			$query = '';
+			if (!empty($parts['query'])) {
+				parse_str((string) $parts['query'], $queryParts);
+				if (is_array($queryParts)) {
+					ksort($queryParts);
+					$query = http_build_query($queryParts);
+				}
+			}
+			return $host . '|' . $path . '|' . $query;
+		};
+
+		$expectedEndpoints = array(
+			'authorization_endpoint' => home_url('?sflmcp_oauth=authorize'),
+			'token_endpoint' => rest_url($this->namespace . '/oauth/token'),
+			'registration_endpoint' => rest_url($this->namespace . '/oauth/register'),
+		);
+		$staticFiles = array(
+			trailingslashit(ABSPATH) . '.well-known/oauth-authorization-server',
+			trailingslashit(ABSPATH) . '.well-known/oauth-authorization-server.json',
+			trailingslashit(ABSPATH) . '.well-known/openid-configuration',
+			trailingslashit(ABSPATH) . '.well-known/openid-configuration.json',
+		);
+		$staleStaticFiles = array();
+
+		foreach ($staticFiles as $filePath) {
+			if (!is_string($filePath) || '' === $filePath || !file_exists($filePath) || !is_readable($filePath)) {
+				continue;
+			}
+
+			// Read only first chunk to avoid large-file overhead.
+			$raw = @file_get_contents($filePath, false, null, 0, 262144); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,WordPress.PHP.NoSilencedErrors.Discouraged
+			if (false === $raw || '' === $raw) {
+				continue;
+			}
+
+			$reason = '';
+			$decoded = json_decode($raw, true);
+			if (is_array($decoded)) {
+				foreach ($expectedEndpoints as $key => $expectedUrl) {
+					if (!isset($decoded[$key]) || !is_string($decoded[$key]) || '' === $decoded[$key]) {
+						continue;
+					}
+					if ($normalizeEndpoint($decoded[$key]) !== $normalizeEndpoint($expectedUrl)) {
+						$reason = sprintf(
+							'Mismatch on %s: found %s',
+							$key,
+							$decoded[$key]
+						);
+						break;
+					}
+				}
+			}
+
+			if ('' === $reason) {
+				$rawLower = strtolower($raw);
+				if (false !== strpos($rawLower, '/wp-json/') && false !== strpos($rawLower, 'oauth') && (false !== strpos($rawLower, 'authorize') || false !== strpos($rawLower, 'token') || false !== strpos($rawLower, 'register'))) {
+					$reason = 'Contains legacy REST OAuth endpoint paths.';
+				}
+			}
+
+			if ('' !== $reason) {
+				$staleStaticFiles[] = array(
+					'path' => $filePath,
+					'reason' => $reason,
+				);
+			}
+		}
+
+		if (!empty($staleStaticFiles)) {
+			?>
+			<div class="notice notice-warning">
+				<p><strong><?php echo esc_html__('Stale static OAuth metadata file detected.', 'stifli-flex-mcp'); ?></strong></p>
+				<p><?php echo esc_html__('A static .well-known file may be overriding dynamic OAuth metadata and breaking connector discovery. Remove or update these files:', 'stifli-flex-mcp'); ?></p>
+				<ul>
+					<?php foreach ($staleStaticFiles as $item) : ?>
+						<li><code><?php echo esc_html((string) $item['path']); ?></code> — <?php echo esc_html((string) $item['reason']); ?></li>
+					<?php endforeach; ?>
+				</ul>
+				<p>
+					<a class="button button-secondary" href="<?php echo esc_url($helpUrl); ?>"><?php echo esc_html__('View manual fix', 'stifli-flex-mcp'); ?></a>
+				</p>
+			</div>
+			<?php
+		}
+
 		$check = $this->getOAuthWellKnownSelfCheckResult();
 		if (empty($check['blocked'])) {
 			return;
@@ -2750,7 +2867,6 @@ class StifliFlexMcp {
 			'sflmcp_dismiss_oauth_well_known_notice',
 			'_sflmcpnonce'
 		);
-		$helpUrl = admin_url('admin.php?page=sflmcp-server&tab=help#troubleshooting');
 		$endpoint = isset($check['url']) ? (string) $check['url'] : home_url('/.well-known/oauth-authorization-server');
 		$code = isset($check['code']) ? (int) $check['code'] : 0;
 		$status = isset($check['status']) ? (string) $check['status'] : '';
