@@ -7969,6 +7969,7 @@ class StifliFlexMcpModel {
         $hook_filter = isset( $args['hook'] ) ? sanitize_text_field( (string) $args['hook'] ) : '';
         $overdue_only = $this->coerceBooleanArg( $args, 'overdue_only', false );
         $include_args = $this->coerceBooleanArg( $args, 'include_args', false );
+        $wp_cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
         $limit = isset( $args['limit'] ) ? intval( $args['limit'] ) : 250;
         if ( $limit < 1 ) {
             $limit = 1;
@@ -8078,6 +8079,12 @@ class StifliFlexMcpModel {
         return array(
             'generated_at_gmt' => gmdate( 'c' ),
             'generated_at_local' => wp_date( 'c' ),
+            'runtime' => array(
+                'disable_wp_cron' => $wp_cron_disabled,
+                'message' => $wp_cron_disabled
+                    ? 'DISABLE_WP_CRON is enabled. WordPress will not auto-run due events on page loads; use a server cron or run wp-cron.php manually.'
+                    : 'DISABLE_WP_CRON is not enabled. WordPress auto-runs due events during site traffic.',
+            ),
             'filters' => array(
                 'hook' => $hook_filter,
                 'overdue_only' => $overdue_only,
@@ -8120,6 +8127,48 @@ class StifliFlexMcpModel {
         }
 
         $keyword = isset( $args['keyword'] ) ? sanitize_text_field( (string) $args['keyword'] ) : '';
+
+        if ( 'wp_debug' === $source ) {
+            $wp_debug_enabled = defined( 'WP_DEBUG' ) && WP_DEBUG;
+            $wp_debug_log_enabled = defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG;
+
+            if ( ! $wp_debug_enabled ) {
+                return array(
+                    'source' => $source,
+                    'exists' => false,
+                    'summary' => array(
+                        'requested_lines' => $lines,
+                        'inspected' => 0,
+                        'returned' => 0,
+                    ),
+                    'message' => 'WP_DEBUG is disabled. Enable WP_DEBUG and WP_DEBUG_LOG in wp-config.php to capture debug.log output.',
+                    'config' => array(
+                        'WP_DEBUG' => defined( 'WP_DEBUG' ) ? (bool) WP_DEBUG : null,
+                        'WP_DEBUG_LOG' => defined( 'WP_DEBUG_LOG' ) ? WP_DEBUG_LOG : null,
+                    ),
+                    'lines' => array(),
+                );
+            }
+
+            if ( ! $wp_debug_log_enabled ) {
+                return array(
+                    'source' => $source,
+                    'exists' => false,
+                    'summary' => array(
+                        'requested_lines' => $lines,
+                        'inspected' => 0,
+                        'returned' => 0,
+                    ),
+                    'message' => 'WP_DEBUG_LOG is disabled. Set WP_DEBUG_LOG to true (or a writable log path) in wp-config.php.',
+                    'config' => array(
+                        'WP_DEBUG' => defined( 'WP_DEBUG' ) ? (bool) WP_DEBUG : null,
+                        'WP_DEBUG_LOG' => defined( 'WP_DEBUG_LOG' ) ? WP_DEBUG_LOG : null,
+                    ),
+                    'lines' => array(),
+                );
+            }
+        }
+
         $log_path = $this->resolveLogPathForSource( $source );
 
         if ( '' === $log_path ) {
@@ -8138,6 +8187,10 @@ class StifliFlexMcpModel {
         }
 
         if ( ! file_exists( $log_path ) ) {
+            $suggestion = 'Log file not found at expected path. Trigger one warning/error, then run this tool again.';
+            if ( 'wp_debug' === $source ) {
+                $suggestion = 'debug.log was not found. Confirm WP_DEBUG_LOG points to this path and that the directory is writable.';
+            }
             return array(
                 'source' => $source,
                 'path' => $log_path,
@@ -8147,7 +8200,7 @@ class StifliFlexMcpModel {
                     'inspected' => 0,
                     'returned' => 0,
                 ),
-                'message' => 'Log file not found.',
+                'message' => $suggestion,
                 'lines' => array(),
             );
         }
