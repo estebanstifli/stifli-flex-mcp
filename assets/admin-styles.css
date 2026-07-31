@@ -209,6 +209,161 @@
 }
 
 /* =============================================================================
+   PLUGINS TAB (Plugin Integrations)
+   ============================================================================= */
+
+.sflmcp-plugins-save-status {
+    margin: 10px 0 16px;
+}
+
+.sflmcp-plugin-card {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
+}
+
+.sflmcp-plugin-card > summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+}
+
+.sflmcp-plugin-card > summary::-webkit-details-marker {
+    display: none;
+}
+
+.sflmcp-plugin-summary-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.sflmcp-plugin-summary-left input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.sflmcp-plugin-card[open] .sflmcp-chevron {
+    transform: rotate(90deg);
+}
+
+.sflmcp-plugin-title {
+    font-weight: 600;
+}
+
+.sflmcp-plugin-summary-right {
+    flex-shrink: 0;
+    text-align: right;
+    min-width: 120px;
+}
+
+.sflmcp-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.sflmcp-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.sflmcp-badge-featured {
+    background: #fff4e5;
+    color: #a35a00;
+}
+
+.sflmcp-badge-active {
+    background: #edfaef;
+    color: #0a7a2f;
+}
+
+.sflmcp-badge-installed {
+    background: #e8f4ff;
+    color: #125e9c;
+}
+
+.sflmcp-badge-muted {
+    background: #f0f0f1;
+    color: #50575e;
+}
+
+.sflmcp-plugin-action-btn {
+    margin-left: 6px;
+}
+
+.sflmcp-plugin-body {
+    border-top: 1px solid #dcdcde;
+    padding: 12px 14px;
+}
+
+.sflmcp-plugin-description {
+    margin-top: 0;
+}
+
+.sflmcp-discover-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.sflmcp-discover-status {
+    font-size: 12px;
+    color: #50575e;
+}
+
+.sflmcp-plugin-tools-table {
+    overflow-x: auto;
+}
+
+.sflmcp-plugin-tools-table .wp-list-table td {
+    vertical-align: middle;
+}
+
+.sflmcp-plugin-tool-row code {
+    word-break: break-all;
+}
+
+.sflmcp-empty {
+    background: #f6f7f7;
+    border: 1px dashed #c3c4c7;
+    border-radius: 6px;
+    padding: 12px;
+    color: #50575e;
+}
+
+@media screen and (max-width: 782px) {
+    .sflmcp-plugin-card > summary {
+        align-items: flex-start;
+    }
+
+    .sflmcp-plugin-summary-left {
+        flex-wrap: wrap;
+    }
+
+    .sflmcp-plugin-summary-right {
+        min-width: auto;
+        text-align: left;
+    }
+}
+
+/* =============================================================================
    HELP PAGE
    ============================================================================= */
 

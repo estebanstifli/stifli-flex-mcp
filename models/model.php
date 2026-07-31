@@ -8884,8 +8884,29 @@ class StifliFlexMcpModel {
         // The check_permission method may not exist on all ability implementations
         // so we'll let execute() handle permission checking internally
 
+        // WordPress Abilities with no input schema expect null when no input is provided.
+        $ability_input_schema = method_exists( $ability, 'get_input_schema' )
+            ? $ability->get_input_schema()
+            : null;
+
+        $has_input_schema = true;
+        if ( null === $ability_input_schema || false === $ability_input_schema ) {
+            $has_input_schema = false;
+        } elseif ( is_string( $ability_input_schema ) && '' === trim( $ability_input_schema ) ) {
+            $has_input_schema = false;
+        } elseif ( is_array( $ability_input_schema ) && empty( $ability_input_schema ) ) {
+            $has_input_schema = false;
+        } elseif ( is_object( $ability_input_schema ) && empty( (array) $ability_input_schema ) ) {
+            $has_input_schema = false;
+        }
+
+        $execute_args = $args;
+        if ( ! $has_input_schema && is_array( $args ) && empty( $args ) ) {
+            $execute_args = null;
+        }
+
         // Execute the ability with input arguments
-        $result = $ability->execute( $args );
+        $result = $ability->execute( $execute_args );
 
         if ( is_wp_error( $result ) ) {
             $r['error'] = array(

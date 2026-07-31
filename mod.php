@@ -2958,7 +2958,7 @@ class StifliFlexMcp {
 			'sflmcp-admin-styles',
 			plugin_dir_url(__FILE__) . 'assets/admin-styles.css',
 			array(),
-			'1.0.6'
+			'1.0.7'
 		);
 
 		// Enqueue Custom Tools assets for legacy tab.
