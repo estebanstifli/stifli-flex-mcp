@@ -4,6 +4,19 @@ if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 // Model MCP con tools completas + intención/consentimiento
 class StifliFlexMcpModel {
     private $tools = array();
+    private static $runtimeConnectionContext = array();
+
+    public static function setRuntimeConnectionContext( $context ) {
+        self::$runtimeConnectionContext = is_array( $context ) ? $context : array();
+    }
+
+    public static function getRuntimeConnectionContext() {
+        return is_array( self::$runtimeConnectionContext ) ? self::$runtimeConnectionContext : array();
+    }
+
+    public static function clearRuntimeConnectionContext() {
+        self::$runtimeConnectionContext = array();
+    }
 
     private function maybeLoadFile( $relative_path, $class_name = '' ) {
         if ( $class_name && class_exists( $class_name ) ) {
@@ -1823,6 +1836,7 @@ class StifliFlexMcpModel {
                             'tool_name'      => array('type' => 'string', 'description' => 'Filter by tool name (e.g. wp_update_post).'),
                             'operation_type'  => array('type' => 'string', 'description' => 'Filter by operation: create, update, delete, file_create, file_delete, unknown.'),
                             'object_type'     => array('type' => 'string', 'description' => 'Filter by object type: post, page, comment, user, term, option, media, product, order, coupon, etc.'),
+                            'session_id'      => array('type' => 'string', 'description' => 'Filter by MCP session ID. Use this value with mcp_rollback_session.'),
                             'date_from'       => array('type' => 'string', 'description' => 'Start date filter (YYYY-MM-DD).'),
                             'date_to'         => array('type' => 'string', 'description' => 'End date filter (YYYY-MM-DD).'),
                             'rolled_back'     => array('type' => 'integer', 'description' => '0=active only, 1=rolled-back only. Omit for all.'),
@@ -2520,7 +2534,7 @@ class StifliFlexMcpModel {
             return null;
         };
         $toolCalledEmitted = false;
-        $emitToolCalled = function(array $response) use ($tool, &$toolCalledEmitted) {
+        $emitToolCalled = function(array $response) use ($tool, $id, $args, &$toolCalledEmitted) {
             if ($toolCalledEmitted) {
                 return $response;
             }
@@ -2530,6 +2544,21 @@ class StifliFlexMcpModel {
             if (isset($response['error']['message']) && is_scalar($response['error']['message'])) {
                 $error_message = (string) $response['error']['message'];
             }
+
+            $connectionContext = self::getRuntimeConnectionContext();
+            $contextPayload = array(
+                'request_id' => $id,
+                'tool' => $tool,
+                'status' => $status,
+                'error_message' => $error_message,
+                'arguments_keys' => is_array($args) ? array_values(array_map('strval', array_keys($args))) : array(),
+                'connection_context' => $connectionContext,
+                'is_authenticated' => get_current_user_id() > 0,
+                'user_id' => (int) get_current_user_id(),
+                'timestamp_gmt' => gmdate('c'),
+            );
+
+            do_action('sflmcp_tool_context', $tool, $status, $error_message, $contextPayload);
             do_action('stifli_flex_mcp_tool_called', $tool, $status, $error_message);
             do_action('sflmcp_tool_called', $tool, $status, $error_message);
             return $response;
@@ -3037,6 +3066,17 @@ class StifliFlexMcpModel {
                 $timeoutSec = max(1, min(10, intval($utils::getArrayValue($args, 'timeout_sec', 3, 1))));
                 $homeUrl = home_url('/');
                 $restUrl = get_rest_url(null, '/');
+                $theme = wp_get_theme();
+                $themeTemplate = strtolower((string) $theme->get_template());
+                $themeStylesheet = strtolower((string) $theme->get_stylesheet());
+                $isDiviTheme = in_array($themeTemplate, array('divi', 'extra'), true) || in_array($themeStylesheet, array('divi', 'extra'), true);
+                $connectionContext = self::getRuntimeConnectionContext();
+                $connectionSessionId = isset($connectionContext['session_id']) ? trim((string) $connectionContext['session_id']) : '';
+                $trackerSessionId = '';
+                if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) ) {
+                    $trackerSessionId = trim((string) StifliFlexMcp_ChangeTracker::getInstance()->getSessionId());
+                }
+                $effectiveSessionId = '' !== $connectionSessionId ? $connectionSessionId : $trackerSessionId;
                 $pingData = array(
                     'time' => gmdate('Y-m-d H:i:s'),
                     'name' => get_bloginfo('name'),
@@ -3045,6 +3085,26 @@ class StifliFlexMcpModel {
                     'https' => is_ssl(),
                     'wordpress_version' => get_bloginfo('version'),
                     'php_version' => PHP_VERSION,
+                    'connection_context' => array(
+                        'transport' => isset($connectionContext['transport']) ? (string) $connectionContext['transport'] : 'unknown',
+                        'route' => isset($connectionContext['route']) ? (string) $connectionContext['route'] : '',
+                        'auth_method' => isset($connectionContext['auth_method']) ? (string) $connectionContext['auth_method'] : 'unknown',
+                        'session_id' => $effectiveSessionId,
+                        'request_id' => isset($connectionContext['request_id']) ? $connectionContext['request_id'] : $id,
+                        'is_authenticated' => isset($connectionContext['is_authenticated']) ? (bool) $connectionContext['is_authenticated'] : ( get_current_user_id() > 0 ),
+                        'user_id' => isset($connectionContext['user_id']) ? (int) $connectionContext['user_id'] : (int) get_current_user_id(),
+                    ),
+                    'builder_versions' => array(
+                        'wordpress_core' => (string) get_bloginfo('version'),
+                        'elementor' => array(
+                            'active' => class_exists('Elementor\\Plugin') || defined('ELEMENTOR_VERSION'),
+                            'version' => defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : '',
+                        ),
+                        'divi' => array(
+                            'active' => defined('ET_BUILDER_VERSION') || $isDiviTheme,
+                            'version' => defined('ET_BUILDER_VERSION') ? ET_BUILDER_VERSION : ( $isDiviTheme ? (string) $theme->get('Version') : '' ),
+                        ),
+                    ),
                 );
 
                 if ($diagnosticsEnabled) {
@@ -3564,7 +3624,116 @@ class StifliFlexMcpModel {
                         delete_post_thumbnail( $u );
                     }
                 }
-                $addResultText($r, 'Post #' . $u . ' updated');
+
+                clean_post_cache($u);
+                $saved_post = get_post($u);
+                if (!$saved_post) {
+                    $r['error'] = array('code' => -42603, 'message' => 'Post updated but could not be reloaded.');
+                    break;
+                }
+
+                $requested_vs_saved = array();
+                $dropped_fields = array();
+
+                foreach ($c as $field_key => $requested_value) {
+                    if ('ID' === $field_key) {
+                        continue;
+                    }
+
+                    if ('post_content' === $field_key || 'post_excerpt' === $field_key) {
+                        $requested_comp = (string) wp_unslash((string) $requested_value);
+                        $saved_comp = (string) $saved_post->{$field_key};
+                    } elseif ('post_author' === $field_key) {
+                        $requested_comp = (int) $requested_value;
+                        $saved_comp = (int) $saved_post->post_author;
+                    } elseif ('post_name' === $field_key) {
+                        $requested_comp = sanitize_title((string) $requested_value);
+                        $saved_comp = (string) $saved_post->post_name;
+                    } else {
+                        $requested_comp = (string) $requested_value;
+                        $saved_comp = isset($saved_post->{$field_key}) ? (string) $saved_post->{$field_key} : '';
+                    }
+
+                    $applied = ($requested_comp === $saved_comp);
+                    $requested_vs_saved[$field_key] = array(
+                        'requested' => $requested_comp,
+                        'saved' => $saved_comp,
+                        'applied' => $applied,
+                    );
+                    if (!$applied) {
+                        $dropped_fields[] = $field_key;
+                    }
+                }
+
+                if (!empty($up_post_categories)) {
+                    $saved_categories = wp_get_post_categories($u, array('fields' => 'ids'));
+                    $requested_categories = array_values(array_map('intval', $up_post_categories));
+                    $saved_categories = array_values(array_map('intval', is_array($saved_categories) ? $saved_categories : array()));
+                    sort($requested_categories);
+                    sort($saved_categories);
+                    $applied_categories = ($requested_categories === $saved_categories);
+                    $requested_vs_saved['post_category'] = array(
+                        'requested' => $requested_categories,
+                        'saved' => $saved_categories,
+                        'applied' => $applied_categories,
+                    );
+                    if (!$applied_categories) {
+                        $dropped_fields[] = 'post_category';
+                    }
+                }
+
+                if (!empty($up_tax_input)) {
+                    foreach ($up_tax_input as $taxonomy_name => $requested_terms) {
+                        $saved_terms = wp_get_post_terms($u, $taxonomy_name, array('fields' => 'slugs'));
+                        $requested_term_values = array_values(array_filter(array_map('strval', is_array($requested_terms) ? $requested_terms : array()), 'strlen'));
+                        $saved_term_values = array_values(array_filter(array_map('strval', is_array($saved_terms) ? $saved_terms : array()), 'strlen'));
+                        sort($requested_term_values);
+                        sort($saved_term_values);
+                        $field_key = 'tax_input.' . $taxonomy_name;
+                        $applied_terms = ($requested_term_values === $saved_term_values);
+                        $requested_vs_saved[$field_key] = array(
+                            'requested' => $requested_term_values,
+                            'saved' => $saved_term_values,
+                            'applied' => $applied_terms,
+                        );
+                        if (!$applied_terms) {
+                            $dropped_fields[] = $field_key;
+                        }
+                    }
+                }
+
+                if (array_key_exists('featured_media', $args)) {
+                    $requested_featured_media = intval($args['featured_media']);
+                    $saved_featured_media = (int) get_post_thumbnail_id($u);
+                    $applied_featured_media = ($requested_featured_media === $saved_featured_media);
+                    $requested_vs_saved['featured_media'] = array(
+                        'requested' => $requested_featured_media,
+                        'saved' => $saved_featured_media,
+                        'applied' => $applied_featured_media,
+                    );
+                    if (!$applied_featured_media) {
+                        $dropped_fields[] = 'featured_media';
+                    }
+                }
+
+                $dropped_fields = array_values(array_unique($dropped_fields));
+                $persisted_ok = empty($dropped_fields);
+                $summary = $persisted_ok
+                    ? 'Post #' . $u . ' updated and verified.'
+                    : 'Post #' . $u . ' updated, but some requested fields were not persisted: ' . implode(', ', $dropped_fields);
+
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => $summary),
+                    ),
+                    'structuredContent' => array(
+                        'success' => true,
+                        'post_id' => (int) $u,
+                        'persisted' => $persisted_ok,
+                        'dropped_fields' => $dropped_fields,
+                        'requested_vs_saved' => $requested_vs_saved,
+                    ),
+                );
                 break;
             case 'wp_set_featured_image':
                 $post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
@@ -3737,7 +3906,60 @@ class StifliFlexMcpModel {
                         update_post_meta($u, sanitize_key($k), maybe_serialize($v));
                     }
                 }
-                $addResultText($r, 'Page #' . $u . ' updated');
+
+                clean_post_cache($u);
+                $saved_page = get_post($u);
+                if (!$saved_page) {
+                    $r['error'] = array('code' => -42603, 'message' => 'Page updated but could not be reloaded.');
+                    break;
+                }
+
+                $requested_vs_saved = array();
+                $dropped_fields = array();
+                foreach ($pdata as $field_key => $requested_value) {
+                    if ('ID' === $field_key) {
+                        continue;
+                    }
+                    if ('post_content' === $field_key) {
+                        $requested_comp = (string) wp_unslash((string) $requested_value);
+                        $saved_comp = (string) $saved_page->post_content;
+                    } elseif ('post_author' === $field_key || 'post_parent' === $field_key || 'menu_order' === $field_key) {
+                        $requested_comp = (int) $requested_value;
+                        $saved_comp = (int) $saved_page->{$field_key};
+                    } else {
+                        $requested_comp = (string) $requested_value;
+                        $saved_comp = isset($saved_page->{$field_key}) ? (string) $saved_page->{$field_key} : '';
+                    }
+
+                    $applied = ($requested_comp === $saved_comp);
+                    $requested_vs_saved[$field_key] = array(
+                        'requested' => $requested_comp,
+                        'saved' => $saved_comp,
+                        'applied' => $applied,
+                    );
+                    if (!$applied) {
+                        $dropped_fields[] = $field_key;
+                    }
+                }
+
+                $dropped_fields = array_values(array_unique($dropped_fields));
+                $persisted_ok = empty($dropped_fields);
+                $summary = $persisted_ok
+                    ? 'Page #' . $u . ' updated and verified.'
+                    : 'Page #' . $u . ' updated, but some requested fields were not persisted: ' . implode(', ', $dropped_fields);
+
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => $summary),
+                    ),
+                    'structuredContent' => array(
+                        'success' => true,
+                        'page_id' => (int) $u,
+                        'persisted' => $persisted_ok,
+                        'dropped_fields' => $dropped_fields,
+                        'requested_vs_saved' => $requested_vs_saved,
+                    ),
+                );
                 break;
             case 'wp_delete_page':
                 $delete_page_id = $resolveObjectId($args);
@@ -7602,6 +7824,7 @@ class StifliFlexMcpModel {
                 if ( ! empty( $args['tool_name'] ) )      $cl_f['tool_name']      = sanitize_text_field( $args['tool_name'] );
                 if ( ! empty( $args['operation_type'] ) )  $cl_f['operation_type']  = sanitize_key( $args['operation_type'] );
                 if ( ! empty( $args['object_type'] ) )     $cl_f['object_type']     = sanitize_key( $args['object_type'] );
+                if ( ! empty( $args['session_id'] ) )      $cl_f['session_id']      = sanitize_text_field( $args['session_id'] );
                 if ( ! empty( $args['date_from'] ) )       $cl_f['date_from']       = sanitize_text_field( $args['date_from'] ) . ' 00:00:00';
                 if ( ! empty( $args['date_to'] ) )         $cl_f['date_to']         = sanitize_text_field( $args['date_to'] ) . ' 23:59:59';
                 if ( isset( $args['rolled_back'] ) )       $cl_f['rolled_back']     = intval( $args['rolled_back'] );

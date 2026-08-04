@@ -116,15 +116,42 @@ class StifliFlexMcp_WC_Products {
             ),
             'wc_batch_update_products' => array(
                 'name' => 'wc_batch_update_products',
-                'description' => 'Batch update multiple products at once. Pass arrays: create, update, delete.',
+                'description' => 'Batch mutate products in one request. Supports create[], update[], and delete[] arrays. Legacy updates[] is still accepted as alias of update[]. For update items, both product_id and id are accepted.',
                 'inputSchema' => array(
                     'type' => 'object',
                     'properties' => array(
                         'create' => array('type' => 'array', 'items' => array('type' => 'object')),
                         'update' => array('type' => 'array', 'items' => array('type' => 'object')),
                         'delete' => array('type' => 'array', 'items' => array('type' => 'integer')),
+                        'updates' => array('type' => 'array', 'items' => array('type' => 'object'), 'description' => 'Legacy alias for update[]'),
+                        'force' => array('type' => 'boolean', 'description' => 'When true, permanently delete product IDs passed in delete[]'),
                     ),
                     'required' => array(),
+                ),
+            ),
+            'wc_bulk_assign_product_categories' => array(
+                'name' => 'wc_bulk_assign_product_categories',
+                'description' => 'Assign categories to multiple products in one call. Set append=true to keep existing categories.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'product_ids' => array('type' => 'array', 'items' => array('type' => 'integer')),
+                        'category_ids' => array('type' => 'array', 'items' => array('type' => 'integer')),
+                        'append' => array('type' => 'boolean'),
+                    ),
+                    'required' => array('product_ids', 'category_ids'),
+                ),
+            ),
+            'wc_bulk_delete_products' => array(
+                'name' => 'wc_bulk_delete_products',
+                'description' => 'Delete multiple WooCommerce products by ID in one call. Pass force=true to delete permanently.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'product_ids' => array('type' => 'array', 'items' => array('type' => 'integer')),
+                        'force' => array('type' => 'boolean'),
+                    ),
+                    'required' => array('product_ids'),
                 ),
             ),
             
@@ -474,6 +501,8 @@ class StifliFlexMcp_WC_Products {
             'wc_update_product' => 'edit_products',
             'wc_delete_product' => 'delete_products',
             'wc_batch_update_products' => 'edit_products',
+            'wc_bulk_assign_product_categories' => 'manage_product_terms',
+            'wc_bulk_delete_products' => 'delete_products',
             'wc_create_product_variation' => 'edit_products',
             'wc_update_product_variation' => 'edit_products',
             'wc_delete_product_variation' => 'delete_products',
@@ -835,41 +864,231 @@ class StifliFlexMcp_WC_Products {
                 return true;
                 
             case 'wc_batch_update_products':
-                $updates = $utils::getArrayValue($args, 'updates', array());
-                if (empty($updates) || !is_array($updates)) {
-                    $r['error'] = array('code' => -50001, 'message' => 'updates array is required');
+                $createItems = $utils::getArrayValue($args, 'create', array());
+                $updateItems = $utils::getArrayValue($args, 'update', array());
+                $deleteItems = $utils::getArrayValue($args, 'delete', array());
+                $legacyUpdates = $utils::getArrayValue($args, 'updates', array());
+                if (!empty($legacyUpdates) && is_array($legacyUpdates) && (empty($updateItems) || !is_array($updateItems))) {
+                    $updateItems = $legacyUpdates;
+                }
+
+                $hasCreate = is_array($createItems) && !empty($createItems);
+                $hasUpdate = is_array($updateItems) && !empty($updateItems);
+                $hasDelete = is_array($deleteItems) && !empty($deleteItems);
+                if (!$hasCreate && !$hasUpdate && !$hasDelete) {
+                    $r['error'] = array('code' => -50001, 'message' => 'Provide at least one of create[], update[] (or updates[]), or delete[]');
                     return true;
                 }
-                
-                $results = array();
-                foreach ($updates as $update) {
-                    if (empty($update['product_id'])) {
-                        continue;
+
+                $forceDelete = (bool) $utils::getArrayValue($args, 'force', false);
+                $resultPayload = array(
+                    'created' => array(),
+                    'updated' => array(),
+                    'deleted' => array(),
+                    'skipped' => array(),
+                );
+
+                if ($hasCreate) {
+                    foreach ($createItems as $index => $createItem) {
+                        if (!is_array($createItem)) {
+                            $resultPayload['skipped'][] = array('operation' => 'create', 'index' => $index, 'reason' => 'Invalid create payload');
+                            continue;
+                        }
+                        $name = sanitize_text_field((string) $utils::getArrayValue($createItem, 'name', ''));
+                        if ('' === $name) {
+                            $resultPayload['skipped'][] = array('operation' => 'create', 'index' => $index, 'reason' => 'name is required');
+                            continue;
+                        }
+
+                        $product_type = sanitize_key((string) $utils::getArrayValue($createItem, 'type', 'simple'));
+                        $supported_types = array('simple', 'variable', 'grouped', 'external');
+                        if (!in_array($product_type, $supported_types, true)) {
+                            $product_type = 'simple';
+                        }
+
+                        if (class_exists('WC_Product_Factory')) {
+                            $factory = new WC_Product_Factory();
+                            $product = $factory->get_product_classname(0, $product_type);
+                            $product = class_exists($product) ? new $product() : new WC_Product_Simple();
+                        } else {
+                            $product = new WC_Product_Simple();
+                        }
+
+                        $product->set_name($name);
+                        if (isset($createItem['description'])) {
+                            $product->set_description(wp_kses_post($createItem['description']));
+                        }
+                        if (isset($createItem['short_description'])) {
+                            $product->set_short_description(wp_kses_post($createItem['short_description']));
+                        }
+                        if (isset($createItem['regular_price'])) {
+                            $product->set_regular_price(sanitize_text_field($createItem['regular_price']));
+                        }
+                        if (isset($createItem['sale_price'])) {
+                            $product->set_sale_price(sanitize_text_field($createItem['sale_price']));
+                        }
+                        if (isset($createItem['status'])) {
+                            $product->set_status(sanitize_key($createItem['status']));
+                        }
+                        if (isset($createItem['stock_quantity'])) {
+                            $product->set_stock_quantity(intval($createItem['stock_quantity']));
+                            $product->set_manage_stock(true);
+                        }
+                        if (isset($createItem['categories'])) {
+                            $product->set_category_ids(array_map('intval', (array) $createItem['categories']));
+                        }
+
+                        $newProductId = $product->save();
+                        if ($newProductId) {
+                            $resultPayload['created'][] = (int) $newProductId;
+                        } else {
+                            $resultPayload['skipped'][] = array('operation' => 'create', 'index' => $index, 'reason' => 'Failed to create product');
+                        }
                     }
-                    
-                    $product = wc_get_product(intval($update['product_id']));
-                    if (!$product) {
-                        continue;
-                    }
-                    
-                    if (isset($update['regular_price'])) {
-                        $product->set_regular_price(sanitize_text_field($update['regular_price']));
-                    }
-                    if (isset($update['sale_price'])) {
-                        $product->set_sale_price(sanitize_text_field($update['sale_price']));
-                    }
-                    if (isset($update['stock_quantity'])) {
-                        $product->set_stock_quantity(intval($update['stock_quantity']));
-                    }
-                    if (isset($update['status'])) {
-                        $product->set_status(sanitize_key($update['status']));
-                    }
-                    
-                    $product->save();
-                    $results[] = $update['product_id'];
                 }
-                
-                $addResultText($r, 'Updated ' . count($results) . ' products: ' . implode(', ', $results));
+
+                if ($hasUpdate) {
+                    foreach ($updateItems as $index => $update) {
+                        $updateProductId = is_array($update)
+                            ? intval(isset($update['product_id']) ? $update['product_id'] : (isset($update['id']) ? $update['id'] : 0))
+                            : 0;
+
+                        if (!is_array($update) || $updateProductId <= 0) {
+                            $resultPayload['skipped'][] = array('operation' => 'update', 'index' => $index, 'reason' => 'product_id is required');
+                            continue;
+                        }
+
+                        $productId = $updateProductId;
+                        $product = wc_get_product($productId);
+                        if (!$product) {
+                            $resultPayload['skipped'][] = array('operation' => 'update', 'product_id' => $productId, 'reason' => 'Product not found');
+                            continue;
+                        }
+
+                        if (!empty($update['name'])) {
+                            $product->set_name(sanitize_text_field($update['name']));
+                        }
+                        if (isset($update['description'])) {
+                            $product->set_description(wp_kses_post($update['description']));
+                        }
+                        if (isset($update['short_description'])) {
+                            $product->set_short_description(wp_kses_post($update['short_description']));
+                        }
+                        if (isset($update['regular_price'])) {
+                            $product->set_regular_price(sanitize_text_field($update['regular_price']));
+                        }
+                        if (isset($update['sale_price'])) {
+                            $product->set_sale_price(sanitize_text_field($update['sale_price']));
+                        }
+                        if (isset($update['stock_quantity'])) {
+                            $product->set_stock_quantity(intval($update['stock_quantity']));
+                            $product->set_manage_stock(true);
+                        }
+                        if (isset($update['status'])) {
+                            $product->set_status(sanitize_key($update['status']));
+                        }
+                        if (isset($update['categories'])) {
+                            $product->set_category_ids(array_map('intval', (array) $update['categories']));
+                        }
+                        if (isset($update['tags'])) {
+                            $product->set_tag_ids(array_map('intval', (array) $update['tags']));
+                        }
+
+                        $product->save();
+                        $resultPayload['updated'][] = $productId;
+                    }
+                }
+
+                if ($hasDelete) {
+                    foreach ($deleteItems as $deleteProductIdRaw) {
+                        $deleteProductId = intval($deleteProductIdRaw);
+                        if ($deleteProductId <= 0) {
+                            $resultPayload['skipped'][] = array('operation' => 'delete', 'product_id' => 0, 'reason' => 'Invalid product ID');
+                            continue;
+                        }
+
+                        $deleted = wp_delete_post($deleteProductId, $forceDelete);
+                        if ($deleted) {
+                            $resultPayload['deleted'][] = $deleteProductId;
+                        } else {
+                            $resultPayload['skipped'][] = array('operation' => 'delete', 'product_id' => $deleteProductId, 'reason' => 'Failed to delete product');
+                        }
+                    }
+                }
+
+                $addResultText($r, 'Batch product mutation result: ' . wp_json_encode($resultPayload, JSON_PRETTY_PRINT));
+                $r['result']['structuredContent'] = $resultPayload;
+                return true;
+
+            case 'wc_bulk_assign_product_categories':
+                $product_ids = array_values(array_filter(array_map('intval', (array) $utils::getArrayValue($args, 'product_ids', array()))));
+                $category_ids = array_values(array_filter(array_map('intval', (array) $utils::getArrayValue($args, 'category_ids', array()))));
+                $append = (bool) $utils::getArrayValue($args, 'append', false);
+                if (empty($product_ids) || empty($category_ids)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_ids and category_ids are required');
+                    return true;
+                }
+
+                $assigned = array();
+                $skipped = array();
+                foreach ($product_ids as $product_id) {
+                    $product = wc_get_product($product_id);
+                    if (!$product) {
+                        $skipped[] = array('product_id' => $product_id, 'reason' => 'Product not found');
+                        continue;
+                    }
+
+                    $next_categories = $category_ids;
+                    if ($append) {
+                        $next_categories = array_values(array_unique(array_merge($product->get_category_ids(), $category_ids)));
+                    }
+                    $product->set_category_ids(array_map('intval', $next_categories));
+                    $product->save();
+                    $assigned[] = $product_id;
+                }
+
+                $payload = array(
+                    'assigned' => $assigned,
+                    'skipped' => $skipped,
+                    'category_ids' => $category_ids,
+                    'append' => $append,
+                );
+                $addResultText($r, 'Bulk category assignment result: ' . wp_json_encode($payload, JSON_PRETTY_PRINT));
+                $r['result']['structuredContent'] = $payload;
+                return true;
+
+            case 'wc_bulk_delete_products':
+                $product_ids = array_values(array_filter(array_map('intval', (array) $utils::getArrayValue($args, 'product_ids', array()))));
+                $force = (bool) $utils::getArrayValue($args, 'force', false);
+                if (empty($product_ids)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'product_ids is required');
+                    return true;
+                }
+
+                $deleted = array();
+                $skipped = array();
+                foreach ($product_ids as $delete_product_id) {
+                    $product = wc_get_product($delete_product_id);
+                    if (!$product) {
+                        $skipped[] = array('product_id' => $delete_product_id, 'reason' => 'Product not found');
+                        continue;
+                    }
+
+                    $result = wp_delete_post($delete_product_id, $force);
+                    if ($result) {
+                        $deleted[] = $delete_product_id;
+                    } else {
+                        $skipped[] = array('product_id' => $delete_product_id, 'reason' => 'Delete failed');
+                    }
+                }
+
+                $payload = array(
+                    'deleted' => $deleted,
+                    'skipped' => $skipped,
+                    'force' => $force,
+                );
+                $addResultText($r, 'Bulk delete products result: ' . wp_json_encode($payload, JSON_PRETTY_PRINT));
+                $r['result']['structuredContent'] = $payload;
                 return true;
                 
             case 'wc_get_product_variations':

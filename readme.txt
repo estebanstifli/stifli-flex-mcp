@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.4.3
+Stable tag: 3.4.4
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -439,6 +439,20 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.4.4 =
+* New: Added `elementor_update_widget` to update Elementor widget settings by `element_id` with undo compatibility.
+* New: Added `elementor_export_template` to export Elementor template/page data as JSON for portability workflows.
+* New: Added `wc_bulk_assign_product_categories` and `wc_bulk_delete_products` for WooCommerce bulk product operations.
+* Improvement: Expanded `wc_batch_update_products` to support `create`, `update`, and `delete` operations (plus legacy `updates` compatibility).
+* Improvement: Added compatibility aliases for automation scripts (`wc_batch_update_products.update[].id` as alias of `product_id`, and `elementor_export_template.post_id` as alias of `template_id`).
+* Improvement: Expanded `mcp_ping` with `connection_context` and `builder_versions` to improve connector diagnostics.
+* Improvement: `mcp_ping.connection_context.session_id` now falls back to the active ChangeTracker session when transport context is empty, improving `mcp_rollback_session` operability.
+* Improvement: Added `session_id` filter to `mcp_get_changelog` schema and runtime filtering, so rollback targets can be discovered from tool outputs.
+* Improvement: Added enriched `sflmcp_tool_context` hook payload while preserving legacy hook compatibility.
+* Improvement: Hardened `wp_update_post` and `wp_update_page` responses with requested-vs-saved checks, including dropped-field reporting.
+* Improvement: Added `.mcpb` one-click bundle download flow from OAuth settings to simplify Claude Desktop connector setup.
+* Improvement: Added `README.md` optimized for GitHub rendering, including linked video thumbnail preview.
+
 = 3.4.3 =
 * Fix: WordPress 6.9+ Abilities compatibility for schema-less abilities. When no arguments are provided and the ability has no effective input schema, MCP now calls `execute(null)` instead of `execute([])`.
 * Fix: Plugin Integrations tab CSS now uses the same base visual style as the Tools tabs, restoring card/table layout consistency in `admin.php?page=sflmcp-server&tab=plugins`.

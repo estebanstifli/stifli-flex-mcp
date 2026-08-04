@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.4.3
+Version: 3.4.4
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1191,6 +1191,8 @@ function stifli_flex_mcp_seed_initial_tools() {
 	$tools[] = array('wc_update_product', 'Update a WooCommerce product by ID.', 'WooCommerce - Products', 1);
 	$tools[] = array('wc_delete_product', 'Delete a WooCommerce product by ID.', 'WooCommerce - Products', 1);
 	$tools[] = array('wc_batch_update_products', 'Batch update multiple WooCommerce products.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_bulk_assign_product_categories', 'Assign categories to multiple products in one call.', 'WooCommerce - Products', 1);
+	$tools[] = array('wc_bulk_delete_products', 'Delete multiple WooCommerce products by ID in one call.', 'WooCommerce - Products', 1);
 	
 	// WooCommerce Product Variations
 	$tools[] = array('wc_get_product_variations', 'Get variations for a variable product.', 'WooCommerce - Products', 1);
@@ -1953,8 +1955,11 @@ function stifli_flex_mcp_upgrade_elementor_integration_tools() {
 		array( 'elementor_replace_image', 'Swap image URLs and optional attachment IDs in Elementor settings, with dry_run support.', 'Plugins - Elementor', 1 ),
 		array( 'elementor_replace_link', 'Replace URLs in Elementor link fields for buttons, CTAs and repeaters, with dry_run support.', 'Plugins - Elementor', 1 ),
 		array( 'elementor_get_page_outline', 'Get a compact Elementor page outline with widget types and text snippets.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_get_widget_settings', 'Read full Elementor settings for one element by element_id.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_update_widget', 'Update one Elementor element settings by element_id (merge patch or replace).', 'Plugins - Elementor', 1 ),
 		array( 'elementor_list_local_templates', 'List saved Elementor templates from the local template library.', 'Plugins - Elementor', 1 ),
 		array( 'elementor_import_template', 'Create a local Elementor template from exported JSON or an elements array.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_export_template', 'Export an Elementor local template as JSON compatible with import.', 'Plugins - Elementor', 1 ),
 		array( 'elementor_add_widget', 'Add a widget or container to an existing Elementor page using curated flat params or raw Elementor settings.', 'Plugins - Elementor', 1 ),
 	);
 
@@ -2015,6 +2020,101 @@ function stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool() {
 			),
 			array( '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine: add Wave1 roadmap tools for existing installs.
+ */
+function stifli_flex_mcp_upgrade_wave1_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_wave1_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'elementor_get_widget_settings', 'Read full Elementor settings for one element by element_id.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_update_widget', 'Update one Elementor element settings by element_id (merge patch or replace).', 'Plugins - Elementor', 1 ),
+		array( 'elementor_export_template', 'Export an Elementor local template as JSON compatible with import.', 'Plugins - Elementor', 1 ),
+		array( 'wc_bulk_assign_product_categories', 'Assign categories to multiple products in one call.', 'WooCommerce - Products', 1 ),
+		array( 'wc_bulk_delete_products', 'Delete multiple WooCommerce products by ID in one call.', 'WooCommerce - Products', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	if ( stifli_flex_mcp_table_exists( $profiles_table ) && stifli_flex_mcp_table_exists( $profile_tools_table ) ) {
+		$profile_map = array(
+			'WooCommerce Store Management' => array( 'wc_bulk_assign_product_categories', 'wc_bulk_delete_products' ),
+			'Complete E-commerce' => array( 'wc_bulk_assign_product_categories', 'wc_bulk_delete_products' ),
+			'Complete Site' => array(
+				'elementor_get_widget_settings',
+				'elementor_update_widget',
+				'elementor_export_template',
+				'wc_bulk_assign_product_categories',
+				'wc_bulk_delete_products',
+			),
+		);
+
+		foreach ( $profile_map as $profile_name => $tool_names ) {
+			$profile_id = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+					$profile_name
+				)
+			);
+			if ( ! $profile_id ) {
+				continue;
+			}
+
+			foreach ( $tool_names as $tool_name ) {
+				$exists = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+						(int) $profile_id,
+						$tool_name
+					)
+				);
+				if ( ! $exists ) {
+					$wpdb->insert(
+						$profile_tools_table,
+						array(
+							'profile_id' => (int) $profile_id,
+							'tool_name' => $tool_name,
+						),
+						array( '%d', '%s' )
+					);
+				}
+			}
+		}
 	}
 
 	update_option( $flag, '1' );
@@ -2328,6 +2428,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				// Products & Stock
 				'wc_get_products', 'wc_create_product', 'wc_update_product', 'wc_delete_product', 'wc_batch_update_products',
+				'wc_bulk_assign_product_categories', 'wc_bulk_delete_products',
 				'wc_update_stock', 'wc_get_low_stock_products', 'wc_set_stock_status',
 				'wc_get_product_variations', 'wc_get_variation', 'wc_create_product_variation', 'wc_update_product_variation', 'wc_delete_product_variation', 'wc_batch_update_variations',
 				'wc_get_product_attributes', 'wc_get_attribute_terms', 'wc_create_product_attribute', 'wc_set_product_attributes',
@@ -2351,6 +2452,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				// All WooCommerce tools (65 total)
 				'wc_get_products', 'wc_create_product', 'wc_update_product', 'wc_delete_product', 'wc_batch_update_products',
+				'wc_bulk_assign_product_categories', 'wc_bulk_delete_products',
 				'wc_get_product_variations', 'wc_get_variation', 'wc_create_product_variation', 'wc_update_product_variation', 'wc_delete_product_variation', 'wc_batch_update_variations',
 				'wc_get_product_attributes', 'wc_get_attribute_terms', 'wc_create_product_attribute', 'wc_set_product_attributes',
 				'wc_get_product_categories', 'wc_create_product_category', 'wc_update_product_category', 'wc_delete_product_category',
@@ -4136,6 +4238,7 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_maybe_upgrade_db();
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
 	stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool();
+	stifli_flex_mcp_upgrade_wave1_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
@@ -4309,6 +4412,7 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_upgrade_plugin_integration_tools();
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
 	stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool();
+	stifli_flex_mcp_upgrade_wave1_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_rankmath_profile_detach();
 	stifli_flex_mcp_apply_plugin_integration_overrides();

@@ -121,6 +121,33 @@ class StifliFlexMcp_Elementor {
                     'required' => array( 'post_id' ),
                 ),
             ),
+            'elementor_get_widget_settings' => array(
+                'name' => 'elementor_get_widget_settings',
+                'description' => 'Read full Elementor element settings for a specific widget/container/section/column by element_id.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'post_id' => array( 'type' => 'integer' ),
+                        'element_id' => array( 'type' => 'string', 'description' => 'Elementor element ID from _elementor_data.' ),
+                        'include_children' => array( 'type' => 'boolean', 'description' => 'When true, include nested children nodes. Default false.' ),
+                    ),
+                    'required' => array( 'post_id', 'element_id' ),
+                ),
+            ),
+            'elementor_update_widget' => array(
+                'name' => 'elementor_update_widget',
+                'description' => 'Update Elementor element settings by element_id. Supports replacing settings or merging a patch object into existing settings.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'post_id' => array( 'type' => 'integer' ),
+                        'element_id' => array( 'type' => 'string', 'description' => 'Elementor element ID from _elementor_data.' ),
+                        'settings' => array( 'type' => 'object', 'description' => 'Settings payload to apply to the target element.' ),
+                        'replace_settings' => array( 'type' => 'boolean', 'description' => 'When true, replace full settings object. Default false (merge patch).' ),
+                    ),
+                    'required' => array( 'post_id', 'element_id', 'settings' ),
+                ),
+            ),
             'elementor_list_local_templates' => array(
                 'name' => 'elementor_list_local_templates',
                 'description' => 'List saved templates from the Elementor Library with optional type filter.',
@@ -144,6 +171,19 @@ class StifliFlexMcp_Elementor {
                         'template_json' => array( 'type' => 'string', 'description' => 'JSON-encoded Elementor export or elements array.' ),
                     ),
                     'required' => array( 'title', 'template_json' ),
+                ),
+            ),
+            'elementor_export_template' => array(
+                'name' => 'elementor_export_template',
+                'description' => 'Export an Elementor local template as JSON compatible with Elementor import flow.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'template_id' => array( 'type' => 'integer', 'description' => 'Elementor template post ID.' ),
+                        'post_id' => array( 'type' => 'integer', 'description' => 'Alias for template_id (compatibility with generic scripts).' ),
+                        'include_meta' => array( 'type' => 'boolean', 'description' => 'Include selected Elementor metadata. Default true.' ),
+                    ),
+                    'required' => array(),
                 ),
             ),
             'elementor_add_widget' => array(
@@ -193,8 +233,11 @@ class StifliFlexMcp_Elementor {
             'elementor_replace_image' => 'edit_posts',
             'elementor_replace_link' => 'edit_posts',
             'elementor_get_page_outline' => 'edit_posts',
+            'elementor_get_widget_settings' => 'edit_posts',
+            'elementor_update_widget' => 'edit_posts',
             'elementor_list_local_templates' => 'edit_posts',
             'elementor_import_template' => 'edit_posts',
+            'elementor_export_template' => 'edit_posts',
             'elementor_add_widget' => 'edit_posts',
         );
     }
@@ -216,7 +259,7 @@ class StifliFlexMcp_Elementor {
             return self::build_post_snapshot( 'create', self::TEMPLATE_POST_TYPE, 0 );
         }
 
-        if ( in_array( $tool, array( 'elementor_replace_text', 'elementor_replace_image', 'elementor_replace_link', 'elementor_add_widget' ), true ) ) {
+        if ( in_array( $tool, array( 'elementor_replace_text', 'elementor_replace_image', 'elementor_replace_link', 'elementor_add_widget', 'elementor_update_widget' ), true ) ) {
             $post_id = self::sanitize_positive_int( self::array_value( $args, 'post_id', 0 ) );
             $post = $post_id > 0 ? get_post( $post_id ) : null;
             return self::build_post_snapshot( 'update', $post ? $post->post_type : 'post', $post_id );
@@ -254,11 +297,20 @@ class StifliFlexMcp_Elementor {
                 case 'elementor_get_page_outline':
                     $payload = self::get_page_outline( $args );
                     break;
+                case 'elementor_get_widget_settings':
+                    $payload = self::get_widget_settings( $args );
+                    break;
+                case 'elementor_update_widget':
+                    $payload = self::update_widget( $args );
+                    break;
                 case 'elementor_list_local_templates':
                     $payload = self::list_local_templates( $args );
                     break;
                 case 'elementor_import_template':
                     $payload = self::import_template( $args );
+                    break;
+                case 'elementor_export_template':
+                    $payload = self::export_template( $args );
                     break;
                 case 'elementor_add_widget':
                     $payload = self::add_widget( $args );
@@ -447,6 +499,98 @@ class StifliFlexMcp_Elementor {
         );
     }
 
+    private static function get_widget_settings( $args ) {
+        $post_id = self::sanitize_positive_int( self::array_value( $args, 'post_id', 0 ) );
+        $element_id = trim( (string) self::array_value( $args, 'element_id', '' ) );
+        $include_children = self::is_truthy( self::array_value( $args, 'include_children', false ) );
+
+        if ( $post_id <= 0 || '' === $element_id ) {
+            throw new Exception( 'post_id and element_id are required.' );
+        }
+        if ( ! current_user_can( 'read_post', $post_id ) && ! current_user_can( 'edit_post', $post_id ) ) {
+            throw new Exception( 'Permission denied.' );
+        }
+
+        $tree = self::get_elementor_tree( $post_id, 'Target post' );
+        $match = self::find_element_with_path( $tree, $element_id );
+        if ( null === $match || ! is_array( $match ) || empty( $match['element'] ) ) {
+            throw new Exception( 'element_id not found in this Elementor document.' );
+        }
+
+        $element = is_array( $match['element'] ) ? $match['element'] : array();
+        $settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+
+        $payload = array(
+            'success' => true,
+            'post_id' => $post_id,
+            'element_id' => (string) self::array_value( $element, 'id', $element_id ),
+            'elType' => (string) self::array_value( $element, 'elType', '' ),
+            'widgetType' => (string) self::array_value( $element, 'widgetType', '' ),
+            'isInner' => (bool) self::array_value( $element, 'isInner', false ),
+            'path' => isset( $match['path'] ) && is_array( $match['path'] ) ? $match['path'] : array(),
+            'settings' => $settings,
+            'settings_field_count' => count( $settings ),
+            'children_count' => isset( $element['elements'] ) && is_array( $element['elements'] ) ? count( $element['elements'] ) : 0,
+        );
+
+        if ( $include_children ) {
+            $payload['children'] = isset( $element['elements'] ) && is_array( $element['elements'] )
+                ? $element['elements']
+                : array();
+        }
+
+        return $payload;
+    }
+
+    private static function update_widget( $args ) {
+        $post_id = self::require_editable_elementor_post( $args );
+        $element_id = trim( (string) self::array_value( $args, 'element_id', '' ) );
+        $settings_patch = self::array_value( $args, 'settings', null );
+        $replace_settings = self::is_truthy( self::array_value( $args, 'replace_settings', false ) );
+
+        if ( '' === $element_id ) {
+            throw new Exception( 'element_id is required.' );
+        }
+        if ( ! is_array( $settings_patch ) ) {
+            throw new Exception( 'settings must be an object.' );
+        }
+
+        $tree = self::get_elementor_tree( $post_id, 'Target post' );
+        $match = self::find_element_with_path( $tree, $element_id );
+        if ( null === $match || ! is_array( $match ) || empty( $match['element'] ) ) {
+            throw new Exception( 'element_id not found in this Elementor document.' );
+        }
+
+        $current_element = is_array( $match['element'] ) ? $match['element'] : array();
+        $current_settings = isset( $current_element['settings'] ) && is_array( $current_element['settings'] )
+            ? $current_element['settings']
+            : array();
+
+        $next_settings = $replace_settings
+            ? $settings_patch
+            : array_replace_recursive( $current_settings, $settings_patch );
+
+        $current_element['settings'] = $next_settings;
+        $updated_tree = self::replace_element_in_tree( $tree, $element_id, $current_element, $was_updated );
+        if ( ! $was_updated ) {
+            throw new Exception( 'Unable to update element settings for element_id.' );
+        }
+
+        self::save_elementor_tree( $post_id, $updated_tree );
+        self::clear_elementor_cache( $post_id );
+
+        return array(
+            'success' => true,
+            'post_id' => $post_id,
+            'element_id' => $element_id,
+            'replace_settings' => (bool) $replace_settings,
+            'updated_settings_keys' => array_values( array_map( 'strval', array_keys( $settings_patch ) ) ),
+            'settings_field_count' => count( $next_settings ),
+            'path' => isset( $match['path'] ) && is_array( $match['path'] ) ? $match['path'] : array(),
+            'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+        );
+    }
+
     private static function list_local_templates( $args ) {
         if ( ! post_type_exists( self::TEMPLATE_POST_TYPE ) ) {
             throw new Exception( 'Elementor template library post type is not available.' );
@@ -578,6 +722,61 @@ class StifliFlexMcp_Elementor {
             'template_type' => $template_type,
             'edit_url' => admin_url( 'post.php?post=' . (int) $new_id . '&action=elementor' ),
         );
+    }
+
+    private static function export_template( $args ) {
+        $template_id = self::sanitize_positive_int( self::array_value( $args, 'template_id', 0 ) );
+        if ( $template_id <= 0 ) {
+            $template_id = self::sanitize_positive_int( self::array_value( $args, 'post_id', 0 ) );
+        }
+        $include_meta = self::is_truthy( self::array_value( $args, 'include_meta', true ) );
+
+        if ( $template_id <= 0 ) {
+            throw new Exception( 'template_id (or post_id alias) is required.' );
+        }
+        if ( ! current_user_can( 'read_post', $template_id ) && ! current_user_can( 'edit_post', $template_id ) ) {
+            throw new Exception( 'Permission denied.' );
+        }
+
+        $template = get_post( $template_id );
+        if ( ! $template || self::TEMPLATE_POST_TYPE !== $template->post_type ) {
+            throw new Exception( 'Template not found in Elementor library.' );
+        }
+
+        $elements = self::get_elementor_tree( $template_id, 'Template' );
+        $page_settings = get_post_meta( $template_id, '_elementor_page_settings', true );
+        if ( ! is_array( $page_settings ) ) {
+            $page_settings = array();
+        }
+
+        $payload = array(
+            'success' => true,
+            'template_id' => (int) $template_id,
+            'title' => (string) $template->post_title,
+            'template_type' => (string) get_post_meta( $template_id, '_elementor_template_type', true ),
+            'status' => (string) $template->post_status,
+            'content' => $elements,
+            'page_settings' => $page_settings,
+        );
+
+        if ( $include_meta ) {
+            $payload['meta'] = array(
+                '_elementor_edit_mode' => (string) get_post_meta( $template_id, '_elementor_edit_mode', true ),
+                '_elementor_template_type' => (string) get_post_meta( $template_id, '_elementor_template_type', true ),
+                '_elementor_version' => (string) get_post_meta( $template_id, '_elementor_version', true ),
+                '_elementor_pro_version' => (string) get_post_meta( $template_id, '_elementor_pro_version', true ),
+            );
+        }
+
+        $payload['template_json'] = wp_json_encode(
+            array(
+                'content' => $elements,
+                'page_settings' => $page_settings,
+            ),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
+
+        return $payload;
     }
 
     private static function add_widget( $args ) {
@@ -1003,6 +1202,43 @@ class StifliFlexMcp_Elementor {
         return null;
     }
 
+    private static function find_element_with_path( $elements, $element_id, $path = array() ) {
+        if ( ! is_array( $elements ) ) {
+            return null;
+        }
+
+        foreach ( $elements as $index => $element ) {
+            if ( ! is_array( $element ) ) {
+                continue;
+            }
+
+            $node_id = isset( $element['id'] ) ? (string) $element['id'] : '';
+            $next_path = $path;
+            $next_path[] = array(
+                'index' => (int) $index,
+                'id' => $node_id,
+                'elType' => (string) self::array_value( $element, 'elType', '' ),
+                'widgetType' => (string) self::array_value( $element, 'widgetType', '' ),
+            );
+
+            if ( '' !== $node_id && $node_id === (string) $element_id ) {
+                return array(
+                    'element' => $element,
+                    'path' => $next_path,
+                );
+            }
+
+            if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+                $found = self::find_element_with_path( $element['elements'], $element_id, $next_path );
+                if ( null !== $found ) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static function insert_element_into_tree( $elements, $parent_id, $position, $new_element ) {
         if ( null === $parent_id ) {
             return self::insert_element_at_position( is_array( $elements ) ? $elements : array(), $position, $new_element );
@@ -1022,6 +1258,36 @@ class StifliFlexMcp_Elementor {
             }
             $out[] = $element;
         }
+        return $out;
+    }
+
+    private static function replace_element_in_tree( $elements, $element_id, $replacement, &$updated = false ) {
+        $updated = false;
+        $out = array();
+
+        foreach ( is_array( $elements ) ? $elements : array() as $element ) {
+            if ( ! is_array( $element ) ) {
+                $out[] = $element;
+                continue;
+            }
+
+            if ( isset( $element['id'] ) && (string) $element['id'] === (string) $element_id ) {
+                $out[] = $replacement;
+                $updated = true;
+                continue;
+            }
+
+            if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+                $child_updated = false;
+                $element['elements'] = self::replace_element_in_tree( $element['elements'], $element_id, $replacement, $child_updated );
+                if ( $child_updated ) {
+                    $updated = true;
+                }
+            }
+
+            $out[] = $element;
+        }
+
         return $out;
     }
 

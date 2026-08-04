@@ -95,6 +95,8 @@ class StifliFlexMcp_ChangeTracker {
 		'wc_update_product'             => array( 'update', 'product', 'product_id' ),
 		'wc_delete_product'             => array( 'delete', 'product', 'product_id' ),
 		'wc_batch_update_products'      => array( 'update', 'product', null ),
+		'wc_bulk_assign_product_categories' => array( 'update', 'product', null ),
+		'wc_bulk_delete_products'       => array( 'delete', 'product', null ),
 		'wc_update_stock'               => array( 'update', 'product_stock', 'product_id' ),
 		'wc_set_stock_status'           => array( 'update', 'product_stock', 'product_id' ),
 		'wc_create_product_variation'   => array( 'create', 'product_variation', null ),
