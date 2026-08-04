@@ -1,70 +1,114 @@
-# StifLi Flex MCP
+# StifLi Flex MCP - MCP Server for WordPress with Undo
 
-MCP Server for WordPress with built-in Undo, plus optional AI Copilot and AI Chat Agent.
+[![WordPress 5.9+](https://img.shields.io/badge/WordPress-5.9%2B-21759B?logo=wordpress&logoColor=white)](https://wordpress.org)
+[![Tested up to 7.0](https://img.shields.io/badge/Tested%20up%20to-7.0-21759B?logo=wordpress&logoColor=white)](https://wordpress.org)
+[![PHP 7.4+](https://img.shields.io/badge/PHP-7.4%2B-777BB4?logo=php&logoColor=white)](https://www.php.net)
+[![MCP 2025-11-25](https://img.shields.io/badge/MCP-2025--11--25-0A7CFF)](https://modelcontextprotocol.io/specification/2025-11-25/)
+[![OAuth 2.1 + PKCE](https://img.shields.io/badge/OAuth-2.1%20%2B%20PKCE-4CAF50)](https://datatracker.ietf.org/doc/html/rfc7636)
+[![License GPLv2+](https://img.shields.io/badge/License-GPLv2%2B-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 
-- WordPress plugin (pure PHP, no build step)
-- OAuth 2.1 + PKCE for external MCP clients
-- 122+ built-in tools (WordPress + WooCommerce + integrations)
-- Full change tracking with rollback/redo
+StifLi Flex MCP is a WordPress plugin that turns your site into a secure Model Context Protocol (MCP) server for ChatGPT, Claude Desktop, Gemini, and other MCP clients. It includes built-in Undo, OAuth 2.1 authentication, and 122+ tools for WordPress, WooCommerce, SEO, media, and automations.
 
-## Quick Links
+## Why This MCP Server for WordPress
 
-- Plugin URL: https://github.com/estebanstifli/stifli-flex-mcp
-- Documentation: https://andromedanova.com/stifli-flex-mcp.html
-- WordPress readme: readme.txt
+- MCP server for WordPress with real tool execution over JSON-RPC 2.0 and SSE
+- OAuth 2.1 + PKCE authentication for external clients (no shared secrets)
+- Built-in rollback and redo for AI-driven changes
+- 122+ tools out of the box, and 200+ with supported integrations
+- Modular architecture: enable only the add-ons your site needs
 
-## Video
+## Watch the 1-Minute Demo
 
-Watch: Claude to WordPress MCP Connector in 1 minute.
+Claude to WordPress MCP Connector in 1 minute:
 
 [![Watch the video](https://img.youtube.com/vi/AcmvwRzoOSM/hqdefault.jpg)](https://youtu.be/AcmvwRzoOSM)
 
-## What Is Included
+## What You Can Enable
 
-StifLi Flex MCP is modular. You can enable only what you need:
+1. MCP Server (always active)
+2. AI Copilot (optional add-on)
+3. AI Chat Agent (optional add-on)
+4. Automations, SEO, and Plugin Integrations (optional add-ons)
 
-1. MCP Server (always active): JSON-RPC 2.0 + SSE endpoint for MCP clients.
-2. AI Copilot (optional addon): writing assistant inside Gutenberg and Classic editor.
-3. AI Chat Agent (optional addon): conversational admin for site management.
-4. Automations, SEO, Plugin Integrations (optional addons).
+Default install is lightweight: MCP Server only.
 
-## MCP Server Highlights
+## Supported MCP Clients and AI Platforms
 
-- Compatible with ChatGPT, Claude Desktop, LibreChat, Cursor, Cline, Roo Code, Windsurf, Claude Code
-- Standard-based discovery and auth flow
+### External MCP clients
+
+- ChatGPT Apps and Connectors
+- Claude Desktop Connectors
+- LibreChat
+- Cursor, Cline, Roo Code, Windsurf, Claude Code
+
+### Built-in AI Chat Agent providers
+
+- OpenAI
+- Anthropic Claude
+- Google Gemini
+- OpenRouter and Mistral through WordPress AI Client connectors
+
+## Tool Coverage
+
+- WordPress tools: posts, pages, comments, taxonomies, options, media, menus
+- WooCommerce tools: products, variations, orders, coupons, shipping, taxes, webhooks
+- SEO tools: Google Search Console and SEO metadata workflows
+- Multimedia tools: image and video generation, stock image search
+- Rollback tools: changelog, rollback, redo, session rollback
+
+## Security and Control
+
 - OAuth 2.1 with PKCE (S256)
 - Dynamic Client Registration (RFC 7591)
 - Discovery support (RFC 9728 and RFC 8414)
-- Per-tool capability checks and tool profiles
+- Per-tool capability checks mapped to WordPress roles
+- Tool profile restrictions (read-only, full management, safe mode, custom)
+- Confirmation modes in AI Chat Agent
 
-## Undo and Safety
+## Why Undo Matters
 
-Every AI change is tracked with before/after snapshots:
+Every AI mutation is tracked with before/after snapshots:
 
 - One-click rollback
 - Redo support
 - Session rollback
 - Full audit trail
 
-This covers changes made by MCP clients, AI Chat Agent, Copilot, and automations.
+This applies to changes initiated from ChatGPT, Claude, built-in Chat Agent, Copilot, and automations.
 
-## Install
+## Quick Start
 
-1. Upload `stifli-flex-mcp` to `/wp-content/plugins/` (or install from WP directory).
-2. Activate plugin.
-3. Choose addons in first-activation setup.
-4. Go to `StifLi Flex MCP -> MCP Server`.
-5. Copy SSE URL and connect your MCP client.
+1. Upload the stifli-flex-mcp plugin folder to wp-content/plugins, or install from WordPress.
+2. Activate the plugin.
+3. Choose add-ons in first-activation setup.
+4. Go to StifLi Flex MCP > MCP Server.
+5. Copy the SSE URL.
+6. Paste it into ChatGPT or Claude Desktop and complete OAuth.
 
-## Connect External Clients
+## Common Use Cases
 
-1. Open `StifLi Flex MCP -> MCP Server`.
-2. Copy the SSE URL.
-3. Paste into your MCP client (ChatGPT/Claude Desktop/etc.).
-4. Complete OAuth in browser.
+- Manage WordPress content through natural language
+- Run WooCommerce catalog and order operations from MCP clients
+- Generate and insert AI images and videos
+- Build automations that call MCP tools on schedules or events
+- Revert AI mistakes safely with rollback/redo
+
+## Architecture at a Glance
+
+1. MCP client connects to WordPress endpoint
+2. OAuth 2.1 validates and scopes access
+3. Tool dispatch executes WordPress or WooCommerce operations
+4. Changelog stores before/after snapshots
+5. Rollback and redo recover state when needed
+
+## Documentation
+
+- Documentation: https://andromedanova.com/stifli-flex-mcp.html
+- Repository: https://github.com/estebanstifli/stifli-flex-mcp
+- WordPress readme and full changelog: readme.txt
 
 ## Notes
 
-- WooCommerce tools load automatically when WooCommerce is installed.
-- Addons can be changed later from `MCP Server -> Add-ons`.
-- For full FAQ, service disclosures, and complete changelog, see readme.txt.
+- WooCommerce tools load automatically when WooCommerce is active.
+- Add-ons can be enabled or disabled later from MCP Server > Add-ons.
+- This plugin is pure PHP (no npm/webpack build pipeline).
