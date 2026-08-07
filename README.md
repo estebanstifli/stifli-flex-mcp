@@ -11,9 +11,9 @@ StifLi Flex MCP is a WordPress plugin that turns your site into a secure Model C
 
 ## Managing Many WordPress Sites?
 
-Si eres una agencia o tienes muchas instalaciones de WordPress, te interesara usar un punto central para gestionarlas todas con **WP MCP Hub**.
+If you are an agency or manage many WordPress installations, use **WP MCP Hub** as one central point for managing them all.
 
-WP MCP Hub es **open source y gratis**: conecta una sola entrada local de tu cliente de IA con varios servidores MCP de WordPress y mantiene las credenciales bajo control local del sistema operativo.
+WP MCP Hub is **free and open source**: connect one local AI client entry to multiple WordPress MCP servers while keeping credentials under local operating-system control.
 
 - Product page: https://andromedanova.com/wp-mcp-hub.html
 - GitHub repo: https://github.com/estebanstifli/wp-mcp-hub

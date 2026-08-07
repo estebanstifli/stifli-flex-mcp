@@ -2995,9 +2995,9 @@ class StifliFlexMcp {
 		);
 		?>
 		<div class="notice notice-info" style="border-left-color:#0b7a75; padding:14px 16px;">
-			<p style="margin:0 0 8px 0;"><strong><?php echo esc_html__('Si eres una agencia o tienes muchas instalaciones de WordPress, te interesara un punto central para gestionarlas todas.', 'stifli-flex-mcp'); ?></strong></p>
+			<p style="margin:0 0 8px 0;"><strong><?php echo esc_html__('If you are an agency or manage many WordPress installations, use one central point to manage them all.', 'stifli-flex-mcp'); ?></strong></p>
 			<p style="margin:0 0 10px 0;">
-				<?php echo esc_html__('WP MCP Hub te da esa capa central local para conectar y administrar varios MCP de WordPress. Es open source y gratis.', 'stifli-flex-mcp'); ?>
+				<?php echo esc_html__('WP MCP Hub provides that local central layer for connecting and managing multiple WordPress MCP servers. It is free and open source.', 'stifli-flex-mcp'); ?>
 			</p>
 			<p style="margin:0;">
 				<a class="button button-primary" href="<?php echo esc_url($siteUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('View WP MCP Hub', 'stifli-flex-mcp'); ?></a>
@@ -3055,7 +3055,7 @@ class StifliFlexMcp {
 		?>
 		<div style="margin:16px 0 8px 0; padding:10px 12px; border-top:1px solid #dcdcde; color:#50575e; font-size:12px; line-height:1.45;">
 			<strong><?php echo esc_html__('WP MCP Hub', 'stifli-flex-mcp'); ?></strong>
-			<?php echo esc_html__(' - Si eres una agencia o tienes muchas instalaciones de WordPress, te interesara un punto central local para gestionarlas todas. Open source y gratis.', 'stifli-flex-mcp'); ?>
+			<?php echo esc_html__(' - One local central point for agencies and teams that manage many WordPress installations. Free and open source.', 'stifli-flex-mcp'); ?>
 			<a href="<?php echo esc_url($siteUrl); ?>" target="_blank" rel="noopener noreferrer" style="margin-left:8px;"><?php echo esc_html__('Info', 'stifli-flex-mcp'); ?></a>
 			|
 			<a href="<?php echo esc_url($repoUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('GitHub', 'stifli-flex-mcp'); ?></a>

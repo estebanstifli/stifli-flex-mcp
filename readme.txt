@@ -18,11 +18,11 @@ The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent
 
 **🛰️ Manage many WordPress MCP sites from one place (free and open source)**
 
-Si eres una agencia o tienes muchas instalaciones de WordPress, te interesara **WP MCP Hub**: un punto central local desde donde manejar varios servidores MCP de WordPress.
+If you are an agency or manage many WordPress installations, **WP MCP Hub** gives you one local central point for managing multiple WordPress MCP servers.
 
-* **Open source y gratis** — sin hub de pago, sin limite de sitios, sin suscripcion
-* **Una configuracion estable del cliente de IA** — conectas una vez y enrutas al sitio correcto
-* **Arquitectura local-first** — las credenciales quedan en tu vault del sistema operativo
+* **Open source and free** — no paid hub, site limits, or subscription
+* **One stable AI client setup** — connect once and route to the right site
+* **Local-first architecture** — credentials stay in your operating system vault
 
 Explore WP MCP Hub:
 * https://andromedanova.com/wp-mcp-hub.html
