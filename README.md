@@ -9,6 +9,15 @@
 
 StifLi Flex MCP is a WordPress plugin that turns your site into a secure Model Context Protocol (MCP) server for ChatGPT, Claude Desktop, Gemini, and other MCP clients. It includes built-in Undo, OAuth 2.1 authentication, and 122+ tools for WordPress, WooCommerce, SEO, media, and automations.
 
+## Managing Many WordPress Sites?
+
+Si eres una agencia o tienes muchas instalaciones de WordPress, te interesara usar un punto central para gestionarlas todas con **WP MCP Hub**.
+
+WP MCP Hub es **open source y gratis**: conecta una sola entrada local de tu cliente de IA con varios servidores MCP de WordPress y mantiene las credenciales bajo control local del sistema operativo.
+
+- Product page: https://andromedanova.com/wp-mcp-hub.html
+- GitHub repo: https://github.com/estebanstifli/wp-mcp-hub
+
 ## Why This MCP Server for WordPress
 
 - MCP server for WordPress with real tool execution over JSON-RPC 2.0 and SSE

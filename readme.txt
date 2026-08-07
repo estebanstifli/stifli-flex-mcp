@@ -16,6 +16,18 @@ The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent
 
 **StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect ChatGPT, Claude Desktop, Gemini, and other MCP clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
 
+**🛰️ Manage many WordPress MCP sites from one place (free and open source)**
+
+Si eres una agencia o tienes muchas instalaciones de WordPress, te interesara **WP MCP Hub**: un punto central local desde donde manejar varios servidores MCP de WordPress.
+
+* **Open source y gratis** — sin hub de pago, sin limite de sitios, sin suscripcion
+* **Una configuracion estable del cliente de IA** — conectas una vez y enrutas al sitio correcto
+* **Arquitectura local-first** — las credenciales quedan en tu vault del sistema operativo
+
+Explore WP MCP Hub:
+* https://andromedanova.com/wp-mcp-hub.html
+* https://github.com/estebanstifli/wp-mcp-hub
+
 Choose the layers your site needs without loading the rest:
 
 1. **MCP Server (always active)** — Connect ChatGPT, Claude Desktop, or any MCP client directly to your site. Includes Multimedia and Logs & Roll Back.
