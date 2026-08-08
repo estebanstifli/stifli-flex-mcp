@@ -2236,6 +2236,7 @@ class StifliFlexMcpModel {
             'wp_delete_comment' => 'moderate_comments',
             // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
             // user meta
+            'wp_get_users' => 'list_users',
             'wp_get_user_meta' => 'list_users',
             'wp_update_user_meta' => 'edit_users',
             'wp_delete_user_meta' => 'edit_users',
@@ -2376,6 +2377,13 @@ class StifliFlexMcpModel {
         $cleanHtml = function($v) { return wp_kses_post( wp_unslash( $v ) ); };
         $postExcerpt = function($p) {
             return wp_trim_words( wp_strip_all_tags( isset($p->post_excerpt) && !empty($p->post_excerpt) ? $p->post_excerpt : $p->post_content ), 55 );
+        };
+        $canReadPost = function($post) {
+            if (!$post instanceof WP_Post || !current_user_can('read_post', $post->ID)) {
+                return false;
+            }
+
+            return '' === (string) $post->post_password || current_user_can('edit_post', $post->ID);
         };
         $buildSearchSnippet = function($content, $term, $length) {
             $length = max(0, min(1000, (int) $length));
@@ -3166,6 +3174,7 @@ class StifliFlexMcpModel {
                     'post_type' => sanitize_key($utils::getArrayValue($args, 'post_type', 'post')),
                     'post_status' => sanitize_key($utils::getArrayValue($args, 'post_status', 'publish')),
                     'posts_per_page' => $postsLimit,
+                    'perm' => 'readable',
                     'no_found_rows' => !$includePostsPagination,
                 );
                 $postsSearch = sanitize_text_field($utils::getArrayValue($args, 'search'));
@@ -3190,6 +3199,9 @@ class StifliFlexMcpModel {
                 $postQuery = new WP_Query($q);
                 $rows = array();
                 foreach ($postQuery->posts as $p) {
+                    if (!$canReadPost($p)) {
+                        continue;
+                    }
                     $row = array(
                         'ID' => $p->ID,
                         'post_type' => $p->post_type,
@@ -3227,6 +3239,10 @@ class StifliFlexMcpModel {
                 $p = get_post($get_post_id);
                 if (!$p) {
                     $r['error'] = array('code' => -42600, 'message' => 'Post not found');
+                    break;
+                }
+                if (!$canReadPost($p)) {
+                    $r['error'] = array('code' => -42603, 'message' => 'Insufficient permissions to read this post');
                     break;
                 }
                 $includeSingleAuthor = $isTruthy($utils::getArrayValue($args, 'include_author', false));

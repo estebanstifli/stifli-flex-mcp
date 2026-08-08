@@ -3053,12 +3053,12 @@ class StifliFlexMcp {
 		$siteUrl = 'https://andromedanova.com/wp-mcp-hub.html';
 		$repoUrl = 'https://github.com/estebanstifli/wp-mcp-hub';
 		?>
-		<div style="margin:16px 0 8px 0; padding:10px 12px; border-top:1px solid #dcdcde; color:#50575e; font-size:12px; line-height:1.45;">
-			<strong><?php echo esc_html__('WP MCP Hub', 'stifli-flex-mcp'); ?></strong>
-			<?php echo esc_html__(' - One local central point for agencies and teams that manage many WordPress installations. Free and open source.', 'stifli-flex-mcp'); ?>
-			<a href="<?php echo esc_url($siteUrl); ?>" target="_blank" rel="noopener noreferrer" style="margin-left:8px;"><?php echo esc_html__('Info', 'stifli-flex-mcp'); ?></a>
-			|
-			<a href="<?php echo esc_url($repoUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('GitHub', 'stifli-flex-mcp'); ?></a>
+		<div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 14px; margin:16px 0 8px; padding:12px 16px; border:1px solid #72aee6; border-left:4px solid #2271b1; background:#f0f6fc; color:#1d2327; font-size:13px; line-height:1.5; text-align:center;">
+			<span><strong><?php echo esc_html__('WP MCP Hub', 'stifli-flex-mcp'); ?></strong><?php echo esc_html__(' - One local central point for agencies and teams that manage many WordPress installations. Free and open source.', 'stifli-flex-mcp'); ?></span>
+			<span style="display:inline-flex; gap:8px; white-space:nowrap;">
+				<a class="button button-small" href="<?php echo esc_url($siteUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('Info', 'stifli-flex-mcp'); ?></a>
+				<a class="button button-small" href="<?php echo esc_url($repoUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('GitHub', 'stifli-flex-mcp'); ?></a>
+			</span>
 		</div>
 		<?php
 	}
