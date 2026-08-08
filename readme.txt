@@ -452,7 +452,7 @@ When using the MCP server with external AI clients (ChatGPT, Claude Desktop, Lib
 
 == Changelog ==
 = 3.4.6 =
-* Security: Strengthened MCP access controls for post retrieval and user listings.
+* Security: Strengthened MCP access controls for sensitive read operations.
 
 = 3.4.5 =
 * New: Added WP MCP Hub links and a free, open-source multi-site management message to the plugin documentation.

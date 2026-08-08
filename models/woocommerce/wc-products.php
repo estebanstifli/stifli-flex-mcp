@@ -497,6 +497,7 @@ class StifliFlexMcp_WC_Products {
      */
     public static function getCapabilities() {
         return array(
+            'wc_get_products' => 'edit_products',
             'wc_create_product' => 'edit_products',
             'wc_update_product' => 'edit_products',
             'wc_delete_product' => 'delete_products',
@@ -504,6 +505,8 @@ class StifliFlexMcp_WC_Products {
             'wc_bulk_assign_product_categories' => 'manage_product_terms',
             'wc_bulk_delete_products' => 'delete_products',
             'wc_create_product_variation' => 'edit_products',
+            'wc_get_product_variations' => 'edit_products',
+            'wc_get_variation' => 'edit_products',
             'wc_update_product_variation' => 'edit_products',
             'wc_delete_product_variation' => 'delete_products',
             'wc_batch_update_variations' => 'edit_products',
@@ -515,10 +518,12 @@ class StifliFlexMcp_WC_Products {
             'wc_create_product_tag' => 'manage_product_terms',
             'wc_update_product_tag' => 'manage_product_terms',
             'wc_delete_product_tag' => 'manage_product_terms',
+            'wc_get_product_reviews' => 'moderate_comments',
             'wc_create_product_review' => 'moderate_comments',
             'wc_update_product_review' => 'moderate_comments',
             'wc_delete_product_review' => 'moderate_comments',
             'wc_update_stock' => 'edit_products',
+            'wc_get_low_stock_products' => 'edit_products',
             'wc_set_stock_status' => 'edit_products',
         );
     }
