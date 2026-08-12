@@ -176,7 +176,8 @@ class StifliFlexMcp_Addons {
 			return;
 		}
 
-		if ( ( defined( 'DOING_AJAX' ) && DOING_AJAX ) || isset( $_GET['activate-multi'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ( defined( 'DOING_AJAX' ) && DOING_AJAX ) || isset( $_GET['activate-multi'] ) || 'sflmcp_save_addons' === $action ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 
