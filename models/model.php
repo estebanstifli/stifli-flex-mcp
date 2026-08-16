@@ -8558,7 +8558,7 @@ class StifliFlexMcpModel {
      */
     private function tailFileLines( $path, $max_lines ) {
         $max_lines = max( 1, intval( $max_lines ) );
-        $fp = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- graceful fallback when file permissions block reads.
+        $fp = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- WP_Filesystem cannot seek; bounded tail reads avoid loading large logs into memory.
         if ( ! $fp ) {
             return array();
         }
@@ -8572,7 +8572,7 @@ class StifliFlexMcpModel {
             $seek = max( 0, $position - $chunk_size );
             $read = $position - $seek;
             fseek( $fp, $seek );
-            $chunk = fread( $fp, $read );
+            $chunk = fread( $fp, $read ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- paired with fseek for bounded-memory log tail reads.
             if ( false === $chunk ) {
                 break;
             }
@@ -8583,7 +8583,7 @@ class StifliFlexMcpModel {
             }
         }
 
-        fclose( $fp );
+        fclose( $fp ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- closes the direct stream used for bounded-memory log tail reads.
 
         $lines = preg_split( '/\r\n|\n|\r/', $buffer );
         if ( ! is_array( $lines ) ) {

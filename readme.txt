@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.0
-Stable tag: 3.4.7
+Stable tag: 3.4.8
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -451,6 +451,9 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.4.8 =
+* Fix: Restored legacy SSE response delivery so Claude Desktop connectors receive `initialize` and other JSON-RPC responses through their active SSE session.
+
 = 3.4.7 =
 * Fix: Restored the Continue to MCP Server action on the first-activation layer selection screen for new installations.
 

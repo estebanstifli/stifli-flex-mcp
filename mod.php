@@ -1551,7 +1551,11 @@ class StifliFlexMcp {
 					'has_result' => is_array($reply) && isset($reply['result']),
 					'has_error' => is_array($reply) && isset($reply['error']),
 				));
-				// Devolver la respuesta JSON-RPC directamente
+				if ('' !== $sess) {
+					$this->storeMessage($sess, $reply);
+					stifli_flex_mcp_log(sprintf('handleMessage: queued response for session=%s id=%s method=%s', $sess, $id, $method));
+					return $this->withProtocolHeaders(new WP_REST_Response(null, 202), $replyProtocolVersion, false);
+				}
 				return $this->withProtocolHeaders(new WP_REST_Response($reply, 200), $replyProtocolVersion);
 			}
 		}
