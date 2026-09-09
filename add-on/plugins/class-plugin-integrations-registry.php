@@ -115,9 +115,9 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 'plugin_files' => array( 'wordpress-seo/wp-seo.php' ),
                 'install_slug' => 'wordpress-seo',
                 'match' => array(
-                    'tools' => array( 'yoast_get_meta', 'yoast_set_meta', 'yoast_reindex' ),
+                    'tools' => array( 'yoast_get_meta', 'yoast_get_schema', 'yoast_set_meta', 'yoast_reindex' ),
                 ),
-                'catalog_tools' => array( 'yoast_get_meta', 'yoast_set_meta', 'yoast_reindex' ),
+                'catalog_tools' => array( 'yoast_get_meta', 'yoast_get_schema', 'yoast_set_meta', 'yoast_reindex' ),
             ),
             array(
                 'id' => 'rankmath_catalog',
@@ -139,9 +139,9 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 'plugin_files' => array( 'wpforms-lite/wpforms.php' ),
                 'install_slug' => 'wpforms-lite',
                 'match' => array(
-                    'tools' => array( 'wpforms_list_forms', 'wpforms_get_entries' ),
+                    'tools' => array( 'wpforms_list_forms', 'wpforms_get_form', 'wpforms_get_entries', 'wpforms_get_entry' ),
                 ),
-                'catalog_tools' => array( 'wpforms_list_forms', 'wpforms_get_entries' ),
+                'catalog_tools' => array( 'wpforms_list_forms', 'wpforms_get_form', 'wpforms_get_entries', 'wpforms_get_entry' ),
             ),
             array(
                 'id' => 'gravityforms_catalog',
@@ -201,7 +201,16 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 'match_constants' => array( 'ET_BUILDER_VERSION' ),
                 'install_slug' => 'divi-builder',
                 'match' => array(
-                    'prefixes' => array( 'divi_' ),
+                    'tools' => array(
+                        'divi_get_page_format',
+                        'divi_get_page_outline',
+                        'divi_list_local_templates',
+                        'divi_library_get',
+                        'divi_replace_text',
+                        'divi_clone_page',
+                        'divi_replace_image',
+                        'divi_apply_library_template',
+                    ),
                 ),
                 'catalog_tools' => array(
                     'divi_get_page_format',

@@ -43,6 +43,7 @@ class StifliFlexMcp_Divi {
 					'properties' => array(
 						'post_id' => array( 'type' => 'integer', 'description' => 'Post ID containing the Divi layout.' ),
 						'content' => array( 'type' => 'string', 'description' => 'Optional Divi shortcode content to validate instead of loading a post.' ),
+						'raw_content' => array( 'type' => 'string', 'description' => 'Alias for content. Can be validated even when Divi is not installed or active.' ),
 					),
 					'required' => array(),
 				),
@@ -180,12 +181,14 @@ class StifliFlexMcp_Divi {
 		if ( 0 !== strpos( (string) $tool, 'divi_' ) ) {
 			return null;
 		}
-		if ( ! self::isAvailable() ) {
+		$args = is_array( $args ) ? $args : array();
+		$has_raw_validation_content = 'divi_validate_layout' === $tool
+			&& ( is_string( self::array_value( $args, 'raw_content', null ) ) || is_string( self::array_value( $args, 'content', null ) ) );
+		if ( ! self::isAvailable() && ! $has_raw_validation_content ) {
 			$r['error'] = array( 'code' => -32603, 'message' => 'Divi Builder or a Divi theme is not active.' );
 			return true;
 		}
 
-		$args = is_array( $args ) ? $args : array();
 		try {
 			switch ( $tool ) {
 				case 'divi_get_page_format':
@@ -245,7 +248,7 @@ class StifliFlexMcp_Divi {
 	}
 
 	private static function validate_layout( $args ) {
-		$content = self::array_value( $args, 'content', null );
+		$content = self::array_value( $args, 'raw_content', self::array_value( $args, 'content', null ) );
 		$post_id = absint( self::array_value( $args, 'post_id', 0 ) );
 		if ( null === $content ) {
 			$post = self::require_editable_post( array( 'post_id' => $post_id ), 'post_id' );

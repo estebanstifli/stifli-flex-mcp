@@ -90,6 +90,9 @@ class StifliFlexMcp_ChangeTracker {
 		// --- Post Meta ---
 		'wp_update_post_meta'       => array( 'update', 'post_meta', 'post_id' ),
 		'wp_delete_post_meta'       => array( 'delete', 'post_meta', 'post_id' ),
+		'wp_rm_update_post_seo'     => array( 'update', 'post', 'post_id' ),
+		'yoast_set_meta'            => array( 'update', 'post', 'post_id' ),
+		'acf_update_field'          => array( 'update', 'post', 'post_id' ),
 		// --- Revisions ---
 		'wp_restore_post_revision'  => array( 'update', 'post', 'revision_id' ),
 		// --- WooCommerce Products ---

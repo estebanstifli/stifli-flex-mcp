@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.5.1
+Version: 3.5.2
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -14,6 +14,10 @@ Domain Path: /languages
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
+}
+
+if ( ! defined( 'SFLMCP_VERSION' ) ) {
+	define( 'SFLMCP_VERSION', '3.5.2' );
 }
 
 // define debug constant 
@@ -1138,6 +1142,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_rm_update_post_seo', 'Update Rank Math SEO metadata fields for a post.', 'WordPress - SEO', 1),
 		// SEO - Yoast
 		array('yoast_get_meta', 'Get Yoast SEO meta fields for a post (title, description, OG, Twitter). Requires Yoast SEO.', 'WordPress - SEO', 1),
+		array('yoast_get_schema', 'Get the resolved Yoast SEO JSON-LD schema graph for a post. Requires Yoast SEO.', 'WordPress - SEO', 1),
 		array('yoast_set_meta', 'Set Yoast SEO meta fields for a post. Requires Yoast SEO.', 'WordPress - SEO', 1),
 		array('yoast_reindex', 'Clear Yoast SEO indexables cache for a post or site-wide. Requires Yoast SEO.', 'WordPress - SEO', 1),
 		// SEO - Google Search Console
@@ -1155,7 +1160,9 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('acf_update_field', 'Update an ACF field value for a post. Requires ACF.', 'Plugins - ACF', 1),
 		// WPForms
 		array('wpforms_list_forms', 'List all WPForms forms. Requires WPForms.', 'Plugins - Forms', 1),
+		array('wpforms_get_form', 'Get a WPForms form schema with normalized fields and choices. Requires WPForms.', 'Plugins - Forms', 1),
 		array('wpforms_get_entries', 'Get form entries for a WPForms form. Requires WPForms.', 'Plugins - Forms', 1),
+		array('wpforms_get_entry', 'Get one WPForms entry with normalized dates and sensitive-key redaction. Requires WPForms entry storage.', 'Plugins - Forms', 1),
 		// Gravity Forms
 		array('gf_list_forms', 'List all Gravity Forms. Requires Gravity Forms.', 'Plugins - Forms', 1),
 		array('gf_get_entries', 'Get entries for a Gravity Forms form. Requires Gravity Forms.', 'Plugins - Forms', 1),
@@ -1391,7 +1398,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.09.09.2' );
+	define( 'SFLMCP_DB_VERSION', '2026.09.09.3' );
 }
 
 /**
@@ -1427,6 +1434,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_338_seed_css_tools();
 	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
 	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
+	stifli_flex_mcp_upgrade_352_seed_reliability_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	stifli_flex_mcp_upgrade_retire_custom_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
@@ -2347,6 +2355,49 @@ function stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools() {
 					array( '%d', '%s' )
 				);
 			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.5.2): add richer Yoast and WPForms read tools.
+ */
+function stifli_flex_mcp_upgrade_352_seed_reliability_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_352_seed_reliability_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'yoast_get_schema', 'Get the resolved Yoast SEO JSON-LD schema graph for a post. Requires Yoast SEO.', 'WordPress - SEO', 1 ),
+		array( 'wpforms_get_form', 'Get a WPForms form schema with normalized fields and choices. Requires WPForms.', 'Plugins - Forms', 1 ),
+		array( 'wpforms_get_entry', 'Get one WPForms entry with normalized dates and sensitive-key redaction. Requires WPForms entry storage.', 'Plugins - Forms', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( ! $exists ) {
+			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
 		}
 	}
 
@@ -4476,6 +4527,7 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_upgrade_349_seed_order_detail_tool();
 	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
 	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
+	stifli_flex_mcp_upgrade_352_seed_reliability_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
@@ -4653,6 +4705,7 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_upgrade_349_seed_order_detail_tool();
 	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
 	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
+	stifli_flex_mcp_upgrade_352_seed_reliability_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_rankmath_profile_detach();
 	stifli_flex_mcp_apply_plugin_integration_overrides();

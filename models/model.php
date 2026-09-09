@@ -99,11 +99,6 @@ class StifliFlexMcpModel {
         if ( class_exists( 'StifliFlexMcp_Divi' ) ) {
             return true;
         }
-
-        if ( ! $this->isDiviRuntimeAvailable() ) {
-            return false;
-        }
-
         return $this->maybeLoadFile( 'integrations/class-divi.php', 'StifliFlexMcp_Divi' );
     }
 
@@ -325,13 +320,16 @@ class StifliFlexMcpModel {
             'wp_rm_get_post_seo',
             // Yoast SEO reads
             'yoast_get_meta',
+            'yoast_get_schema',
             'yoast_reindex',
             // ACF reads
             'acf_get_field_groups',
             'acf_get_fields',
             // WPForms reads
             'wpforms_list_forms',
+            'wpforms_get_form',
             'wpforms_get_entries',
+            'wpforms_get_entry',
             // Gravity Forms reads
             'gf_list_forms',
             'gf_get_entries',
@@ -592,12 +590,13 @@ class StifliFlexMcpModel {
                 ),
                 'wp_set_featured_image' => array(
                     'name' => 'wp_set_featured_image',
-                    'description' => 'Set or remove the featured image (post thumbnail) of a post. Pass attachment_id=0 to remove.',
+                    'description' => 'Set or remove the featured image of a post and optionally update its media-library alt text. Pass attachment_id=0 to remove.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id'       => array('type' => 'integer'),
                             'attachment_id' => array('type' => 'integer', 'description' => 'Attachment post ID. Use 0 to clear the featured image.'),
+                            'alt_text'      => array('type' => 'string', 'description' => 'Optional accessible alternative text for the attachment.'),
                         ),
                         'required' => array('post_id', 'attachment_id'),
                     ),
@@ -1275,11 +1274,24 @@ class StifliFlexMcpModel {
                 // Yoast SEO
                 'yoast_get_meta' => array(
                     'name' => 'yoast_get_meta',
-                    'description' => 'Get Yoast SEO meta fields and WordPress slug for a post (title, description, focus keyword, canonical, robots, OG, Twitter). Requires Yoast SEO plugin active.',
+                    'description' => 'Get stored and resolved Yoast SEO values, WordPress slug, and analysis status for a post. Requires Yoast SEO plugin active.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'post_id' => array('type' => 'integer', 'description' => 'Post ID to read Yoast meta from'),
+                            'ID' => array('type' => 'integer'),
+                            'id' => array('type' => 'integer'),
+                        ),
+                        'required' => array(),
+                    ),
+                ),
+                'yoast_get_schema' => array(
+                    'name' => 'yoast_get_schema',
+                    'description' => 'Get the resolved Yoast SEO JSON-LD schema graph for a post. Requires Yoast SEO plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer', 'description' => 'Post ID whose public JSON-LD graph should be resolved'),
                             'ID' => array('type' => 'integer'),
                             'id' => array('type' => 'integer'),
                         ),
@@ -1374,7 +1386,7 @@ class StifliFlexMcpModel {
                 ),
                 'wpforms_get_entries' => array(
                     'name' => 'wpforms_get_entries',
-                    'description' => 'Get form entries for a WPForms form. Returns entry ID, date, fields and status. Requires WPForms plugin active.',
+                    'description' => 'Get a deterministic, paginated list of entries for a WPForms form. Requires an edition of WPForms with entry storage.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
@@ -1384,6 +1396,28 @@ class StifliFlexMcpModel {
                             'status'  => array('type' => 'string', 'description' => 'Entry status: active, spam, trash or empty for all'),
                         ),
                         'required' => array('form_id'),
+                    ),
+                ),
+                'wpforms_get_form' => array(
+                    'name' => 'wpforms_get_form',
+                    'description' => 'Get a WPForms form schema with normalized fields and choices. Requires WPForms plugin active.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'form_id' => array('type' => 'integer'),
+                        ),
+                        'required' => array('form_id'),
+                    ),
+                ),
+                'wpforms_get_entry' => array(
+                    'name' => 'wpforms_get_entry',
+                    'description' => 'Get one WPForms entry by entry ID with normalized dates and redacted sensitive keys. Requires an edition of WPForms with entry storage.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'entry_id' => array('type' => 'integer'),
+                        ),
+                        'required' => array('entry_id'),
                     ),
                 ),
 
@@ -1991,9 +2025,15 @@ class StifliFlexMcpModel {
                 $tools = array_merge( $tools, StifliFlexMcp_Elementor::getTools() );
             }
 
-            // Merge Divi tools when Divi Builder or a Divi theme is active.
+            // Raw shortcode validation remains useful even when Divi is not active.
             if ( $this->maybeLoadDiviIntegrationModule() && class_exists( 'StifliFlexMcp_Divi' ) ) {
-                $tools = array_merge( $tools, StifliFlexMcp_Divi::getTools() );
+                $divi_tools = StifliFlexMcp_Divi::getTools();
+                if ( ! StifliFlexMcp_Divi::isAvailable() ) {
+                    $divi_tools = isset( $divi_tools['divi_validate_layout'] )
+                        ? array( 'divi_validate_layout' => $divi_tools['divi_validate_layout'] )
+                        : array();
+                }
+                $tools = array_merge( $tools, $divi_tools );
             }
 
             // Merge Google Search Console tools only when the optional SEO add-on is enabled.
@@ -2406,6 +2446,7 @@ class StifliFlexMcpModel {
             'wp_rm_update_post_seo' => 'edit_posts',
             // Yoast SEO
             'yoast_get_meta' => 'edit_posts',
+            'yoast_get_schema' => 'edit_posts',
             'yoast_set_meta' => 'edit_posts',
             'yoast_reindex' => 'manage_options',
             // ACF
@@ -2414,7 +2455,9 @@ class StifliFlexMcpModel {
             'acf_update_field' => 'edit_posts',
             // WPForms
             'wpforms_list_forms' => 'manage_options',
+            'wpforms_get_form' => 'manage_options',
             'wpforms_get_entries' => 'manage_options',
+            'wpforms_get_entry' => 'manage_options',
             // Gravity Forms
             'gf_list_forms' => 'manage_options',
             'gf_get_entries' => 'manage_options',
@@ -2569,6 +2612,15 @@ class StifliFlexMcpModel {
                 }
             }
             return 0;
+        };
+        $finalizePostMetaMutation = function($post_id) {
+            $post_id = intval($post_id);
+            if (!$post_id || !get_post($post_id)) {
+                return new WP_Error('invalid_post', 'Post not found while finalizing metadata changes.');
+            }
+
+            clean_post_cache($post_id);
+            return wp_update_post(array('ID' => $post_id), true);
         };
         $isEmptyTextUpdate = function($value) {
             return is_string($value) && '' === $value;
@@ -3332,6 +3384,8 @@ class StifliFlexMcpModel {
                     }
                     if ($includePostFeaturedMedia) {
                         $row['featured_media'] = $buildFeaturedMedia($p->ID);
+                        $row['featured_media_id'] = $row['featured_media'] ? $row['featured_media']['ID'] : 0;
+                        $row['featured_media_url'] = $row['featured_media'] ? $row['featured_media']['url'] : '';
                     }
                     if ($includePostTaxonomies) {
                         $row['taxonomies'] = $buildPostTaxonomies($p);
@@ -3381,6 +3435,8 @@ class StifliFlexMcpModel {
                 }
                 if ($includeSingleFeaturedMedia) {
                     $out['featured_media'] = $buildFeaturedMedia($p->ID);
+                    $out['featured_media_id'] = $out['featured_media'] ? $out['featured_media']['ID'] : 0;
+                    $out['featured_media_url'] = $out['featured_media'] ? $out['featured_media']['url'] : '';
                 }
                 if ($includeSingleTaxonomies) {
                     $out['taxonomies'] = $buildPostTaxonomies($p);
@@ -3966,22 +4022,63 @@ class StifliFlexMcpModel {
                     break;
                 }
                 $att_id = intval( $utils::getArrayValue( $args, 'attachment_id', 0 ) );
+                $previous_att_id = (int) get_post_thumbnail_id( $post_id );
+                $thumbnail_changed = $previous_att_id !== $att_id;
+                $alt_changed = false;
                 if ( $att_id > 0 ) {
                     $att = get_post( $att_id );
                     if ( ! $att || 'attachment' !== $att->post_type ) {
                         $r['error'] = array( 'code' => -42600, 'message' => 'Attachment not found' );
                         break;
                     }
-                    $ok = set_post_thumbnail( $post_id, $att_id );
-                    if ( $ok ) {
-                        $addResultText( $r, 'Featured image set: post #' . $post_id . ' -> attachment #' . $att_id );
-                    } else {
+                    if ( array_key_exists( 'alt_text', $args ) && ! current_user_can( 'edit_post', $att_id ) ) {
+                        $r['error'] = array( 'code' => 'permission_denied', 'message' => 'Insufficient permissions to edit attachment alt text.' );
+                        break;
+                    }
+                    if ( $thumbnail_changed && ! set_post_thumbnail( $post_id, $att_id ) ) {
                         $r['error'] = array( 'code' => -42603, 'message' => 'Failed to set featured image' );
+                        break;
+                    }
+                    if ( array_key_exists( 'alt_text', $args ) ) {
+                        $alt_text = sanitize_text_field( (string) $args['alt_text'] );
+                        $previous_alt_text = (string) get_post_meta( $att_id, '_wp_attachment_image_alt', true );
+                        $alt_changed = $previous_alt_text !== $alt_text;
+                        if ( $alt_changed ) {
+                            if ( false === update_post_meta( $att_id, '_wp_attachment_image_alt', $alt_text ) ) {
+                                $r['error'] = array( 'code' => -42603, 'message' => 'Failed to update attachment alt text.' );
+                                break;
+                            }
+                            $finalized_attachment = $finalizePostMetaMutation( $att_id );
+                            if ( is_wp_error( $finalized_attachment ) ) {
+                                $r['error'] = array( 'code' => $finalized_attachment->get_error_code(), 'message' => $finalized_attachment->get_error_message() );
+                                break;
+                            }
+                        }
                     }
                 } else {
-                    delete_post_thumbnail( $post_id );
-                    $addResultText( $r, 'Featured image cleared for post #' . $post_id );
+                    if ( $thumbnail_changed && ! delete_post_thumbnail( $post_id ) ) {
+                        $r['error'] = array( 'code' => -42603, 'message' => 'Failed to clear featured image' );
+                        break;
+                    }
                 }
+                if ( $thumbnail_changed || $alt_changed ) {
+                    $finalized_post = $finalizePostMetaMutation( $post_id );
+                    if ( is_wp_error( $finalized_post ) ) {
+                        $r['error'] = array( 'code' => $finalized_post->get_error_code(), 'message' => $finalized_post->get_error_message() );
+                        break;
+                    }
+                }
+                $featured_payload = array(
+                    'post_id' => $post_id,
+                    'attachment_id' => $att_id,
+                    'changed' => $thumbnail_changed || $alt_changed,
+                    'thumbnail_changed' => $thumbnail_changed,
+                    'alt_text_changed' => $alt_changed,
+                );
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($featured_payload, JSON_PRETTY_PRINT))),
+                    'structuredContent' => $featured_payload,
+                );
                 break;
             case 'wp_delete_post':
                 $delete_post_id = $resolveObjectId($args);
@@ -6649,6 +6746,12 @@ class StifliFlexMcpModel {
                         break;
                     }
                     $rm_updated[] = 'slug';
+                } elseif ( ! empty( $rm_updated ) ) {
+                    $rm_finalized = $finalizePostMetaMutation( $rm_post_id );
+                    if ( is_wp_error( $rm_finalized ) ) {
+                        $r['error'] = array('code' => $rm_finalized->get_error_code(), 'message' => $rm_finalized->get_error_message());
+                        break;
+                    }
                 }
                 $rm_saved_post = get_post($rm_post_id);
                 $addResultText( $r, wp_json_encode( array(
@@ -6691,11 +6794,99 @@ class StifliFlexMcpModel {
                     '_yoast_wpseo_twitter-description' => 'twitter_description',
                     '_yoast_wpseo_twitter-image'      => 'twitter_image',
                 );
-                $ys_data = array( 'post_id' => $ys_post_id, 'slug' => $ys_post->post_name );
+                $ys_stored = array();
                 foreach ( $ys_keys as $ys_meta_key => $ys_field ) {
-                    $ys_data[ $ys_field ] = get_post_meta( $ys_post_id, $ys_meta_key, true );
+                    $ys_stored[ $ys_field ] = get_post_meta( $ys_post_id, $ys_meta_key, true );
                 }
+                $ys_head_json = array();
+                $ys_permalink = get_permalink( $ys_post_id );
+                if ( $ys_permalink && class_exists( 'WP_REST_Request' ) ) {
+                    $ys_head_request = new WP_REST_Request( 'GET', '/yoast/v1/get_head' );
+                    $ys_head_request->set_param( 'url', $ys_permalink );
+                    $ys_head_response = rest_do_request( $ys_head_request );
+                    if ( ! $ys_head_response->is_error() ) {
+                        $ys_head_payload = $ys_head_response->get_data();
+                        if ( isset( $ys_head_payload['json'] ) && is_array( $ys_head_payload['json'] ) ) {
+                            $ys_head_json = $ys_head_payload['json'];
+                        }
+                    }
+                }
+                $ys_open_graph_images = isset( $ys_head_json['og_image'] ) && is_array( $ys_head_json['og_image'] ) ? $ys_head_json['og_image'] : array();
+                $ys_first_open_graph_image = ! empty( $ys_open_graph_images[0]['url'] ) ? $ys_open_graph_images[0]['url'] : '';
+                $ys_resolved = array(
+                    'title' => isset( $ys_head_json['title'] ) ? $ys_head_json['title'] : $ys_stored['title'],
+                    'description' => isset( $ys_head_json['description'] ) ? $ys_head_json['description'] : $ys_stored['description'],
+                    'canonical' => isset( $ys_head_json['canonical'] ) ? $ys_head_json['canonical'] : ( $ys_stored['canonical'] ?: $ys_permalink ),
+                    'facebook_title' => isset( $ys_head_json['og_title'] ) ? $ys_head_json['og_title'] : ( $ys_stored['facebook_title'] ?: $ys_post->post_title ),
+                    'facebook_description' => isset( $ys_head_json['og_description'] ) ? $ys_head_json['og_description'] : ( $ys_stored['facebook_description'] ?: $ys_stored['description'] ),
+                    'facebook_image' => $ys_first_open_graph_image ?: $ys_stored['facebook_image'],
+                    'twitter_title' => isset( $ys_head_json['twitter_title'] ) ? $ys_head_json['twitter_title'] : ( $ys_stored['twitter_title'] ?: $ys_post->post_title ),
+                    'twitter_description' => isset( $ys_head_json['twitter_description'] ) ? $ys_head_json['twitter_description'] : ( $ys_stored['twitter_description'] ?: $ys_stored['description'] ),
+                    'twitter_image' => isset( $ys_head_json['twitter_image'] ) ? $ys_head_json['twitter_image'] : $ys_stored['twitter_image'],
+                    'robots' => isset( $ys_head_json['robots'] ) ? $ys_head_json['robots'] : array(),
+                );
+                $ys_seo_score = get_post_meta( $ys_post_id, '_yoast_wpseo_linkdex', true );
+                $ys_readability_score = get_post_meta( $ys_post_id, '_yoast_wpseo_content_score', true );
+                $ys_score_status = function( $score ) {
+                    if ( '' === $score || null === $score ) {
+                        return 'not_analyzed';
+                    }
+                    $score = intval( $score );
+                    if ( $score <= 40 ) {
+                        return 'needs_improvement';
+                    }
+                    return $score <= 70 ? 'okay' : 'good';
+                };
+                $ys_data = array_merge( array( 'post_id' => $ys_post_id, 'slug' => $ys_post->post_name ), $ys_stored );
+                $ys_data['stored'] = $ys_stored;
+                $ys_data['resolved'] = $ys_resolved;
+                $ys_data['analysis'] = array(
+                    'pending' => ( '' === $ys_seo_score && '' === $ys_readability_score ),
+                    'seo_score' => '' === $ys_seo_score ? null : intval( $ys_seo_score ),
+                    'seo_status' => $ys_score_status( $ys_seo_score ),
+                    'readability_score' => '' === $ys_readability_score ? null : intval( $ys_readability_score ),
+                    'readability_status' => $ys_score_status( $ys_readability_score ),
+                );
+                $ys_data['analysis_pending'] = $ys_data['analysis']['pending'];
                 $addResultText( $r, wp_json_encode( $ys_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                break;
+            case 'yoast_get_schema':
+                if ( ! defined( 'WPSEO_VERSION' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Yoast SEO plugin is not active.' );
+                    break;
+                }
+                $ys_schema_post_id = $resolveObjectId( $args );
+                $ys_schema_post = $ys_schema_post_id ? get_post( $ys_schema_post_id ) : null;
+                if ( ! $ys_schema_post ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Invalid or missing post_id.' );
+                    break;
+                }
+                if ( ! current_user_can( 'edit_post', $ys_schema_post_id ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'You do not have permission to read SEO data for this post.' );
+                    break;
+                }
+                $ys_schema_request = new WP_REST_Request( 'GET', '/yoast/v1/get_head' );
+                $ys_schema_request->set_param( 'url', get_permalink( $ys_schema_post_id ) );
+                $ys_schema_response = rest_do_request( $ys_schema_request );
+                if ( $ys_schema_response->is_error() ) {
+                    $ys_schema_error = $ys_schema_response->as_error();
+                    $r['error'] = array( 'code' => -32603, 'message' => $ys_schema_error->get_error_message() );
+                    break;
+                }
+                $ys_schema_payload = $ys_schema_response->get_data();
+                $ys_schema = isset( $ys_schema_payload['json']['schema'] ) && is_array( $ys_schema_payload['json']['schema'] )
+                    ? $ys_schema_payload['json']['schema']
+                    : array();
+                $ys_schema = StifliFlexMcpUtils::redactSecrets( $ys_schema );
+                $ys_schema_result = array(
+                    'post_id' => $ys_schema_post_id,
+                    'permalink' => get_permalink( $ys_schema_post_id ),
+                    'schema' => $ys_schema,
+                );
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($ys_schema_result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))),
+                    'structuredContent' => $ys_schema_result,
+                );
                 break;
             case 'yoast_set_meta':
                 if ( ! defined( 'WPSEO_VERSION' ) ) {
@@ -6733,14 +6924,16 @@ class StifliFlexMcpModel {
                         $ys_val = in_array( $ys_arg, array( 'canonical', 'facebook_image', 'twitter_image' ), true )
                             ? esc_url_raw( $args[ $ys_arg ] )
                             : sanitize_text_field( $args[ $ys_arg ] );
-                        update_post_meta( $ys_post_id, $ys_meta, $ys_val );
-                        $ys_updated[] = $ys_arg;
+                        if ( false !== update_post_meta( $ys_post_id, $ys_meta, $ys_val ) ) {
+                            $ys_updated[] = $ys_arg;
+                        }
                     }
                 }
                 foreach ( $ys_bool_map as $ys_arg => $ys_meta ) {
                     if ( isset( $args[ $ys_arg ] ) ) {
-                        update_post_meta( $ys_post_id, $ys_meta, $args[ $ys_arg ] ? '1' : '0' );
-                        $ys_updated[] = $ys_arg;
+                        if ( false !== update_post_meta( $ys_post_id, $ys_meta, $args[ $ys_arg ] ? '1' : '0' ) ) {
+                            $ys_updated[] = $ys_arg;
+                        }
                     }
                 }
                 $ys_slug = $resolveSlugUpdate($args);
@@ -6751,6 +6944,12 @@ class StifliFlexMcpModel {
                         break;
                     }
                     $ys_updated[] = 'slug';
+                } elseif ( ! empty( $ys_updated ) ) {
+                    $ys_finalized = $finalizePostMetaMutation( $ys_post_id );
+                    if ( is_wp_error( $ys_finalized ) ) {
+                        $r['error'] = array('code' => $ys_finalized->get_error_code(), 'message' => $ys_finalized->get_error_message());
+                        break;
+                    }
                 }
                 $ys_saved_post = get_post($ys_post_id);
                 $addResultText( $r, wp_json_encode( array( 'post_id' => $ys_post_id, 'slug' => $ys_saved_post ? $ys_saved_post->post_name : '', 'updated_fields' => $ys_updated ), JSON_PRETTY_PRINT ) );
@@ -6896,9 +7095,19 @@ class StifliFlexMcpModel {
                 }
                 // Value can be any type (string, int, bool, array) — passed as-is.
                 $acf_value  = $utils::getArrayValue( $args, 'value', null );
+                $acf_previous_value = get_field( $acf_field_name, $acf_post_id, false );
+                if ( $acf_previous_value === $acf_value ) {
+                    $addResultText( $r, wp_json_encode( array( 'post_id' => $acf_post_id, 'field_name' => $acf_field_name, 'updated' => false ), JSON_PRETTY_PRINT ) );
+                    break;
+                }
                 $acf_result = update_field( $acf_field_name, $acf_value, $acf_post_id );
                 if ( false === $acf_result ) {
                     $r['error'] = array( 'code' => -32603, 'message' => 'ACF update_field returned false. Check field name and post ID.' );
+                    break;
+                }
+                $acf_finalized = $finalizePostMetaMutation( $acf_post_id );
+                if ( is_wp_error( $acf_finalized ) ) {
+                    $r['error'] = array( 'code' => $acf_finalized->get_error_code(), 'message' => $acf_finalized->get_error_message() );
                     break;
                 }
                 $addResultText( $r, wp_json_encode( array( 'post_id' => $acf_post_id, 'field_name' => $acf_field_name, 'updated' => true ), JSON_PRETTY_PRINT ) );
@@ -6933,9 +7142,66 @@ class StifliFlexMcpModel {
                 }
                 $addResultText( $r, wp_json_encode( $wpf_out, JSON_PRETTY_PRINT ) );
                 break;
+            case 'wpforms_get_form':
+                if ( ! function_exists( 'wpforms' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'WPForms plugin is not active.' );
+                    break;
+                }
+                $wpf_form_id = intval( $utils::getArrayValue( $args, 'form_id', 0 ) );
+                $wpf_form = $wpf_form_id ? wpforms()->form->get( $wpf_form_id ) : null;
+                if ( ! $wpf_form ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'WPForms form not found.' );
+                    break;
+                }
+                $wpf_form_data = function_exists( 'wpforms_decode' )
+                    ? wpforms_decode( $wpf_form->post_content )
+                    : json_decode( $wpf_form->post_content, true );
+                $wpf_form_data = is_array( $wpf_form_data ) ? $wpf_form_data : array();
+                $wpf_fields = array();
+                foreach ( isset( $wpf_form_data['fields'] ) && is_array( $wpf_form_data['fields'] ) ? $wpf_form_data['fields'] : array() as $wpf_field_id => $wpf_field ) {
+                    if ( ! is_array( $wpf_field ) ) {
+                        continue;
+                    }
+                    $wpf_choices = array();
+                    foreach ( isset( $wpf_field['choices'] ) && is_array( $wpf_field['choices'] ) ? $wpf_field['choices'] : array() as $wpf_choice_key => $wpf_choice ) {
+                        $wpf_choice = is_array( $wpf_choice ) ? $wpf_choice : array( 'label' => $wpf_choice );
+                        $wpf_choices[] = array(
+                            'key' => (string) $wpf_choice_key,
+                            'label' => isset( $wpf_choice['label'] ) ? sanitize_text_field( $wpf_choice['label'] ) : '',
+                            'value' => isset( $wpf_choice['value'] ) ? sanitize_text_field( $wpf_choice['value'] ) : ( isset( $wpf_choice['label'] ) ? sanitize_text_field( $wpf_choice['label'] ) : '' ),
+                        );
+                    }
+                    $wpf_fields[] = array(
+                        'id' => isset( $wpf_field['id'] ) ? (int) $wpf_field['id'] : (int) $wpf_field_id,
+                        'type' => isset( $wpf_field['type'] ) ? sanitize_key( $wpf_field['type'] ) : '',
+                        'label' => isset( $wpf_field['label'] ) ? sanitize_text_field( $wpf_field['label'] ) : '',
+                        'description' => isset( $wpf_field['description'] ) ? sanitize_textarea_field( $wpf_field['description'] ) : '',
+                        'required' => ! empty( $wpf_field['required'] ),
+                        'choices' => $wpf_choices,
+                    );
+                }
+                $wpf_form_payload = array(
+                    'form_id' => (int) $wpf_form->ID,
+                    'title' => $wpf_form->post_title,
+                    'status' => $wpf_form->post_status,
+                    'created' => $wpf_form->post_date_gmt,
+                    'modified' => $wpf_form->post_modified_gmt,
+                    'fields' => $wpf_fields,
+                    'field_count' => count( $wpf_fields ),
+                );
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($wpf_form_payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))),
+                    'structuredContent' => $wpf_form_payload,
+                );
+                break;
             case 'wpforms_get_entries':
                 if ( ! function_exists( 'wpforms' ) ) {
                     $r['error'] = array( 'code' => -32603, 'message' => 'WPForms plugin is not active.' );
+                    break;
+                }
+                $wpf_entry_handler = isset( wpforms()->entry ) ? wpforms()->entry : null;
+                if ( ! is_object( $wpf_entry_handler ) || ! method_exists( $wpf_entry_handler, 'get_entries' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'WPForms entry storage is not available in this installation.' );
                     break;
                 }
                 $wpf_form_id = intval( $utils::getArrayValue( $args, 'form_id', 0 ) );
@@ -6943,31 +7209,75 @@ class StifliFlexMcpModel {
                     $r['error'] = array( 'code' => -32602, 'message' => 'Missing required parameter: form_id.' );
                     break;
                 }
-                $wpf_limit   = max( 1, intval( $utils::getArrayValue( $args, 'limit', 20 ) ) );
+                $wpf_limit   = min( 100, max( 1, intval( $utils::getArrayValue( $args, 'limit', 20 ) ) ) );
                 $wpf_offset  = max( 0, intval( $utils::getArrayValue( $args, 'offset', 0 ) ) );
                 $wpf_status  = sanitize_text_field( $utils::getArrayValue( $args, 'status', '' ) );
                 $wpf_query   = array(
                     'form_id'  => $wpf_form_id,
                     'number'   => $wpf_limit,
                     'offset'   => $wpf_offset,
+                    'orderby'  => 'entry_id',
+                    'order'    => 'DESC',
                 );
                 if ( $wpf_status ) {
                     $wpf_query['status'] = $wpf_status;
                 }
-                $wpf_entries = wpforms()->entry->get_entries( $wpf_query );
+                $wpf_entries = $wpf_entry_handler->get_entries( $wpf_query );
+                $wpf_count_query = $wpf_query;
+                unset( $wpf_count_query['number'], $wpf_count_query['offset'], $wpf_count_query['orderby'], $wpf_count_query['order'] );
+                $wpf_total = (int) $wpf_entry_handler->get_entries( $wpf_count_query, true );
                 $wpf_out = array();
                 if ( $wpf_entries ) {
                     foreach ( $wpf_entries as $wpf_entry ) {
+                        $wpf_timestamp = ! empty( $wpf_entry->date ) ? strtotime( $wpf_entry->date . ' UTC' ) : false;
                         $wpf_out[] = array(
-                            'entry_id' => $wpf_entry->entry_id,
-                            'form_id'  => $wpf_entry->form_id,
-                            'date'     => $wpf_entry->date,
-                            'status'   => $wpf_entry->status,
-                            'fields'   => json_decode( $wpf_entry->fields, true ),
+                            'entry_id' => (int) $wpf_entry->entry_id,
+                            'form_id'  => (int) $wpf_entry->form_id,
+                            'date'     => $wpf_timestamp ? gmdate( 'c', $wpf_timestamp ) : (string) $wpf_entry->date,
+                            'date_epoch' => $wpf_timestamp ? $wpf_timestamp : null,
+                            'status'   => sanitize_key( $wpf_entry->status ),
+                            'fields'   => StifliFlexMcpUtils::redactSecrets( json_decode( $wpf_entry->fields, true ) ),
                         );
                     }
                 }
-                $addResultText( $r, wp_json_encode( $wpf_out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+                $wpf_entries_payload = array(
+                    'items' => $wpf_out,
+                    'pagination' => $buildPaginationMeta( $wpf_total, $wpf_limit, $wpf_offset ),
+                );
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($wpf_entries_payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))),
+                    'structuredContent' => $wpf_entries_payload,
+                );
+                break;
+            case 'wpforms_get_entry':
+                if ( ! function_exists( 'wpforms' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'WPForms plugin is not active.' );
+                    break;
+                }
+                $wpf_entry_handler = isset( wpforms()->entry ) ? wpforms()->entry : null;
+                if ( ! is_object( $wpf_entry_handler ) || ! method_exists( $wpf_entry_handler, 'get' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'WPForms entry storage is not available in this installation.' );
+                    break;
+                }
+                $wpf_entry_id = intval( $utils::getArrayValue( $args, 'entry_id', 0 ) );
+                $wpf_entry = $wpf_entry_id ? $wpf_entry_handler->get( $wpf_entry_id ) : null;
+                if ( ! $wpf_entry ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'WPForms entry not found.' );
+                    break;
+                }
+                $wpf_timestamp = ! empty( $wpf_entry->date ) ? strtotime( $wpf_entry->date . ' UTC' ) : false;
+                $wpf_entry_payload = array(
+                    'entry_id' => (int) $wpf_entry->entry_id,
+                    'form_id' => (int) $wpf_entry->form_id,
+                    'date' => $wpf_timestamp ? gmdate( 'c', $wpf_timestamp ) : (string) $wpf_entry->date,
+                    'date_epoch' => $wpf_timestamp ? $wpf_timestamp : null,
+                    'status' => sanitize_key( $wpf_entry->status ),
+                    'fields' => StifliFlexMcpUtils::redactSecrets( json_decode( $wpf_entry->fields, true ) ),
+                );
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($wpf_entry_payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES))),
+                    'structuredContent' => $wpf_entry_payload,
+                );
                 break;
 
             // ── Gravity Forms ─────────────────────────────────────────────────
@@ -7167,6 +7477,11 @@ class StifliFlexMcpModel {
                 }
                 $updated = update_post_meta($post_id, $meta_key, $meta_value);
                 if ($updated) {
+                    $finalized = $finalizePostMetaMutation($post_id);
+                    if (is_wp_error($finalized)) {
+                        $r['error'] = array('code' => $finalized->get_error_code(), 'message' => $finalized->get_error_message());
+                        break;
+                    }
                     $addResultText($r, 'Meta creado/actualizado para post ' . $post_id . ' (' . $meta_key . ')');
                 } else {
                     $addResultText($r, 'No se pudo crear/actualizar el metadato para post ' . $post_id . ' (' . $meta_key . ')');
@@ -7209,6 +7524,11 @@ class StifliFlexMcpModel {
                     ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
                     break;
                 }
+                $finalized = $finalizePostMetaMutation($post_id);
+                if (is_wp_error($finalized)) {
+                    $r['error'] = array('code' => $finalized->get_error_code(), 'message' => $finalized->get_error_message());
+                    break;
+                }
                 $addResultText($r, wp_json_encode(array(
                     'created' => true,
                     'meta_id' => (int) $meta_id,
@@ -7230,6 +7550,11 @@ class StifliFlexMcpModel {
                 }
                 $deleted = delete_post_meta($post_id, $meta_key, $meta_value);
                 if ($deleted) {
+                    $finalized = $finalizePostMetaMutation($post_id);
+                    if (is_wp_error($finalized)) {
+                        $r['error'] = array('code' => $finalized->get_error_code(), 'message' => $finalized->get_error_message());
+                        break;
+                    }
                     $addResultText($r, 'Metadato (' . $meta_key . ') eliminado para post ' . $post_id);
                 } else {
                     $addResultText($r, 'No se eliminó el metadato (' . $meta_key . ') para post ' . $post_id);

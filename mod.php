@@ -7029,6 +7029,21 @@ class StifliFlexMcp {
 	private function renderHelpTab() {
 		$site_url = site_url();
 		$endpoint = rest_url($this->namespace . '/messages');
+		$model = class_exists( 'StifliFlexMcpModel' ) ? new StifliFlexMcpModel() : null;
+		$enabled_tool_count = $model ? count( $model->getToolsList() ) : 0;
+		$diagnostics = array(
+			'plugin_version' => defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '',
+			'wordpress_version' => get_bloginfo( 'version' ),
+			'php_version' => PHP_VERSION,
+			'site_https' => is_ssl(),
+			'permalink_structure' => (string) get_option( 'permalink_structure', '' ),
+			'mcp_endpoint' => $endpoint,
+			'oauth_metadata' => home_url( '/.well-known/oauth-authorization-server' ),
+			'enabled_tool_count' => $enabled_tool_count,
+			'wp_debug' => defined( 'WP_DEBUG' ) && WP_DEBUG,
+			'sflmcp_debug' => defined( 'SFLMCP_DEBUG' ) && SFLMCP_DEBUG,
+		);
+		$diagnostic_text = wp_json_encode( $diagnostics, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 		?>
 		
 		<div class="sflmcp-help">
@@ -7038,7 +7053,7 @@ class StifliFlexMcp {
 				<h3>📑 <?php esc_html_e('Table of Contents', 'stifli-flex-mcp'); ?></h3>
 				<ul>
 					<li><a href="#overview">🎯 <?php esc_html_e('What is MCP?', 'stifli-flex-mcp'); ?></a></li>
-					<li><a href="#builtin-tools">🔧 <?php esc_html_e('Built-in Tools (117+)', 'stifli-flex-mcp'); ?></a></li>
+					<li><a href="#builtin-tools">🔧 <?php esc_html_e('Available Tools', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#custom-extensions">🔌 <?php esc_html_e('Custom Extensions with Abilities', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#use-cases">💡 <?php esc_html_e('Use Cases & Examples', 'stifli-flex-mcp'); ?></a></li>
 					<li><a href="#security">🔐 <?php esc_html_e('Security Considerations', 'stifli-flex-mcp'); ?></a></li>
@@ -7053,13 +7068,13 @@ class StifliFlexMcp {
 				<li>✅ <?php esc_html_e('Create, edit, and delete posts, pages, and custom content', 'stifli-flex-mcp'); ?></li>
 				<li>✅ <?php esc_html_e('Manage WooCommerce products, orders, and customers', 'stifli-flex-mcp'); ?></li>
 				<li>✅ <?php esc_html_e('Upload images (including AI-generated images)', 'stifli-flex-mcp'); ?></li>
-				<li>✅ <?php esc_html_e('Execute any WordPress action hook', 'stifli-flex-mcp'); ?></li>
-				<li>✅ <?php esc_html_e('Connect to external APIs and webhooks', 'stifli-flex-mcp'); ?></li>
+				<li>✅ <?php esc_html_e('Use plugin integrations and registered WordPress Abilities', 'stifli-flex-mcp'); ?></li>
+				<li>✅ <?php esc_html_e('Connect through OAuth 2.1 from compatible MCP clients', 'stifli-flex-mcp'); ?></li>
 			</ul>
 
 			<!-- SECTION: Built-in Tools -->
 			<h2 id="builtin-tools">🔧 <?php esc_html_e('Built-in Tools', 'stifli-flex-mcp'); ?></h2>
-			<p><?php esc_html_e('This plugin comes with 117+ ready-to-use tools:', 'stifli-flex-mcp'); ?></p>
+			<p><?php echo esc_html( sprintf( __( 'This site currently exposes %d enabled tools. Availability changes with profiles, tool settings, and active integrations.', 'stifli-flex-mcp' ), $enabled_tool_count ) ); ?></p>
 			<table>
 				<tr><th><?php esc_html_e('Category', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Examples', 'stifli-flex-mcp'); ?></th></tr>
 				<tr><td><strong>Posts & Pages</strong></td><td>wp_get_posts, wp_create_post, wp_update_post, wp_delete_post</td></tr>
@@ -7078,215 +7093,15 @@ class StifliFlexMcp {
 				<p><?php esc_html_e('Use WordPress Abilities to expose custom plugin functionality to MCP clients. Abilities provide explicit schemas and permission callbacks, which is safer than generic HTTP/webhook/action-hook execution.', 'stifli-flex-mcp'); ?></p>
 			</div>
 
-			<?php if ( false ) : ?>
-			<!-- SECTION: Custom Tools Overview -->
-			<h2 id="custom-tools">🔌 <?php esc_html_e('Custom Tools Overview', 'stifli-flex-mcp'); ?></h2>
-			<p><?php esc_html_e('Custom Tools extend the AI\'s capabilities beyond the built-in functions. There are two types:', 'stifli-flex-mcp'); ?></p>
-			
-			<table>
-				<tr>
-					<th><?php esc_html_e('Type', 'stifli-flex-mcp'); ?></th>
-					<th><?php esc_html_e('Badge', 'stifli-flex-mcp'); ?></th>
-					<th><?php esc_html_e('Use Case', 'stifli-flex-mcp'); ?></th>
-				</tr>
-				<tr>
-					<td><strong>HTTP</strong> (GET/POST/PUT/DELETE)</td>
-					<td><span class="badge badge-http">HTTP</span></td>
-					<td><?php esc_html_e('Call external APIs, webhooks (Zapier, Make, n8n), or your site\'s own REST API', 'stifli-flex-mcp'); ?></td>
-				</tr>
-				<tr>
-					<td><strong>ACTION</strong></td>
-					<td><span class="badge badge-action">ACTION</span></td>
-					<td><?php esc_html_e('Execute any WordPress do_action() hook - from core, themes, or any plugin', 'stifli-flex-mcp'); ?></td>
-				</tr>
-			</table>
-
-			<!-- SECTION: WordPress Action Hooks -->
-			<h2 id="action-hooks">⚡ <?php esc_html_e('WordPress Action Hooks (Make Tools from ANY Plugin)', 'stifli-flex-mcp'); ?></h2>
-			
-			<div class="card success">
-				<strong>💡 <?php esc_html_e('Key Concept', 'stifli-flex-mcp'); ?>:</strong>
-				<?php esc_html_e('WordPress plugins communicate through "action hooks" (do_action). With Custom Tools, you can expose ANY of these hooks to the AI!', 'stifli-flex-mcp'); ?>
-			</div>
-
-			<h3><?php esc_html_e('How It Works', 'stifli-flex-mcp'); ?></h3>
-			<ol>
-				<li><?php esc_html_e('You create a Custom Tool with Type = ACTION', 'stifli-flex-mcp'); ?></li>
-				<li><?php esc_html_e('In "Action Hook Name", you put the hook name (e.g., flush_rewrite_rules)', 'stifli-flex-mcp'); ?></li>
-				<li><?php esc_html_e('When the AI calls your tool, the plugin executes: do_action(\'hook_name\', $args)', 'stifli-flex-mcp'); ?></li>
-			</ol>
-
-			<h3><?php esc_html_e('Example: WordPress Core Actions', 'stifli-flex-mcp'); ?></h3>
-			<table>
-				<tr><th><?php esc_html_e('Action Hook', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('What It Does', 'stifli-flex-mcp'); ?></th></tr>
-				<tr><td><code>flush_rewrite_rules</code></td><td><?php esc_html_e('Regenerate permalink structure', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code>wp_cron</code></td><td><?php esc_html_e('Manually run scheduled tasks', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code>wp_cache_flush</code></td><td><?php esc_html_e('Clear object cache', 'stifli-flex-mcp'); ?></td></tr>
-			</table>
-
-			<h3><?php esc_html_e('Example: WooCommerce Actions', 'stifli-flex-mcp'); ?></h3>
-			<table>
-				<tr><th><?php esc_html_e('Action Hook', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('What It Does', 'stifli-flex-mcp'); ?></th></tr>
-				<tr><td><code>woocommerce_cancel_unpaid_orders</code></td><td><?php esc_html_e('Cancel orders not paid within hold time', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code>woocommerce_cleanup_sessions</code></td><td><?php esc_html_e('Remove expired customer sessions', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code>woocommerce_scheduled_sales</code></td><td><?php esc_html_e('Process scheduled sale prices', 'stifli-flex-mcp'); ?></td></tr>
-			</table>
-
-			<h3><?php esc_html_e('Example: Popular Plugin Actions', 'stifli-flex-mcp'); ?></h3>
-			<table>
-				<tr><th><?php esc_html_e('Plugin', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Action Hook', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Effect', 'stifli-flex-mcp'); ?></th></tr>
-				<tr><td>Yoast SEO</td><td><code>wpseo_reindex</code></td><td><?php esc_html_e('Rebuild SEO index', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td>WP Super Cache</td><td><code>wp_cache_clear_cache</code></td><td><?php esc_html_e('Clear all cache', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td>W3 Total Cache</td><td><code>w3tc_flush_all</code></td><td><?php esc_html_e('Flush all caches', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td>WP Rocket</td><td><code>rocket_clean_domain</code></td><td><?php esc_html_e('Purge site cache', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td>Elementor</td><td><code>elementor/core/files/clear_cache</code></td><td><?php esc_html_e('Clear CSS cache', 'stifli-flex-mcp'); ?></td></tr>
-			</table>
-
-			<!-- SECTION: Finding Plugin Actions -->
-			<h2 id="find-actions">🔍 <?php esc_html_e('How to Find Plugin Action Hooks', 'stifli-flex-mcp'); ?></h2>
-			
-			<div class="card">
-				<h4><?php esc_html_e('Method 1: Plugin Documentation', 'stifli-flex-mcp'); ?></h4>
-				<p><?php esc_html_e('Most quality plugins document their hooks. Search for:', 'stifli-flex-mcp'); ?></p>
-				<ul>
-					<li><code>"[plugin name] action hooks"</code></li>
-					<li><code>"[plugin name] do_action"</code></li>
-					<li><code>"[plugin name] developer documentation"</code></li>
-				</ul>
-			</div>
-
-			<div class="card">
-				<h4><?php esc_html_e('Method 2: Search Plugin Code', 'stifli-flex-mcp'); ?></h4>
-				<p><?php esc_html_e('Search for do_action in the plugin files:', 'stifli-flex-mcp'); ?></p>
-				<pre><code># In your plugin folder, search for hooks:
-grep -r "do_action(" wp-content/plugins/your-plugin/
-
-# Common patterns:
-do_action('plugin_prefix_event_name');
-do_action('plugin_prefix_before_save', $data);
-do_action('plugin_prefix_after_delete', $id);</code></pre>
-			</div>
-
-			<div class="card">
-				<h4><?php esc_html_e('Method 3: Use a Hook Discovery Plugin', 'stifli-flex-mcp'); ?></h4>
-				<p><?php esc_html_e('Install "Query Monitor" or "Debug Bar Actions and Filters" to see all hooks executed on any page.', 'stifli-flex-mcp'); ?></p>
-			</div>
-
-			<div class="card example">
-				<h4>📋 <?php esc_html_e('Step-by-Step Example: Creating an Action Tool', 'stifli-flex-mcp'); ?></h4>
-				<p><?php esc_html_e('Let\'s create a tool that clears WP Rocket cache:', 'stifli-flex-mcp'); ?></p>
-				<ol>
-					<li><?php esc_html_e('Go to Custom Tools → Add New Tool', 'stifli-flex-mcp'); ?></li>
-					<li><strong><?php esc_html_e('Name', 'stifli-flex-mcp'); ?>:</strong> <code>custom_clear_rocket_cache</code></li>
-					<li><strong><?php esc_html_e('Description', 'stifli-flex-mcp'); ?>:</strong> "Clear WP Rocket cache. Use when site shows outdated content."</li>
-					<li><strong><?php esc_html_e('Type', 'stifli-flex-mcp'); ?>:</strong> ACTION (WordPress do_action)</li>
-					<li><strong><?php esc_html_e('Action Hook Name', 'stifli-flex-mcp'); ?>:</strong> <code>rocket_clean_domain</code></li>
-					<li><strong><?php esc_html_e('Parameters', 'stifli-flex-mcp'); ?>:</strong> (none needed)</li>
-					<li><?php esc_html_e('Enable and Save!', 'stifli-flex-mcp'); ?></li>
-				</ol>
-				<p><?php esc_html_e('Now the AI can say: "Clear the cache" and it will work!', 'stifli-flex-mcp'); ?></p>
-			</div>
-
-			<!-- SECTION: Webhooks -->
-			<h2 id="webhooks">🌐 <?php esc_html_e('Webhooks & External APIs', 'stifli-flex-mcp'); ?></h2>
-			
-			<p><?php esc_html_e('Connect your AI to ANY external service using HTTP methods:', 'stifli-flex-mcp'); ?></p>
-
-			<h3><?php esc_html_e('Automation Platforms', 'stifli-flex-mcp'); ?></h3>
-			<table>
-				<tr><th><?php esc_html_e('Platform', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Webhook URL Pattern', 'stifli-flex-mcp'); ?></th></tr>
-				<tr><td>Zapier</td><td><code>https://hooks.zapier.com/hooks/catch/...</code></td></tr>
-				<tr><td>Make (Integromat)</td><td><code>https://hook.eu1.make.com/...</code></td></tr>
-				<tr><td>n8n</td><td><code>https://your-n8n.com/webhook/...</code></td></tr>
-				<tr><td>IFTTT</td><td><code>https://maker.ifttt.com/trigger/...</code></td></tr>
-			</table>
-
-			<div class="card example">
-				<h4>📋 <?php esc_html_e('Example: Create a Jira Ticket via Zapier', 'stifli-flex-mcp'); ?></h4>
-				<ol>
-					<li><?php esc_html_e('In Zapier: Create a Zap with "Webhooks by Zapier" trigger → "Jira" action', 'stifli-flex-mcp'); ?></li>
-					<li><?php esc_html_e('Copy the Zapier webhook URL', 'stifli-flex-mcp'); ?></li>
-					<li><?php esc_html_e('In Custom Tools:', 'stifli-flex-mcp'); ?>
-						<ul>
-							<li><strong>Name:</strong> <code>custom_create_jira_ticket</code></li>
-							<li><strong>Type:</strong> POST</li>
-							<li><strong>Endpoint:</strong> (your Zapier URL)</li>
-							<li><strong>Parameters:</strong> title (string, required), description (string), priority (string)</li>
-						</ul>
-					</li>
-				</ol>
-				<p><?php esc_html_e('Now the AI can say: "Create a Jira ticket about the login bug"!', 'stifli-flex-mcp'); ?></p>
-			</div>
-
-			<h3><?php esc_html_e('Public APIs', 'stifli-flex-mcp'); ?></h3>
-			<table>
-				<tr><th><?php esc_html_e('API', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Example Endpoint', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Use Case', 'stifli-flex-mcp'); ?></th></tr>
-				<tr><td>wttr.in</td><td><code>https://wttr.in/{city}?format=j1</code></td><td><?php esc_html_e('Weather data', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td>ipapi.co</td><td><code>https://ipapi.co/{ip}/json/</code></td><td><?php esc_html_e('IP geolocation', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td>OpenAI</td><td><code>https://api.openai.com/v1/...</code></td><td><?php esc_html_e('AI completions', 'stifli-flex-mcp'); ?></td></tr>
-			</table>
-
-			<!-- SECTION: Internal API -->
-			<h2 id="internal-api">🏠 <?php esc_html_e('Internal WordPress REST API', 'stifli-flex-mcp'); ?></h2>
-			
-			<p><?php esc_html_e('Your WordPress site already has a powerful REST API. Use Custom Tools to expose specific endpoints:', 'stifli-flex-mcp'); ?></p>
-
-			<table>
-				<tr><th><?php esc_html_e('Endpoint', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('What It Returns', 'stifli-flex-mcp'); ?></th></tr>
-				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/wp/v2/posts</code></td><td><?php esc_html_e('List of posts', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/wp/v2/pages/{id}</code></td><td><?php esc_html_e('Single page (with Yoast/RankMath SEO data if installed)', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/wc/v3/products</code></td><td><?php esc_html_e('WooCommerce products', 'stifli-flex-mcp'); ?></td></tr>
-				<tr><td><code><?php echo esc_html($site_url); ?>/wp-json/contact-form-7/v1/contact-forms</code></td><td><?php esc_html_e('Contact Form 7 forms', 'stifli-flex-mcp'); ?></td></tr>
-			</table>
-
-			<div class="card warning">
-				<strong>⚠️ <?php esc_html_e('Note on Plugin APIs:', 'stifli-flex-mcp'); ?></strong>
-				<?php esc_html_e('Many plugins add their own REST endpoints. Check their documentation for available endpoints. You can also visit', 'stifli-flex-mcp'); ?> 
-				<code><?php echo esc_html($site_url); ?>/wp-json/</code>
-				<?php esc_html_e('to see all registered namespaces.', 'stifli-flex-mcp'); ?>
-			</div>
-
-			<!-- SECTION: Use Cases -->
-			<h2 id="use-cases">💡 <?php esc_html_e('Real-World Use Cases', 'stifli-flex-mcp'); ?></h2>
-
-			<div class="card">
-				<h4>🛒 <?php esc_html_e('E-commerce Operations', 'stifli-flex-mcp'); ?></h4>
-				<ul>
-					<li><?php esc_html_e('"Cancel all unpaid orders older than 24 hours"', 'stifli-flex-mcp'); ?> → <code>woocommerce_cancel_unpaid_orders</code></li>
-					<li><?php esc_html_e('"Update stock for product SKU-123 to 50 units"', 'stifli-flex-mcp'); ?> → built-in <code>wc_update_stock</code></li>
-					<li><?php esc_html_e('"Create a 20% discount coupon"', 'stifli-flex-mcp'); ?> → built-in <code>wc_create_coupon</code></li>
-				</ul>
-			</div>
-
-			<div class="card">
-				<h4>🔧 <?php esc_html_e('Site Maintenance', 'stifli-flex-mcp'); ?></h4>
-				<ul>
-					<li><?php esc_html_e('"Clear all caches"', 'stifli-flex-mcp'); ?> → <code>w3tc_flush_all</code> / <code>rocket_clean_domain</code></li>
-					<li><?php esc_html_e('"Enable maintenance mode"', 'stifli-flex-mcp'); ?> → <code>sflmcp_maintenance_mode</code></li>
-					<li><?php esc_html_e('"Rebuild permalinks"', 'stifli-flex-mcp'); ?> → <code>flush_rewrite_rules</code></li>
-				</ul>
-			</div>
-
-			<div class="card">
-				<h4>📊 <?php esc_html_e('Business Integrations', 'stifli-flex-mcp'); ?></h4>
-				<ul>
-					<li><?php esc_html_e('"Log this conversation to Notion"', 'stifli-flex-mcp'); ?> → Notion API webhook</li>
-					<li><?php esc_html_e('"Create a support ticket in Jira"', 'stifli-flex-mcp'); ?> → Zapier/Make webhook</li>
-					<li><?php esc_html_e('"Send SMS notification"', 'stifli-flex-mcp'); ?> → Twilio API</li>
-				</ul>
-			</div>
-
-			<?php endif; ?>
-
 			<!-- SECTION: Security -->
 			<h2 id="security">🔐 <?php esc_html_e('Security Considerations', 'stifli-flex-mcp'); ?></h2>
 
 			<div class="card warning">
 				<h4><?php esc_html_e('Important Security Notes', 'stifli-flex-mcp'); ?></h4>
 				<ul>
-					<li><?php esc_html_e('All MCP requests require authentication (WordPress Application Passwords)', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('MCP clients should use OAuth 2.1; WordPress Application Passwords remain an advanced fallback', 'stifli-flex-mcp'); ?></li>
 					<li><?php esc_html_e('The AI operates with the permissions of the authenticated user', 'stifli-flex-mcp'); ?></li>
-					<li><?php esc_html_e('Custom Tools marked as "write" operations require confirmation', 'stifli-flex-mcp'); ?></li>
+					<li><?php esc_html_e('Write operations declare confirmation requirements and enforce WordPress capabilities', 'stifli-flex-mcp'); ?></li>
 					<li><?php esc_html_e('Disable tools you don\'t need in the Tools tabs', 'stifli-flex-mcp'); ?></li>
 					<li><?php esc_html_e('Use Profiles to limit available tools for specific use cases', 'stifli-flex-mcp'); ?></li>
 				</ul>
@@ -7305,21 +7120,27 @@ X-Custom-Header: value</code></pre>
 				<tr><th><?php esc_html_e('Problem', 'stifli-flex-mcp'); ?></th><th><?php esc_html_e('Solution', 'stifli-flex-mcp'); ?></th></tr>
 				<tr>
 					<td><?php esc_html_e('Tool not appearing for AI', 'stifli-flex-mcp'); ?></td>
-					<td><?php esc_html_e('Check that the tool is enabled (green checkmark in table)', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('Check the active profile, the Tools tab, and the relevant Plugin Integration. Reconnect the client after changing discovery.', 'stifli-flex-mcp'); ?></td>
 				</tr>
 				<tr>
-					<td><?php esc_html_e('ACTION returns "no handlers registered"', 'stifli-flex-mcp'); ?></td>
-					<td><?php esc_html_e('The hook name might be wrong, or the plugin that registers it is not active', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('OAuth discovery returns HTML or is blocked', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('Allow /.well-known/oauth-authorization-server and MCP OAuth REST routes in the host firewall, CDN, or Sucuri, then run the OAuth re-check.', 'stifli-flex-mcp'); ?></td>
 				</tr>
 				<tr>
-					<td><?php esc_html_e('HTTP webhook returns error', 'stifli-flex-mcp'); ?></td>
-					<td><?php esc_html_e('Use the "Test Tool" button to debug. Check URL, headers, and method', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('ChatGPT rejects a tool schema', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('Update the plugin, reconnect the client, and confirm that cached discovery data was refreshed.', 'stifli-flex-mcp'); ?></td>
 				</tr>
 				<tr>
-					<td><?php esc_html_e('Parameters not passed correctly', 'stifli-flex-mcp'); ?></td>
-					<td><?php esc_html_e('For GET: use {param} in URL. For POST: they\'re sent as JSON body', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('OAuth fails with Plain permalinks', 'stifli-flex-mcp'); ?></td>
+					<td><?php esc_html_e('Select Post name or another pretty permalink structure and save it before reconnecting.', 'stifli-flex-mcp'); ?></td>
 				</tr>
 			</table>
+
+			<div class="card">
+				<h4><?php esc_html_e('Copy-safe diagnostics', 'stifli-flex-mcp'); ?></h4>
+				<p><?php esc_html_e('This block omits access tokens, OAuth client secrets, user identities, and request payloads.', 'stifli-flex-mcp'); ?></p>
+				<textarea class="large-text code" rows="12" readonly><?php echo esc_textarea( $diagnostic_text ); ?></textarea>
+			</div>
 
 			<div class="card">
 				<h4>📝 <?php esc_html_e('Enable Logging', 'stifli-flex-mcp'); ?></h4>

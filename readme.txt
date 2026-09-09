@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.1
-Stable tag: 3.5.1
+Stable tag: 3.5.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -451,6 +451,15 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.5.2 =
+* Reliability: Post meta, Yoast, Rank Math, ACF, and featured-image mutations now complete through the standard WordPress post-update lifecycle after effective metadata changes, refreshing modification dates, caches, and save listeners.
+* New: Added `yoast_get_schema` for resolved Yoast JSON-LD and enriched `yoast_get_meta` with stored/resolved values, social fallbacks, robots data, and explicit SEO/readability analysis status.
+* New: Added `wpforms_get_form` and `wpforms_get_entry`; WPForms reads now normalize choices and timestamps, redact sensitive keys, paginate deterministically, and fail cleanly when entry storage is unavailable in WPForms Lite.
+* Improvement: `wp_set_featured_image` now accepts optional attachment alt text, handles unchanged requests idempotently, and post reads expose non-breaking `featured_media_id` and `featured_media_url` aliases.
+* Improvement: `divi_validate_layout` accepts `raw_content` and can validate shortcode structure without Divi Builder or a Divi theme being active.
+* Improvement: The Help tab now reports the live enabled-tool count, prioritizes OAuth 2.1, includes current WAF/schema troubleshooting, and provides copy-safe diagnostics without credentials or request payloads.
+* Developer: Added `scripts/audit-tool-schemas.ps1` to validate live `tools/list` schemas, including active WooCommerce and optional integration tools, for strict MCP clients.
+
 = 3.5.1 =
 * New: Added undo-aware `divi_clone_page`, `divi_replace_image`, and `divi_apply_library_template` tools, preserving Divi content and `_et_*` metadata for Divi 4 and alternate Divi 5 storage.
 * New: Added `elementor_apply_template_to_page` with replace and append modes, including support for ordinary pages that do not yet contain Elementor data.
