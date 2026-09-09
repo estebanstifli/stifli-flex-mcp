@@ -563,7 +563,17 @@ class StifliFlexMcp_WC_Products {
                 'has_more' => ($offset + $limit) < (int) $totalItems,
             );
         };
-        $buildProductRow = function($product, $compact, $includeImages, $includeCategories, $includeAttributes, $includeVariationCount) {
+        $formatDatePair = function($date) {
+            if (!$date || !is_object($date) || !method_exists($date, 'getTimestamp')) {
+                return array('local' => null, 'gmt' => null);
+            }
+            $timestamp = $date->getTimestamp();
+            return array(
+                'local' => method_exists($date, 'date') ? $date->date('c') : gmdate('c', $timestamp),
+                'gmt' => gmdate('c', $timestamp),
+            );
+        };
+        $buildProductRow = function($product, $compact, $includeImages, $includeCategories, $includeAttributes, $includeVariationCount) use ($formatDatePair) {
             $row = array(
                 'id' => $product->get_id(),
                 'name' => $product->get_name(),
@@ -576,10 +586,47 @@ class StifliFlexMcp_WC_Products {
             );
 
             if (!$compact) {
+                $created = $formatDatePair($product->get_date_created());
+                $modified = $formatDatePair($product->get_date_modified());
+                $saleFrom = $formatDatePair($product->get_date_on_sale_from());
+                $saleTo = $formatDatePair($product->get_date_on_sale_to());
                 $row['regular_price'] = $product->get_regular_price();
                 $row['sale_price'] = $product->get_sale_price();
                 $row['sku'] = $product->get_sku();
                 $row['stock_quantity'] = $product->get_stock_quantity();
+                $row['catalog_visibility'] = $product->get_catalog_visibility();
+                $row['featured'] = $product->get_featured();
+                $row['virtual'] = $product->get_virtual();
+                $row['downloadable'] = $product->get_downloadable();
+                $row['purchasable'] = $product->is_purchasable();
+                $row['tax_status'] = $product->get_tax_status();
+                $row['tax_class'] = $product->get_tax_class();
+                $row['total_sales'] = $product->get_total_sales();
+                $row['date_created'] = $created['local'];
+                $row['date_created_gmt'] = $created['gmt'];
+                $row['date_modified'] = $modified['local'];
+                $row['date_modified_gmt'] = $modified['gmt'];
+                $row['date_on_sale_from'] = $saleFrom['local'];
+                $row['date_on_sale_from_gmt'] = $saleFrom['gmt'];
+                $row['date_on_sale_to'] = $saleTo['local'];
+                $row['date_on_sale_to_gmt'] = $saleTo['gmt'];
+
+                $subscriptionGetters = array(
+                    'billing_period' => 'get_billing_period',
+                    'billing_interval' => 'get_billing_interval',
+                    'trial_period' => 'get_trial_period',
+                    'trial_length' => 'get_trial_length',
+                    'sign_up_fee' => 'get_sign_up_fee',
+                );
+                $subscription = array();
+                foreach ($subscriptionGetters as $field => $getter) {
+                    if (method_exists($product, $getter)) {
+                        $subscription[$field] = $product->{$getter}();
+                    }
+                }
+                if (!empty($subscription)) {
+                    $row['subscription'] = $subscription;
+                }
             }
 
             if ($includeImages) {
@@ -626,8 +673,12 @@ class StifliFlexMcp_WC_Products {
             return $row;
         };
 
-        $buildVariationRow = function($variation) {
-            return array(
+        $buildVariationRow = function($variation) use ($formatDatePair) {
+            $created = $formatDatePair($variation->get_date_created());
+            $modified = $formatDatePair($variation->get_date_modified());
+            $saleFrom = $formatDatePair($variation->get_date_on_sale_from());
+            $saleTo = $formatDatePair($variation->get_date_on_sale_to());
+            $row = array(
                 'id' => $variation->get_id(),
                 'product_id' => (int) $variation->get_parent_id(),
                 'sku' => $variation->get_sku(),
@@ -637,7 +688,39 @@ class StifliFlexMcp_WC_Products {
                 'stock_quantity' => $variation->get_stock_quantity(),
                 'stock_status' => $variation->get_stock_status(),
                 'attributes' => $variation->get_attributes(),
+                'virtual' => $variation->get_virtual(),
+                'downloadable' => $variation->get_downloadable(),
+                'purchasable' => $variation->is_purchasable(),
+                'tax_status' => $variation->get_tax_status(),
+                'tax_class' => $variation->get_tax_class(),
+                'date_created' => $created['local'],
+                'date_created_gmt' => $created['gmt'],
+                'date_modified' => $modified['local'],
+                'date_modified_gmt' => $modified['gmt'],
+                'date_on_sale_from' => $saleFrom['local'],
+                'date_on_sale_from_gmt' => $saleFrom['gmt'],
+                'date_on_sale_to' => $saleTo['local'],
+                'date_on_sale_to_gmt' => $saleTo['gmt'],
             );
+
+            $subscriptionGetters = array(
+                'billing_period' => 'get_billing_period',
+                'billing_interval' => 'get_billing_interval',
+                'trial_period' => 'get_trial_period',
+                'trial_length' => 'get_trial_length',
+                'sign_up_fee' => 'get_sign_up_fee',
+            );
+            $subscription = array();
+            foreach ($subscriptionGetters as $field => $getter) {
+                if (method_exists($variation, $getter)) {
+                    $subscription[$field] = $variation->{$getter}();
+                }
+            }
+            if (!empty($subscription)) {
+                $row['subscription'] = $subscription;
+            }
+
+            return $row;
         };
 
         $syncVariableParent = function($productId) {

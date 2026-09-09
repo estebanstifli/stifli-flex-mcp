@@ -102,6 +102,18 @@ class StifliFlexMcpModel {
         return $this->maybeLoadFile( 'integrations/class-divi.php', 'StifliFlexMcp_Divi' );
     }
 
+    private function maybeLoadContactForm7IntegrationModule() {
+        if ( class_exists( 'StifliFlexMcp_ContactForm7' ) ) {
+            return true;
+        }
+
+        if ( ! class_exists( 'WPCF7_ContactForm' ) || ! post_type_exists( 'wpcf7_contact_form' ) ) {
+            return false;
+        }
+
+        return $this->maybeLoadFile( 'integrations/class-contact-form-7.php', 'StifliFlexMcp_ContactForm7' );
+    }
+
     private function maybeLoadGoogleSearchConsoleModule() {
         if ( class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) ) {
             StifliFlexMcp_GoogleSearchConsole::init();
@@ -336,6 +348,10 @@ class StifliFlexMcpModel {
             // Forminator reads
             'forminator_list_forms',
             'forminator_get_entries',
+            // Contact Form 7 and Flamingo reads
+            'cf7_list_forms',
+            'cf7_get_form',
+            'flamingo_get_submissions',
             'fetch',                // red externa: tratar como lectura sensible
             // WordPress - Additional sensitive reads
             'wp_get_user_meta',     // user privacy data
@@ -416,6 +432,9 @@ class StifliFlexMcpModel {
             $tool['inputSchema'] = StifliFlexMcpUtils::normalizeToolInputSchema(
                 isset( $tool['inputSchema'] ) ? $tool['inputSchema'] : array()
             );
+			if ( isset( $tool['outputSchema'] ) ) {
+				$tool['outputSchema'] = StifliFlexMcpUtils::normalizeToolInputSchema( $tool['outputSchema'] );
+			}
 
             $allowed_by_integration = apply_filters('sflmcp_is_tool_enabled_for_integrations', true, $name, 'list', $tool);
             if (!$allowed_by_integration) {
@@ -476,6 +495,23 @@ class StifliFlexMcpModel {
                         ),
                         'required' => array(),
                     ),
+                    'outputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'time' => array( 'type' => 'string' ),
+                            'name' => array( 'type' => 'string' ),
+                            'home_url' => array( 'type' => 'string' ),
+                            'rest_url' => array( 'type' => 'string' ),
+                            'https' => array( 'type' => 'boolean' ),
+                            'wordpress_version' => array( 'type' => 'string' ),
+                            'php_version' => array( 'type' => 'string' ),
+                            'connection_context' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                            'builder_versions' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                            'diagnostics' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                        ),
+                        'required' => array( 'time', 'name', 'home_url', 'rest_url', 'https', 'wordpress_version', 'php_version', 'connection_context', 'builder_versions' ),
+                        'additionalProperties' => false,
+                    ),
                 ),
 
                 // Posts (lectura)
@@ -500,6 +536,18 @@ class StifliFlexMcpModel {
                         ),
                         'required' => array(),
                     ),
+                    'outputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'items' => array(
+                                'type' => 'array',
+                                'items' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                            ),
+                            'pagination' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                        ),
+                        'required' => array( 'items' ),
+                        'additionalProperties' => false,
+                    ),
                 ),
                 'wp_get_post' => array(
                     'name' => 'wp_get_post',
@@ -515,6 +563,27 @@ class StifliFlexMcpModel {
                             'include_taxonomies' => array('type' => 'boolean'),
                         ),
                         'required' => array(),
+                    ),
+                    'outputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'ID' => array( 'type' => 'integer' ),
+                            'post_type' => array( 'type' => 'string' ),
+                            'post_title' => array( 'type' => 'string' ),
+                            'post_status' => array( 'type' => 'string' ),
+                            'post_content' => array( 'type' => 'string' ),
+                            'post_excerpt' => array( 'type' => 'string' ),
+                            'permalink' => array( 'type' => 'string' ),
+                            'post_date' => array( 'type' => 'string' ),
+                            'post_modified' => array( 'type' => 'string' ),
+                            'author' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                            'featured_media' => array( 'type' => array( 'object', 'null' ), 'properties' => array(), 'additionalProperties' => true ),
+                            'featured_media_id' => array( 'type' => 'integer' ),
+                            'featured_media_url' => array( 'type' => 'string' ),
+                            'taxonomies' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => true ),
+                        ),
+                        'required' => array( 'ID', 'post_type', 'post_title', 'post_status', 'post_content', 'post_excerpt', 'permalink', 'post_date', 'post_modified' ),
+                        'additionalProperties' => false,
                     ),
                 ),
 
@@ -2036,6 +2105,11 @@ class StifliFlexMcpModel {
                 $tools = array_merge( $tools, $divi_tools );
             }
 
+            // Merge Contact Form 7 tools only when its runtime is available.
+            if ( $this->maybeLoadContactForm7IntegrationModule() && class_exists( 'StifliFlexMcp_ContactForm7' ) ) {
+                $tools = array_merge( $tools, StifliFlexMcp_ContactForm7::getTools() );
+            }
+
             // Merge Google Search Console tools only when the optional SEO add-on is enabled.
             if ( $this->isGoogleSearchConsoleRuntimeEnabled() && $this->maybeLoadGoogleSearchConsoleModule() && class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) ) {
                 $tools = array_merge( $tools, StifliFlexMcp_GoogleSearchConsole::getTools() );
@@ -2113,6 +2187,10 @@ class StifliFlexMcpModel {
     private function maybeLoadOptionalModuleForTool( $tool ) {
         if ( 0 === strpos( (string) $tool, 'wp_tec_' ) ) {
             return $this->maybeLoadTecIntegrationModule();
+        }
+
+        if ( 0 === strpos( (string) $tool, 'cf7_' ) || 0 === strpos( (string) $tool, 'flamingo_' ) ) {
+            return $this->maybeLoadContactForm7IntegrationModule();
         }
 
         if ( 0 === strpos( (string) $tool, 'elementor_' ) ) {
@@ -2501,6 +2579,10 @@ class StifliFlexMcpModel {
 
         if ( $this->maybeLoadDiviIntegrationModule() && class_exists( 'StifliFlexMcp_Divi' ) ) {
             $map = array_merge( $map, StifliFlexMcp_Divi::getCapabilities() );
+        }
+
+        if ( $this->maybeLoadContactForm7IntegrationModule() && class_exists( 'StifliFlexMcp_ContactForm7' ) ) {
+            $map = array_merge( $map, StifliFlexMcp_ContactForm7::getCapabilities() );
         }
 
         if ( $this->maybeLoadSearchImageModule() && class_exists( 'StifliFlexMcp_Search_Image' ) ) {
@@ -3090,7 +3172,7 @@ class StifliFlexMcpModel {
         if ( $this->isGoogleSearchConsoleTool( $tool ) && ! $this->isGoogleSearchConsoleRuntimeEnabled() ) {
             $r['error'] = array(
                 'code' => -32603,
-                'message' => 'Google Search Console tools are disabled or not connected. Enable Search Console tools and connect Google OAuth in StifLi Flex MCP > SEO.',
+                'message' => 'Google Search Console tools are disabled or not connected. Enable Search Console tools and connect Google OAuth in Flex MCP > SEO.',
             );
             return $emitToolCalled($r);
         }
@@ -3326,6 +3408,7 @@ class StifliFlexMcpModel {
                     }
                 }
 
+				$r['result']['structuredContent'] = $pingData;
                 $addResultText($r, 'Ping successful: ' . wp_json_encode($pingData, JSON_PRETTY_PRINT));
                 break;
             case 'wp_get_posts':
@@ -3399,6 +3482,10 @@ class StifliFlexMcpModel {
                         'pagination' => $buildPaginationMeta((int) $postQuery->found_posts, $postsLimit, $effectivePostsOffset, $postsPaged),
                     );
                 }
+                $postsStructured = $includePostsPagination
+                    ? $rows
+                    : array( 'items' => $rows );
+                $r['result']['structuredContent'] = $postsStructured;
                 $addResultText($r, wp_json_encode($rows, JSON_PRETTY_PRINT));
                 break;
             case 'wp_get_post':
@@ -3441,6 +3528,7 @@ class StifliFlexMcpModel {
                 if ($includeSingleTaxonomies) {
                     $out['taxonomies'] = $buildPostTaxonomies($p);
                 }
+				$r['result']['structuredContent'] = $out;
                 $addResultText($r, wp_json_encode($out, JSON_PRETTY_PRINT));
                 break;
             case 'wp_create_post':
@@ -5418,7 +5506,7 @@ class StifliFlexMcpModel {
                 }
                 if ( empty( $api_key ) ) {
                     stifli_flex_mcp_log('wp_generate_image: ERROR - no API key configured for provider=' . $provider);
-                    $r['error'] = array( 'code' => -32603, 'message' => 'No AI API key configured. Go to StifLi Flex MCP > Multimedia Settings to set one.' );
+                    $r['error'] = array( 'code' => -32603, 'message' => 'No AI API key configured. Go to Flex MCP > Multimedia Settings to set one.' );
                     break;
                 }
                 stifli_flex_mcp_log('wp_generate_image: API key resolved (length=' . strlen( $api_key ) . ')');
@@ -5960,7 +6048,7 @@ class StifliFlexMcpModel {
                 }
                 if ( empty( $vid_api_key ) ) {
                     stifli_flex_mcp_log('wp_generate_video: ERROR - no API key configured for provider=' . $vid_provider);
-                    $r['error'] = array( 'code' => -32603, 'message' => 'No video AI API key configured. Go to StifLi Flex MCP > Multimedia > Videos to set one.' );
+                    $r['error'] = array( 'code' => -32603, 'message' => 'No video AI API key configured. Go to Flex MCP > Multimedia > Videos to set one.' );
                     break;
                 }
                 stifli_flex_mcp_log('wp_generate_video: API key resolved (length=' . strlen( $vid_api_key ) . ')');
@@ -8606,6 +8694,24 @@ class StifliFlexMcpModel {
                         $result = StifliFlexMcp_TheEventsCalendar::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
                             $recordChangeIfNeeded();
+                            return $r;
+                        }
+                    }
+                }
+
+                // Try Contact Form 7 and Flamingo modules.
+                if ( strpos( $tool, 'cf7_' ) === 0 || strpos( $tool, 'flamingo_' ) === 0 ) {
+                    if ( ! $this->maybeLoadContactForm7IntegrationModule() ) {
+                        $r['error'] = array(
+                            'code' => -32603,
+                            'message' => 'Contact Form 7 plugin is not active.',
+                        );
+                        return $r;
+                    }
+
+                    if ( class_exists( 'StifliFlexMcp_ContactForm7' ) ) {
+                        $result = StifliFlexMcp_ContactForm7::dispatch( $tool, $args, $r, $addResultText, $utils );
+                        if ( $result !== null ) {
                             return $r;
                         }
                     }

@@ -157,7 +157,21 @@ class StifliFlexMcp_WC_Coupons {
             return true;
         }
 
-        $buildCouponRow = function($coupon) {
+        $formatDatePair = function($date) {
+            if (!$date || !is_object($date) || !method_exists($date, 'getTimestamp')) {
+                return array('local' => null, 'gmt' => null);
+            }
+            $timestamp = $date->getTimestamp();
+            return array(
+                'local' => method_exists($date, 'date') ? $date->date('c') : gmdate('c', $timestamp),
+                'gmt' => gmdate('c', $timestamp),
+            );
+        };
+
+        $buildCouponRow = function($coupon) use ($formatDatePair) {
+            $created = $formatDatePair($coupon->get_date_created());
+            $modified = $formatDatePair($coupon->get_date_modified());
+            $expires = $formatDatePair($coupon->get_date_expires());
             return array(
                 'id' => $coupon->get_id(),
                 'code' => $coupon->get_code(),
@@ -165,9 +179,25 @@ class StifliFlexMcp_WC_Coupons {
                 'amount' => $coupon->get_amount(),
                 'status' => get_post_status($coupon->get_id()),
                 'expiry_date' => $coupon->get_date_expires() ? $coupon->get_date_expires()->date('Y-m-d') : null,
+                'expiry_date_iso' => $expires['local'],
+                'expiry_date_gmt_iso' => $expires['gmt'],
+                'date_created' => $created['local'],
+                'date_created_gmt' => $created['gmt'],
+                'date_modified' => $modified['local'],
+                'date_modified_gmt' => $modified['gmt'],
                 'usage_count' => $coupon->get_usage_count(),
                 'usage_limit' => $coupon->get_usage_limit(),
+                'usage_limit_per_user' => $coupon->get_usage_limit_per_user(),
+                'limit_usage_to_x_items' => $coupon->get_limit_usage_to_x_items(),
                 'individual_use' => $coupon->get_individual_use(),
+                'free_shipping' => $coupon->get_free_shipping(),
+                'exclude_sale_items' => $coupon->get_exclude_sale_items(),
+                'minimum_amount' => $coupon->get_minimum_amount(),
+                'maximum_amount' => $coupon->get_maximum_amount(),
+                'product_ids' => array_map('intval', $coupon->get_product_ids()),
+                'excluded_product_ids' => array_map('intval', $coupon->get_excluded_product_ids()),
+                'product_categories' => array_map('intval', $coupon->get_product_categories()),
+                'excluded_product_categories' => array_map('intval', $coupon->get_excluded_product_categories()),
             );
         };
 

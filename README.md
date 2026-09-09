@@ -1,4 +1,4 @@
-# StifLi Flex MCP - MCP Server for WordPress with Undo
+# Flex MCP - Connect ChatGPT, Claude and AI agents with MCP, Undo, Abilities and Tools
 
 [![WordPress 5.9+](https://img.shields.io/badge/WordPress-5.9%2B-21759B?logo=wordpress&logoColor=white)](https://wordpress.org)
 [![Tested up to 7.0](https://img.shields.io/badge/Tested%20up%20to-7.0-21759B?logo=wordpress&logoColor=white)](https://wordpress.org)
@@ -7,7 +7,7 @@
 [![OAuth 2.1 + PKCE](https://img.shields.io/badge/OAuth-2.1%20%2B%20PKCE-4CAF50)](https://datatracker.ietf.org/doc/html/rfc7636)
 [![License GPLv2+](https://img.shields.io/badge/License-GPLv2%2B-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 
-StifLi Flex MCP is a WordPress plugin that turns your site into a secure Model Context Protocol (MCP) server for ChatGPT, Claude Desktop, Gemini, and other MCP clients. It includes built-in Undo, OAuth 2.1 authentication, and 122+ tools for WordPress, WooCommerce, SEO, media, and automations.
+Flex MCP is a WordPress plugin that turns your site into a secure Model Context Protocol (MCP) server for ChatGPT, Claude Desktop, Gemini, and other MCP clients. It includes built-in Undo, OAuth 2.1 authentication, and 122+ tools for WordPress, WooCommerce, SEO, media, and automations.
 
 ## Managing Many WordPress Sites?
 
@@ -90,7 +90,7 @@ This applies to changes initiated from ChatGPT, Claude, built-in Chat Agent, Cop
 1. Upload the stifli-flex-mcp plugin folder to wp-content/plugins, or install from WordPress.
 2. Activate the plugin.
 3. Choose add-ons in first-activation setup.
-4. Go to StifLi Flex MCP > MCP Server.
+4. Go to Flex MCP > MCP Server.
 5. Copy the SSE URL.
 6. Paste it into ChatGPT or Claude Desktop and complete OAuth.
 

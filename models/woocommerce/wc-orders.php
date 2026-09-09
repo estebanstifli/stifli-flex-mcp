@@ -309,14 +309,36 @@ class StifliFlexMcp_WC_Orders {
                 'has_more' => ($offset + $limit) < (int) $totalItems,
             );
         };
-        $buildOrderRow = function($order, $compact, $includeItems, $includeTotalsBreakdown, $includeShippingSummary) {
+        $formatDatePair = function($date) {
+            if (!$date || !is_object($date) || !method_exists($date, 'getTimestamp')) {
+                return array('local' => null, 'gmt' => null);
+            }
+            $timestamp = $date->getTimestamp();
+            return array(
+                'local' => method_exists($date, 'date') ? $date->date('c') : gmdate('c', $timestamp),
+                'gmt' => gmdate('c', $timestamp),
+            );
+        };
+        $buildOrderRow = function($order, $compact, $includeItems, $includeTotalsBreakdown, $includeShippingSummary) use ($formatDatePair) {
             $created = $order->get_date_created();
+            $createdIso = $formatDatePair($created);
+            $modifiedIso = $formatDatePair($order->get_date_modified());
+            $paidIso = $formatDatePair($order->get_date_paid());
+            $completedIso = $formatDatePair($order->get_date_completed());
             $row = array(
                 'id' => $order->get_id(),
                 'status' => $order->get_status(),
                 'total' => $order->get_total(),
                 'currency' => $order->get_currency(),
                 'date_created' => $created ? $created->date('Y-m-d H:i:s') : null,
+                'date_created_iso' => $createdIso['local'],
+                'date_created_gmt_iso' => $createdIso['gmt'],
+                'date_modified_iso' => $modifiedIso['local'],
+                'date_modified_gmt_iso' => $modifiedIso['gmt'],
+                'date_paid_iso' => $paidIso['local'],
+                'date_paid_gmt_iso' => $paidIso['gmt'],
+                'date_completed_iso' => $completedIso['local'],
+                'date_completed_gmt_iso' => $completedIso['gmt'],
                 'customer_id' => $order->get_customer_id(),
                 'items_count' => count($order->get_items()),
             );

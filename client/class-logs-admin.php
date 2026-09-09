@@ -150,7 +150,7 @@ class StifliFlexMcp_Logs_Admin {
 		$active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'changelog';
 		?>
 		<div class="wrap sflmcp-logs-page">
-			<h1><?php echo esc_html__( 'StifLi Flex MCP - Logs', 'stifli-flex-mcp' ); ?></h1>
+			<h1><?php echo esc_html__( 'Flex MCP - Logs', 'stifli-flex-mcp' ); ?></h1>
 
 			<h2 class="nav-tab-wrapper">
 				<a href="?page=sflmcp-logs&tab=changelog" class="nav-tab <?php echo 'changelog' === $active_tab ? 'nav-tab-active' : ''; ?>">

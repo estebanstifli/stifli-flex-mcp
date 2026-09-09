@@ -433,7 +433,7 @@ class StifliFlexMcp_GoogleSearchConsole {
 		if ( ! self::toolsAreEnabled() ) {
 			$r['error'] = array(
 				'code' => -32603,
-				'message' => 'Google Search Console is not enabled or configured in StifLi Flex MCP > SEO.',
+				'message' => 'Google Search Console is not enabled or configured in Flex MCP > SEO.',
 			);
 			return true;
 		}

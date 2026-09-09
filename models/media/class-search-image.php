@@ -452,7 +452,7 @@ class StifliFlexMcp_Search_Image {
 		$response    = wp_remote_get( $request_url, array(
 			'timeout' => max( 5, min( 60, intval( $timeout ) ) ),
 			'redirection' => 5,
-			'user-agent' => 'StifLi Flex MCP/' . ( defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '1.0' ) . '; ' . home_url( '/' ),
+			'user-agent' => 'Flex MCP/' . ( defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '1.0' ) . '; ' . home_url( '/' ),
 			'headers' => $headers,
 		) );
 

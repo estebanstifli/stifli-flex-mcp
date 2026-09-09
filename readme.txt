@@ -1,11 +1,11 @@
-=== StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini === 
+=== Flex MCP - Connect ChatGPT, Claude and AI agents with MCP, Undo, Abilities and Tools. ===
 
 Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
-Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
+Tags:  mcp, abilities, chatgpt, claude, gemini
 Requires at least: 5.9
 Tested up to: 7.1
-Stable tag: 3.5.2
+Stable tag: 3.5.4
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,7 +14,7 @@ The most secure MCP Server for WordPress with Undo, plus AI Copilot & Chat Agent
 
 == Description ==
 
-**StifLi Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect ChatGPT, Claude Desktop, Gemini, and other MCP clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
+**Flex MCP** is the most secure MCP Server for WordPress with built-in Undo. Connect ChatGPT, Claude Desktop, Gemini, and other MCP clients safely, roll back changes when needed, and manage your site through natural conversation without losing control.
 
 **🛰️ Manage many WordPress MCP sites from one place (free and open source)**
 
@@ -35,7 +35,7 @@ Choose the layers your site needs without loading the rest:
 3. **AI Chat Agent (optional addon)** — A full conversational interface to manage posts, WooCommerce, settings, and more.
 4. **Automations, SEO, and Plugin Integrations (optional addons)** — Enable only the workflows and integrations used on your site.
 
-On first activation, a setup screen lets you select the addons to load. The default is the MCP Server layer only. You can change the selection later from **StifLi Flex MCP → MCP Server → Add-ons**.
+On first activation, a setup screen lets you select the addons to load. The default is the MCP Server layer only. You can change the selection later from **Flex MCP → MCP Server → Add-ons**.
 
 **🎬 Video: Claude to WordPress MCP Connector in 1 Minute**
 
@@ -43,14 +43,14 @@ https://youtu.be/AcmvwRzoOSM
 
 **📚 Documentation**
 
-[StifLi Flex MCP Documentation](https://andromedanova.com/stifli-flex-mcp.html)
+[Flex MCP Documentation](https://andromedanova.com/stifli-flex-mcp.html)
 
-Released in December 2025, **StifLi Flex MCP** was the first MCP plugin for WordPress and remains the most complete WordPress MCP platform for ChatGPT, Claude Desktop, and other MCP clients.
+Released in December 2025, **Flex MCP** was the first MCP plugin for WordPress and remains the most complete WordPress MCP platform for ChatGPT, Claude Desktop, and other MCP clients.
 It starts with 122+ built-in MCP tools, and with supported integrations such as All Sources Images, Stifli Backup Tools, AiPatch Security Scanner, Notification for Telegram, WPCode, Code Snippets, Woody Snippets, Advanced Custom Fields, Yoast SEO, Rank Math, WPForms, Gravity Forms, Forminator, The Events Calendar, and Elementor, it can exceed 200 total tools depending on the plugins you install.
 
 **📡 MCP Server — Connect ChatGPT, Claude Desktop, and Other MCP Clients**
 
-StifLi Flex MCP includes a full standards-compliant MCP server for WordPress, so ChatGPT, Claude Desktop, LibreChat, and other MCP clients can connect directly to your site and use real WordPress tools through OAuth 2.1.
+Flex MCP includes a full standards-compliant MCP server for WordPress, so ChatGPT, Claude Desktop, LibreChat, and other MCP clients can connect directly to your site and use real WordPress tools through OAuth 2.1.
 
 * **ChatGPT** — Connect through Apps & Connectors with OAuth 2.1 authentication
 * **Claude Desktop** — Connect through Connectors with automatic OAuth flow
@@ -136,7 +136,7 @@ This opens up powerful possibilities: customize your theme's appearance, add tra
 
 **🧠 WordPress Abilities Integration** (WordPress 6.9+)
 
-Automatically discover and import abilities registered by other plugins into your AI agent's toolkit. If a plugin supports the WordPress Abilities API, StifLi Flex MCP can detect, import, and expose it as an AI tool — zero configuration needed.
+Automatically discover and import abilities registered by other plugins into your AI agent's toolkit. If a plugin supports the WordPress Abilities API, Flex MCP can detect, import, and expose it as an AI tool — zero configuration needed.
 
 **⏰ Automation Tasks — Let AI Work While You Sleep**
 
@@ -157,7 +157,7 @@ Run AI workflows automatically when specific events happen
 
 Mistakes happen. You asked ChatGPT to update your landing page and the result isn't what you expected? No problem — **roll back the change with one click** and your site is restored instantly.
 
-StifLi Flex MCP is the **only MCP server for WordPress that tracks every change and lets you undo it**. Every modification made by any AI — whether from ChatGPT, Claude Desktop, the built-in Chat Agent, the Copilot, or automated tasks — is recorded with a full before/after snapshot.
+Flex MCP is the **only MCP server for WordPress that tracks every change and lets you undo it**. Every modification made by any AI — whether from ChatGPT, Claude Desktop, the built-in Chat Agent, the Copilot, or automated tasks — is recorded with a full before/after snapshot.
 
 * **One-click Undo** — Roll back any change from the Logs & Roll Back page in your admin panel
 * **Redo support** — Changed your mind? Re-apply a rolled-back change just as easily
@@ -176,7 +176,7 @@ StifLi Flex MCP is the **only MCP server for WordPress that tracks every change 
 
 **🛡️ Security — OAuth 2.1 Built In**
 
-StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard security protocol — to authenticate external AI clients. No API keys to copy, no passwords to share. Just paste the URL, authorize once, and you're connected.
+Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard security protocol — to authenticate external AI clients. No API keys to copy, no passwords to share. Just paste the URL, authorize once, and you're connected.
 
 * **OAuth 2.1 with PKCE (S256)** — The most modern and secure authentication standard, used by Google, Microsoft, and GitHub
 * **Dynamic Client Registration (RFC 7591)** — AI clients register automatically, no manual setup needed
@@ -200,7 +200,7 @@ StifLi Flex MCP uses **OAuth 2.1 with PKCE** — the latest industry-standard se
 
 **🌐 Supported AI Platforms**
 
-StifLi Flex MCP integrates with:
+Flex MCP integrates with:
 
 **Built-in AI Chat Agent + WordPress AI Client connectors:**
 * OpenAI — GPT-5.4, GPT-5.3, GPT-5.4 Mini
@@ -218,7 +218,7 @@ StifLi Flex MCP integrates with:
 
 **📐 MCP Spec Compliance**
 
-StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25/) for lifecycle and tool operations over JSON-RPC 2.0, while keeping legacy SSE compatibility for older MCP clients.
+Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25/) for lifecycle and tool operations over JSON-RPC 2.0, while keeping legacy SSE compatibility for older MCP clients.
 
 == Installation ==
 
@@ -227,7 +227,7 @@ StifLi Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specific
 1. Upload the `stifli-flex-mcp` folder to `/wp-content/plugins/` or install from the WordPress plugin directory
 2. Activate the plugin
 3. Choose the addons you want on the first-activation screen. Leave them unchecked for the lightweight MCP Server-only setup.
-4. Continue to **StifLi Flex MCP → MCP Server**
+4. Continue to **Flex MCP → MCP Server**
 5. Copy the SSE URL and connect your MCP client through OAuth 2.1
 
 Multimedia tools and Logs & Roll Back are included in the MCP Server layer and are always available. Addons can be changed later from **MCP Server → Add-ons**; disabled addons do not load their PHP classes, menus, hooks, or background jobs.
@@ -235,15 +235,15 @@ Multimedia tools and Logs & Roll Back are included in the MCP Server layer and a
 = Quick Start (AI Copilot) =
 
 1. Enable **AI Copilot** on the first-activation screen or from **MCP Server → Add-ons**
-2. Go to **StifLi Flex MCP → AI Copilot** and make sure it’s enabled
-3. Go to **StifLi Flex MCP → AI Chat Agent → Settings** and enter your API key
+2. Go to **Flex MCP → AI Copilot** and make sure it’s enabled
+3. Go to **Flex MCP → AI Chat Agent → Settings** and enter your API key
 4. Open any post or page in the editor — the Copilot widget appears automatically
 5. Start writing with AI!
 
 = Quick Start (AI Chat Agent) =
 
 1. Enable **AI Chat Agent** on the first-activation screen or from **MCP Server → Add-ons**
-2. Go to **StifLi Flex MCP → AI Chat Agent**
+2. Go to **Flex MCP → AI Chat Agent**
 3. Open the **Settings** tab and select your AI provider (OpenAI, Claude, Gemini, or installed WordPress AI Client connectors like OpenRouter/Mistral)
 4. Enter your API key
 5. Start chatting!
@@ -254,7 +254,7 @@ That's it — no external tools, no complex configuration. Your AI agent is read
 
 To connect external AI clients (ChatGPT, Claude Desktop, LibreChat):
 
-1. Go to **StifLi Flex MCP → MCP Server**
+1. Go to **Flex MCP → MCP Server**
 2. Copy the SSE URL shown on the Settings page
 3. Paste it in your AI client:
    * **Claude Desktop:** Customize → Connectors → Add custom connector → Paste the URL
@@ -280,7 +280,7 @@ Both use the same AI provider and API key.
 
 = How do I set up the AI Chat Agent? =
 
-1. Go to StifLi Flex MCP → AI Chat Agent → Settings
+1. Go to Flex MCP → AI Chat Agent → Settings
 2. Choose your AI provider (OpenAI, Claude, Gemini, or installed WordPress AI Client connectors like OpenRouter/Mistral)
 3. Enter your API key (you get this from your AI provider's website)
 4. Go to the Chat tab and start talking!
@@ -333,7 +333,7 @@ Yes, through WordPress Abilities. Legacy Custom Tools have been retired for secu
 
 = What happens if the AI makes a mistake? =
 
-No worries — StifLi Flex MCP is the only MCP server with a built-in **Roll Back** system. Every change made by any AI (ChatGPT, Claude, the Chat Agent, Copilot, or automations) is tracked with a full before/after snapshot. Go to **Logs & Roll Back** in your admin panel and undo any change with one click. You can even roll back an entire session at once.
+No worries — Flex MCP is the only MCP server with a built-in **Roll Back** system. Every change made by any AI (ChatGPT, Claude, the Chat Agent, Copilot, or automations) is tracked with a full before/after snapshot. Go to **Logs & Roll Back** in your admin panel and undo any change with one click. You can even roll back an entire session at once.
 
 = Can the AI generate images? =
 
@@ -342,7 +342,7 @@ Yes! The `wp_generate_image` tool supports multiple providers:
 * **OpenAI** — gpt-image-1 (default), gpt-image-1.5, gpt-image-2, gpt-image-1-mini, DALL·E 3, DALL·E 2
 * **Google Gemini** — gemini-2.5-flash-image (default), gemini-3.1-flash-image-preview, gemini-3-pro-image-preview, Imagen 4
 
-Just ask your AI agent "Generate an image of..." or configure defaults in **StifLi Flex MCP → Multimedia Settings → Images**.
+Just ask your AI agent "Generate an image of..." or configure defaults in **Flex MCP → Multimedia Settings → Images**.
 
 = Can the AI search stock images too? =
 
@@ -354,7 +354,7 @@ The tool response includes both text JSON and structured output with fields such
 * `author`, `author_url`, `source_url`
 * image dimensions, license/metadata fields, and provider-specific fields like Unsplash `download_location`
 
-Configure everything in **StifLi Flex MCP → Multimedia Settings → Search Image**:
+Configure everything in **Flex MCP → Multimedia Settings → Search Image**:
 
 * Global enable/disable toggle for `wp_search_image`
 * Per-provider enable + API keys (Unsplash, Pexels, Pixabay)
@@ -369,21 +369,21 @@ Yes! The `wp_generate_video` tool supports:
 * **OpenAI Sora** — Text-to-video and image-to-video generation
 * **Google Veo** — Veo 2 and Veo 3 models
 
-Video generation runs asynchronously in the background. Configure providers and API keys in **StifLi Flex MCP → Multimedia Settings → Videos**.
+Video generation runs asynchronously in the background. Configure providers and API keys in **Flex MCP → Multimedia Settings → Videos**.
 
 = Where do I configure API keys for image/video generation? =
 
-Go to **StifLi Flex MCP → Multimedia Settings**. API keys are shared between the Images and Videos tabs — enter your OpenAI or Gemini key once and it works for both.
+Go to **Flex MCP → Multimedia Settings**. API keys are shared between the Images and Videos tabs — enter your OpenAI or Gemini key once and it works for both.
 
 = What are WordPress Abilities? =
 
-WordPress 6.9 introduced the Abilities API, letting plugins register standardized capabilities. If you have plugins that support Abilities, StifLi Flex MCP can auto-discover and import them from **MCP Server → Abilities** tab.
+WordPress 6.9 introduced the Abilities API, letting plugins register standardized capabilities. If you have plugins that support Abilities, Flex MCP can auto-discover and import them from **MCP Server → Abilities** tab.
 
 = How do I connect ChatGPT or Claude Desktop? =
 
 It takes less than a minute:
 
-1. Go to **StifLi Flex MCP → MCP Server** and copy the SSE URL
+1. Go to **Flex MCP → MCP Server** and copy the SSE URL
 2. Paste it in your AI client:
    * **Claude Desktop:** Customize → Connectors → Add custom connector
    * **ChatGPT:** Settings → Apps & Connectors → Advanced settings → Enable Developer mode → Create app → Paste the URL → Choose OAuth
@@ -451,6 +451,19 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.5.4 =
+* Branding: Renamed the user-facing plugin name from StifLi Flex MCP to Flex MCP across WordPress metadata, admin screens, MCP server identity, messages, and documentation; technical slugs and integration identifiers remain unchanged.
+* MCP: The `2025-11-25` initialize response now advertises the WordPress Site Icon through the protocol-standard `serverInfo.icons` structure and reports the plugin version on both direct and SSE transports; older negotiated protocol versions remain unchanged.
+* MCP: Unknown methods now return the standard JSON-RPC `-32601` code consistently across direct and legacy SSE flows, including task methods, preventing strict clients from treating probes as reconnect failures.
+* OAuth: Discovery now accepts RFC path-scoped metadata URLs for the MCP `sse` and `messages` resources, including WordPress installations hosted in subdirectories.
+* Compatibility: `mcp_ping`, `wp_get_posts`, and `wp_get_post` now advertise `outputSchema` and return matching `structuredContent` while preserving their legacy text output.
+* WooCommerce: Product and variation reads now include additive ISO 8601 lifecycle and sale-window dates plus stable catalog, tax, stock, and purchasing fields; subscription details are included only when supported by the product runtime.
+* WooCommerce: Coupon reads now include ISO 8601 dates and non-personal usage, amount, product, and category restrictions, while order reads expose additive ISO 8601 lifecycle aliases without removing existing date fields.
+* New: Added `cf7_list_forms` and `cf7_get_form` for Contact Form 7 form discovery and normalized field schemas.
+* New: Added optional `flamingo_get_submissions` sensitive reads with strict result caps and redaction of email, phone, IP, and secret fields; the tool is hidden when Flamingo storage is unavailable.
+* Reliability: Failed database schema upgrades now pause automatic retries for 24 hours to prevent repeated queries and log flooding on incompatible hosts; plugin reactivation clears the cooldown for an immediate retry.
+* Developer: Added 3.5.4 upgrade seeding and separate Contact Form 7 and Flamingo integration catalog entries.
+
 = 3.5.2 =
 * Reliability: Post meta, Yoast, Rank Math, ACF, and featured-image mutations now complete through the standard WordPress post-update lifecycle after effective metadata changes, refreshing modification dates, caches, and save listeners.
 * New: Added `yoast_get_schema` for resolved Yoast JSON-LD and enriched `yoast_get_meta` with stored/resolved values, social fallbacks, robots data, and explicit SEO/readability analysis status.
@@ -499,7 +512,7 @@ When using the MCP server with external AI clients (ChatGPT, Claude Desktop, Lib
 
 = 3.4.5 =
 * New: Added WP MCP Hub links and a free, open-source multi-site management message to the plugin documentation.
-* New: Added a dismissible WP MCP Hub notice and a persistent footer message across StifLi Flex MCP admin pages.
+* New: Added a dismissible WP MCP Hub notice and a persistent footer message across Flex MCP admin pages.
 
 = 3.4.4 =
 * New: Added `elementor_update_widget` to update Elementor widget settings by `element_id` with undo compatibility.

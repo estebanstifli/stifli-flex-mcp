@@ -144,6 +144,29 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 'catalog_tools' => array( 'wpforms_list_forms', 'wpforms_get_form', 'wpforms_get_entries', 'wpforms_get_entry' ),
             ),
             array(
+                'id' => 'contact_form_7_catalog',
+                'name' => 'Contact Form 7 Catalog',
+                'description' => 'Form tools for listing Contact Form 7 forms and reading normalized field schemas.',
+                'plugin_files' => array( 'contact-form-7/wp-contact-form-7.php' ),
+                'match_classes' => array( 'WPCF7_ContactForm' ),
+                'install_slug' => 'contact-form-7',
+                'match' => array(
+                    'tools' => array( 'cf7_list_forms', 'cf7_get_form' ),
+                ),
+                'catalog_tools' => array( 'cf7_list_forms', 'cf7_get_form' ),
+            ),
+            array(
+                'id' => 'flamingo_catalog',
+                'name' => 'Flamingo Catalog',
+                'description' => 'Sensitive read access to redacted Contact Form 7 submissions stored by Flamingo.',
+                'plugin_files' => array( 'flamingo/flamingo.php' ),
+                'install_slug' => 'flamingo',
+                'match' => array(
+                    'tools' => array( 'flamingo_get_submissions' ),
+                ),
+                'catalog_tools' => array( 'flamingo_get_submissions' ),
+            ),
+            array(
                 'id' => 'gravityforms_catalog',
                 'name' => 'Gravity Forms Catalog',
                 'description' => 'Form tools for listing Gravity Forms, reading entries, and updates.',

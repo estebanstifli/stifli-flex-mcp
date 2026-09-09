@@ -85,14 +85,14 @@ class StifliFlexMcp_OAuth_Server {
 		}
 		$path = ( '/' !== $path ) ? untrailingslashit( $path ) : $path;
 
-		if ( '/.well-known/oauth-protected-resource' === $path ) {
+		if ( $this->is_mcp_well_known_path( $path, '/.well-known/oauth-protected-resource' ) ) {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
 				stifli_flex_mcp_log( 'OAuth: Serving protected resource metadata' );
 			}
 			$this->serve_protected_resource_metadata();
 		}
 
-		if ( '/.well-known/oauth-authorization-server' === $path ) {
+		if ( $this->is_mcp_well_known_path( $path, '/.well-known/oauth-authorization-server' ) ) {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
 				stifli_flex_mcp_log( 'OAuth: Serving authorization server metadata (oauth-authorization-server)' );
 			}
@@ -103,7 +103,7 @@ class StifliFlexMcp_OAuth_Server {
 		// SDK tries: 1) /.well-known/oauth-authorization-server{path} (root, RFC 8414)
 		//            2) /.well-known/openid-configuration{path} (root, OIDC path)
 		//            3) {path}/.well-known/openid-configuration (this one reaches us!)
-		if ( '/.well-known/openid-configuration' === $path ) {
+		if ( $this->is_mcp_well_known_path( $path, '/.well-known/openid-configuration' ) ) {
 			if ( function_exists( 'stifli_flex_mcp_log' ) ) {
 				stifli_flex_mcp_log( 'OAuth: Serving authorization server metadata (openid-configuration fallback)' );
 			}
@@ -125,6 +125,32 @@ class StifliFlexMcp_OAuth_Server {
 				$this->show_authorize_page();
 			}
 		}
+	}
+
+	/**
+	 * Match root and RFC path-scoped discovery URLs for this MCP resource.
+	 *
+	 * @param string $path       Request path after removing the WordPress home path.
+	 * @param string $well_known Well-known endpoint path.
+	 * @return bool
+	 */
+	private function is_mcp_well_known_path( $path, $well_known ) {
+		if ( $well_known === $path ) {
+			return true;
+		}
+
+		foreach ( array( 'sse', 'messages' ) as $endpoint ) {
+			$resource_path = wp_parse_url( rest_url( $this->namespace . '/' . $endpoint ), PHP_URL_PATH );
+			$home_path = wp_parse_url( home_url(), PHP_URL_PATH );
+			if ( is_string( $resource_path ) && is_string( $home_path ) && '/' !== $home_path && 0 === strpos( $resource_path, $home_path . '/' ) ) {
+				$resource_path = substr( $resource_path, strlen( $home_path ) );
+			}
+			if ( is_string( $resource_path ) && $well_known . '/' . ltrim( $resource_path, '/' ) === $path ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

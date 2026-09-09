@@ -20,6 +20,9 @@ class StifliFlexMcp {
 
 	public function __construct() {
 		global $wpdb;
+		if ( defined( 'SFLMCP_VERSION' ) ) {
+			$this->serverVersion = SFLMCP_VERSION;
+		}
 		if (isset($wpdb->prefix)) {
 			$this->queueTable = StifliFlexMcpUtils::getPrefixedTable('sflmcp_queue', false);
 		}
@@ -388,6 +391,31 @@ class StifliFlexMcp {
 			return $requestedVersion;
 		}
 		return $this->protocolVersion;
+	}
+
+	private function getServerInfo( string $protocolVersion ) {
+		$serverInfo = array(
+			'name' => get_bloginfo('name') . ' Flex MCP',
+			'version' => $this->serverVersion,
+		);
+
+		if ( '2025-11-25' === $protocolVersion && function_exists( 'get_site_icon_url' ) ) {
+			$iconUrl = get_site_icon_url( 512 );
+			if ( $iconUrl ) {
+				$icon = array(
+					'src' => esc_url_raw( $iconUrl ),
+					'sizes' => array( '512x512' ),
+				);
+				$iconId = function_exists( 'get_option' ) ? absint( get_option( 'site_icon', 0 ) ) : 0;
+				$mimeType = $iconId ? get_post_mime_type( $iconId ) : '';
+				if ( is_string( $mimeType ) && '' !== $mimeType ) {
+					$icon['mimeType'] = $mimeType;
+				}
+				$serverInfo['icons'] = array( $icon );
+			}
+		}
+
+		return (object) $serverInfo;
 	}
 
 	private function getProtocolVersionHeader( $request ) {
@@ -1251,10 +1279,7 @@ class StifliFlexMcp {
 						'id' => $id,
 						'result' => array(
 							'protocolVersion' => $replyProtocolVersion,
-							'serverInfo' => (object) array(
-								'name' => get_bloginfo('name') . ' StifliFlexMcp',
-								'version' => $this->serverVersion,
-							),
+							'serverInfo' => $this->getServerInfo( $replyProtocolVersion ),
 							'capabilities' => array(
 								'tools' => array('listChanged' => true),
 								'prompts' => array('subscribe' => false, 'listChanged' => false),
@@ -1326,7 +1351,7 @@ class StifliFlexMcp {
 					$reply = array(
 						'jsonrpc' => '2.0',
 						'id' => $id,
-						'error' => array('code' => -44001, 'message' => "Method not found: {$method}"),
+						'error' => array('code' => -32601, 'message' => "Method not found: {$method}"),
 					);
 			}
 			$this->traceMcpRequest('direct-rpc/reply', array(
@@ -1473,10 +1498,7 @@ class StifliFlexMcp {
 						'id' => $id,
 						'result' => array(
 							'protocolVersion' => $replyProtocolVersion,
-							'serverInfo' => (object) array(
-								'name' => get_bloginfo( 'name' ) . ' StifliFlexMcp',
-								'version' => $this->serverVersion,
-							),
+							'serverInfo' => $this->getServerInfo( $replyProtocolVersion ),
 							'capabilities' => array(
 								'tools' => array('listChanged' => true),
 								'prompts' => array('subscribe' => false, 'listChanged' => false),
@@ -1539,7 +1561,7 @@ class StifliFlexMcp {
 					$reply = $this->handleTasksMethod($method, $params, $id);
 					break;
 				default:
-					$reply = $this->rpcError($id, -45601, "Method not found: {$method}");
+					$reply = $this->rpcError($id, -32601, "Method not found: {$method}");
 			}
 			if ($reply) {
 				$this->traceMcpRequest('messages/reply', array(
@@ -2427,8 +2449,8 @@ class StifliFlexMcp {
 	public function registerAdmin() {
 		$top_level_callback = stifli_flex_mcp_addon_enabled( 'ai_chat' ) ? '__return_null' : array($this, 'adminPage');
 		add_menu_page(
-			__('StifLi Flex MCP', 'stifli-flex-mcp'),
-			__('StifLi Flex MCP', 'stifli-flex-mcp'),
+			__('Flex MCP', 'stifli-flex-mcp'),
+			__('Flex MCP', 'stifli-flex-mcp'),
 			'manage_options',
 			'stifli-flex-mcp',
 			$top_level_callback,
@@ -3030,7 +3052,7 @@ class StifliFlexMcp {
 	}
 
 	/**
-	 * Show a promotional banner for WP MCP Hub across StifLi Flex MCP admin pages.
+	 * Show a promotional banner for WP MCP Hub across Flex MCP admin pages.
 	 */
 	public function renderWpMcpHubPromoNotice() {
 		if (!current_user_can('manage_options')) {
@@ -3147,7 +3169,7 @@ class StifliFlexMcp {
 	}
 
 	/**
-	 * Detect whether the current admin page belongs to StifLi Flex MCP.
+	 * Detect whether the current admin page belongs to Flex MCP.
 	 *
 	 * @return bool
 	 */
@@ -4649,7 +4671,7 @@ class StifliFlexMcp {
 		$test_args = array(
 			'test' => true,
 			'timestamp' => time(),
-			'source' => 'StifLi Flex MCP Test'
+			'source' => 'Flex MCP Test'
 		);
 		
 		$args = array(
@@ -7047,7 +7069,7 @@ class StifliFlexMcp {
 		?>
 		
 		<div class="sflmcp-help">
-			<h1>📚 <?php esc_html_e('StifLi Flex MCP - Complete Guide', 'stifli-flex-mcp'); ?></h1>
+			<h1>📚 <?php esc_html_e('Flex MCP - Complete Guide', 'stifli-flex-mcp'); ?></h1>
 			
 			<div class="card toc">
 				<h3>📑 <?php esc_html_e('Table of Contents', 'stifli-flex-mcp'); ?></h3>
@@ -7063,7 +7085,7 @@ class StifliFlexMcp {
 
 			<!-- SECTION: Overview -->
 			<h2 id="overview">🎯 <?php esc_html_e('What is MCP (Model Context Protocol)?', 'stifli-flex-mcp'); ?></h2>
-			<p><?php esc_html_e('MCP is an open standard that allows AI assistants (like ChatGPT, Claude, LibreChat) to interact with external tools and services. StifLi Flex MCP transforms your WordPress site into an MCP server, giving AI the ability to:', 'stifli-flex-mcp'); ?></p>
+			<p><?php esc_html_e('MCP is an open standard that allows AI assistants (like ChatGPT, Claude, LibreChat) to interact with external tools and services. Flex MCP transforms your WordPress site into an MCP server, giving AI the ability to:', 'stifli-flex-mcp'); ?></p>
 			<ul>
 				<li>✅ <?php esc_html_e('Create, edit, and delete posts, pages, and custom content', 'stifli-flex-mcp'); ?></li>
 				<li>✅ <?php esc_html_e('Manage WooCommerce products, orders, and customers', 'stifli-flex-mcp'); ?></li>
@@ -7149,7 +7171,7 @@ X-Custom-Header: value</code></pre>
 
 			<hr class="sflmcp-help-separator">
 			<p class="sflmcp-help-footer">
-				<strong>StifLi Flex MCP</strong> - 
+				<strong>Flex MCP</strong> -
 				<a href="https://github.com/estebanstifli/stifli-flex-mcp" target="_blank">GitHub</a> | 
 				<a href="https://wordpress.org/plugins/stifli-flex-mcp/" target="_blank">WordPress.org</a>
 			</p>

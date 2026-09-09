@@ -160,8 +160,8 @@ class StifliFlexMcp_Addons {
 	public static function register_onboarding_page() {
 		add_submenu_page(
 			null,
-			__( 'Set up StifLi Flex MCP', 'stifli-flex-mcp' ),
-			__( 'Set up StifLi Flex MCP', 'stifli-flex-mcp' ),
+			__( 'Set up Flex MCP', 'stifli-flex-mcp' ),
+			__( 'Set up Flex MCP', 'stifli-flex-mcp' ),
 			'manage_options',
 			'sflmcp-setup',
 			array( __CLASS__, 'render_onboarding_page' )
@@ -223,7 +223,7 @@ class StifliFlexMcp_Addons {
 		}
 		?>
 		<div class="wrap sflmcp-addon-setup">
-			<h1><?php esc_html_e( 'Choose your StifLi Flex MCP layers', 'stifli-flex-mcp' ); ?></h1>
+			<h1><?php esc_html_e( 'Choose your Flex MCP layers', 'stifli-flex-mcp' ); ?></h1>
 			<p class="description"><?php esc_html_e( 'Only selected addons will load their PHP classes, hooks, menus, and background jobs. You can change this later in MCP Server settings.', 'stifli-flex-mcp' ); ?></p>
 			<?php self::render_selector( true ); ?>
 		</div>
