@@ -76,6 +76,8 @@ class StifliFlexMcp_Elementor {
                         'replace' => array( 'type' => 'string', 'description' => 'Replacement text.' ),
                         'case_insensitive' => array( 'type' => 'boolean', 'description' => 'Default false.' ),
                         'dry_run' => array( 'type' => 'boolean', 'description' => 'Preview changes without writing _elementor_data.' ),
+						'expected_count' => array( 'type' => 'integer', 'minimum' => 0, 'description' => 'Optional guard. Nothing is saved unless the actual replacement count matches.' ),
+						'sync_media_library' => array( 'type' => 'boolean', 'description' => 'Synchronize changed image alt, title, and caption values to referenced media attachments.' ),
                     ),
                     'required' => array( 'post_id', 'find', 'replace' ),
                 ),
@@ -173,6 +175,39 @@ class StifliFlexMcp_Elementor {
                     'required' => array( 'title', 'template_json' ),
                 ),
             ),
+            'elementor_apply_template_to_page' => array(
+                'name' => 'elementor_apply_template_to_page',
+                'description' => 'Apply a local Elementor Library template to an editable post. Replace or append mode regenerates element IDs and is undoable.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'post_id' => array( 'type' => 'integer' ),
+                        'template_id' => array( 'type' => 'integer' ),
+                        'mode' => array( 'type' => 'string', 'enum' => array( 'replace', 'append' ), 'description' => 'Defaults to replace.' ),
+                    ),
+                    'required' => array( 'post_id', 'template_id' ),
+                ),
+            ),
+            'elementor_repair_render' => array(
+                'name' => 'elementor_repair_render',
+                'description' => 'Repair one Elementor document by validating and re-saving its existing tree, restoring builder metadata, searchable fallback content, and caches.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array( 'post_id' => array( 'type' => 'integer' ) ),
+                    'required' => array( 'post_id' ),
+                ),
+            ),
+            'elementor_repair_render_bulk' => array(
+                'name' => 'elementor_repair_render_bulk',
+                'description' => 'Repair up to 50 Elementor documents with valid existing data and return per-post outcomes.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'post_ids' => array( 'type' => 'array', 'items' => array( 'type' => 'integer' ), 'maxItems' => 50 ),
+                    ),
+                    'required' => array( 'post_ids' ),
+                ),
+            ),
             'elementor_export_template' => array(
                 'name' => 'elementor_export_template',
                 'description' => 'Export an Elementor local template as JSON compatible with Elementor import flow.',
@@ -237,6 +272,9 @@ class StifliFlexMcp_Elementor {
             'elementor_update_widget' => 'edit_posts',
             'elementor_list_local_templates' => 'edit_posts',
             'elementor_import_template' => 'edit_posts',
+            'elementor_apply_template_to_page' => 'edit_posts',
+            'elementor_repair_render' => 'edit_posts',
+            'elementor_repair_render_bulk' => 'edit_posts',
             'elementor_export_template' => 'edit_posts',
             'elementor_add_widget' => 'edit_posts',
         );
@@ -257,6 +295,12 @@ class StifliFlexMcp_Elementor {
 
         if ( 'elementor_import_template' === $tool ) {
             return self::build_post_snapshot( 'create', self::TEMPLATE_POST_TYPE, 0 );
+        }
+
+        if ( in_array( $tool, array( 'elementor_apply_template_to_page', 'elementor_repair_render' ), true ) ) {
+            $post_id = self::sanitize_positive_int( self::array_value( $args, 'post_id', 0 ) );
+            $post = $post_id > 0 ? get_post( $post_id ) : null;
+            return self::build_post_snapshot( 'update', $post ? $post->post_type : 'post', $post_id );
         }
 
         if ( in_array( $tool, array( 'elementor_replace_text', 'elementor_replace_image', 'elementor_replace_link', 'elementor_add_widget', 'elementor_update_widget' ), true ) ) {
@@ -308,6 +352,15 @@ class StifliFlexMcp_Elementor {
                     break;
                 case 'elementor_import_template':
                     $payload = self::import_template( $args );
+                    break;
+                case 'elementor_apply_template_to_page':
+                    $payload = self::apply_template_to_page( $args );
+                    break;
+                case 'elementor_repair_render':
+                    $payload = self::repair_render( $args );
+                    break;
+                case 'elementor_repair_render_bulk':
+                    $payload = self::repair_render_bulk( $args );
                     break;
                 case 'elementor_export_template':
                     $payload = self::export_template( $args );
@@ -361,6 +414,7 @@ class StifliFlexMcp_Elementor {
                 'post_author' => get_current_user_id() ? get_current_user_id() : $source->post_author,
                 'post_parent' => 0,
                 'menu_order' => 0,
+				'post_content' => wp_slash( self::build_searchable_post_content( $regenerated ) ),
             ),
             true
         );
@@ -392,6 +446,9 @@ class StifliFlexMcp_Elementor {
         $replace = (string) self::array_value( $args, 'replace', '' );
         $case_insensitive = self::is_truthy( self::array_value( $args, 'case_insensitive', false ) );
         $dry_run = self::is_truthy( self::array_value( $args, 'dry_run', false ) );
+        $has_expected_count = array_key_exists( 'expected_count', $args );
+        $expected_count = $has_expected_count ? self::sanitize_positive_int( $args['expected_count'] ) : null;
+        $sync_media_library = self::is_truthy( self::array_value( $args, 'sync_media_library', false ) );
 
         if ( '' === $find ) {
             throw new Exception( 'find is required.' );
@@ -400,9 +457,18 @@ class StifliFlexMcp_Elementor {
         $tree = self::get_elementor_tree( $post_id, 'Target post' );
         $counter = array( 'count' => 0 );
         $updated = self::walk_widgets_text( $tree, $find, $replace, $case_insensitive, $counter );
+        if ( $has_expected_count && $counter['count'] !== $expected_count ) {
+            throw new Exception( 'Expected ' . $expected_count . ' text replacements but found ' . $counter['count'] . '; no changes were saved.' );
+        }
 
+        $synced_attachments = 0;
+        $media_undo_change_ids = array();
         if ( ! $dry_run && $counter['count'] > 0 ) {
             self::save_elementor_tree( $post_id, $updated );
+            if ( $sync_media_library ) {
+                $visited_attachments = array();
+                $synced_attachments = self::sync_image_metadata_to_library( $updated, $visited_attachments, $media_undo_change_ids );
+            }
             self::clear_elementor_cache( $post_id );
         }
 
@@ -413,6 +479,8 @@ class StifliFlexMcp_Elementor {
             'dry_run' => $dry_run,
             'find' => $find,
             'replace' => $replace,
+			'media_attachments_synced' => $synced_attachments,
+            'media_undo_change_ids' => $media_undo_change_ids,
         );
         if ( 1 === preg_match( '/\\\\(?:n|r|t|["\'\\\\])/', $replace ) ) {
             $payload['warnings'] = array( 'Replacement text contains literal escape sequences such as \\n, \\t, or escaped quotes. Verify that literal backslashes are intended.' );
@@ -422,8 +490,12 @@ class StifliFlexMcp_Elementor {
 
     private static function replace_image( $args ) {
         $post_id = self::require_editable_elementor_post( $args );
-        $old_url = esc_url_raw( (string) self::array_value( $args, 'old_url', '' ) );
-        $new_url = esc_url_raw( (string) self::array_value( $args, 'new_url', '' ) );
+        $old_url = StifliFlexMcpUtils::prepareStrictWriteUrl( self::array_value( $args, 'old_url', '' ), 'old_url' );
+        $new_url = StifliFlexMcpUtils::prepareStrictWriteUrl( self::array_value( $args, 'new_url', '' ), 'new_url' );
+        if ( is_wp_error( $old_url ) || is_wp_error( $new_url ) ) {
+            $error = is_wp_error( $old_url ) ? $old_url : $new_url;
+            throw new Exception( $error->get_error_message() );
+        }
         $old_id = self::sanitize_positive_int( self::array_value( $args, 'old_id', 0 ) );
         $new_id = self::sanitize_positive_int( self::array_value( $args, 'new_id', 0 ) );
         $dry_run = self::is_truthy( self::array_value( $args, 'dry_run', false ) );
@@ -453,8 +525,12 @@ class StifliFlexMcp_Elementor {
 
     private static function replace_link( $args ) {
         $post_id = self::require_editable_elementor_post( $args );
-        $old_url = esc_url_raw( (string) self::array_value( $args, 'old_url', '' ) );
-        $new_url = esc_url_raw( (string) self::array_value( $args, 'new_url', '' ) );
+        $old_url = StifliFlexMcpUtils::prepareStrictWriteUrl( self::array_value( $args, 'old_url', '' ), 'old_url' );
+        $new_url = StifliFlexMcpUtils::prepareStrictWriteUrl( self::array_value( $args, 'new_url', '' ), 'new_url' );
+        if ( is_wp_error( $old_url ) || is_wp_error( $new_url ) ) {
+            $error = is_wp_error( $old_url ) ? $old_url : $new_url;
+            throw new Exception( $error->get_error_message() );
+        }
         $dry_run = self::is_truthy( self::array_value( $args, 'dry_run', false ) );
 
         if ( '' === $old_url || '' === $new_url ) {
@@ -725,6 +801,108 @@ class StifliFlexMcp_Elementor {
             'title' => $title,
             'template_type' => $template_type,
             'edit_url' => admin_url( 'post.php?post=' . (int) $new_id . '&action=elementor' ),
+        );
+    }
+
+    private static function apply_template_to_page( $args ) {
+        $post_id = self::sanitize_positive_int( self::array_value( $args, 'post_id', 0 ) );
+        $template_id = self::sanitize_positive_int( self::array_value( $args, 'template_id', 0 ) );
+        $mode = sanitize_key( (string) self::array_value( $args, 'mode', 'replace' ) );
+        $target_post = $post_id > 0 ? get_post( $post_id ) : null;
+        if ( ! $target_post || ! current_user_can( 'edit_post', $post_id ) ) {
+            throw new Exception( 'An editable post_id is required.' );
+        }
+        if ( $template_id <= 0 || ! current_user_can( 'edit_post', $template_id ) ) {
+            throw new Exception( 'A readable template_id is required.' );
+        }
+        $template = get_post( $template_id );
+        if ( ! $template || self::TEMPLATE_POST_TYPE !== $template->post_type ) {
+            throw new Exception( 'Template not found in Elementor Library.' );
+        }
+        if ( ! in_array( $mode, array( 'replace', 'append' ), true ) ) {
+            $mode = 'replace';
+        }
+
+        $current_raw = get_post_meta( $post_id, '_elementor_data', true );
+        $current_tree = array();
+        if ( '' !== $current_raw && null !== $current_raw && false !== $current_raw ) {
+            $current_tree = is_string( $current_raw ) ? json_decode( $current_raw, true ) : $current_raw;
+            if ( ! is_array( $current_tree ) ) {
+                throw new Exception( 'Target _elementor_data is invalid; no template was applied.' );
+            }
+        }
+        $template_tree = self::regenerate_element_ids( self::get_elementor_tree( $template_id, 'Template' ) );
+        $next_tree = 'append' === $mode ? array_merge( $current_tree, $template_tree ) : $template_tree;
+        self::save_elementor_tree( $post_id, $next_tree );
+        self::ensure_builder_meta( $post_id, $target_post->post_type );
+        if ( 'replace' === $mode ) {
+            $page_settings = get_post_meta( $template_id, '_elementor_page_settings', true );
+            if ( is_array( $page_settings ) ) {
+                update_post_meta( $post_id, '_elementor_page_settings', $page_settings );
+            }
+        }
+        self::update_searchable_post_content( $post_id, $next_tree, true );
+        self::clear_elementor_cache( $post_id );
+
+        return array(
+            'success' => true,
+            'post_id' => $post_id,
+            'template_id' => $template_id,
+            'mode' => $mode,
+            'element_count' => count( $next_tree ),
+            'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+        );
+    }
+
+    private static function repair_render( $args ) {
+        $post_id = self::require_editable_elementor_post( $args );
+        $tree = self::get_elementor_tree( $post_id, 'Target post' );
+        if ( ! self::looks_like_elementor_elements( $tree ) ) {
+            throw new Exception( 'Existing _elementor_data is not a valid Elementor elements array; no repair was attempted.' );
+        }
+
+        $post = get_post( $post_id );
+        self::save_elementor_tree( $post_id, $tree );
+        self::ensure_builder_meta( $post_id, $post ? $post->post_type : 'page' );
+        self::update_searchable_post_content( $post_id, $tree, false );
+        delete_post_meta( $post_id, '_elementor_css' );
+        self::clear_elementor_cache( $post_id );
+
+        return array(
+            'success' => true,
+            'post_id' => $post_id,
+            'element_count' => count( $tree ),
+            'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=elementor' ),
+        );
+    }
+
+    private static function repair_render_bulk( $args ) {
+        $post_ids = self::array_value( $args, 'post_ids', array() );
+        if ( ! is_array( $post_ids ) || empty( $post_ids ) ) {
+            throw new Exception( 'post_ids must contain at least one post ID.' );
+        }
+        $post_ids = array_slice( array_values( array_unique( array_map( 'absint', $post_ids ) ) ), 0, 50 );
+        $results = array();
+        foreach ( $post_ids as $post_id ) {
+            try {
+                $post = get_post( $post_id );
+                $snapshot = self::build_post_snapshot( 'update', $post ? $post->post_type : 'post', $post_id );
+                $item = self::repair_render( array( 'post_id' => $post_id ) );
+                $change_id = self::record_object_change( 'elementor_repair_render', array( 'post_id' => $post_id ), $snapshot, $item );
+                if ( $change_id ) {
+                    $item['undo_change_id'] = $change_id;
+                }
+                $results[] = $item;
+            } catch ( Exception $e ) {
+                $results[] = array( 'success' => false, 'post_id' => $post_id, 'message' => $e->getMessage() );
+            }
+        }
+        $success_count = count( array_filter( $results, function( $item ) { return ! empty( $item['success'] ); } ) );
+        return array(
+            'success' => $success_count === count( $results ),
+            'processed' => count( $results ),
+            'repaired' => $success_count,
+            'results' => $results,
         );
     }
 
@@ -1444,6 +1622,13 @@ class StifliFlexMcp_Elementor {
                             $element['settings'][ $field ] = self::replace_text_value( $element['settings'][ $field ], $find, $replace, $case_insensitive, $counter );
                         }
                     }
+                    if ( in_array( $widget_type, array( 'image', 'image-box' ), true ) && isset( $element['settings']['image'] ) && is_array( $element['settings']['image'] ) ) {
+                        foreach ( array( 'alt', 'title', 'caption' ) as $media_field ) {
+                            if ( array_key_exists( $media_field, $element['settings']['image'] ) ) {
+                                $element['settings']['image'][ $media_field ] = self::replace_text_value( $element['settings']['image'][ $media_field ], $find, $replace, $case_insensitive, $counter );
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1455,6 +1640,117 @@ class StifliFlexMcp_Elementor {
         }
 
         return $out;
+    }
+
+    private static function build_searchable_post_content( $elements ) {
+        $values = array();
+        self::collect_searchable_values( $elements, $values );
+        $values = array_values( array_unique( array_filter( array_map( 'trim', $values ) ) ) );
+        return wp_kses_post( implode( "\n\n", $values ) );
+    }
+
+    private static function collect_searchable_values( $elements, &$values ) {
+        $text_keys = array(
+            'title', 'title_text', 'heading', 'sub_heading', 'editor', 'text', 'description',
+            'description_text', 'caption', 'alt', 'testimonial_content', 'testimonial_name',
+            'testimonial_job', 'button_text', 'footer_additional_info',
+        );
+        foreach ( is_array( $elements ) ? $elements : array() as $element ) {
+            if ( ! is_array( $element ) ) {
+                continue;
+            }
+            $settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+            foreach ( $text_keys as $key ) {
+                if ( isset( $settings[ $key ] ) && is_scalar( $settings[ $key ] ) ) {
+                    $text = trim( wp_strip_all_tags( (string) $settings[ $key ] ) );
+                    if ( '' !== $text ) {
+                        $values[] = $text;
+                    }
+                }
+            }
+            if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+                self::collect_searchable_values( $element['elements'], $values );
+            }
+        }
+    }
+
+    private static function update_searchable_post_content( $post_id, $tree, $force ) {
+        $post = get_post( $post_id );
+        if ( ! $post || ( ! $force && '' !== trim( (string) $post->post_content ) ) ) {
+            return;
+        }
+        $content = self::build_searchable_post_content( $tree );
+        if ( '' === $content ) {
+            return;
+        }
+        $result = wp_update_post( array( 'ID' => $post_id, 'post_content' => wp_slash( $content ) ), true );
+        if ( is_wp_error( $result ) ) {
+            throw new Exception( $result->get_error_message() );
+        }
+    }
+
+    private static function sync_image_metadata_to_library( $elements, &$visited, &$change_ids ) {
+        $synced = 0;
+        foreach ( is_array( $elements ) ? $elements : array() as $element ) {
+            if ( ! is_array( $element ) ) {
+                continue;
+            }
+            $settings = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+            $image = isset( $settings['image'] ) && is_array( $settings['image'] ) ? $settings['image'] : array();
+            $attachment_id = isset( $image['id'] ) ? absint( $image['id'] ) : 0;
+            if ( $attachment_id > 0 && ! isset( $visited[ $attachment_id ] ) && 'attachment' === get_post_type( $attachment_id ) && current_user_can( 'edit_post', $attachment_id ) ) {
+                $visited[ $attachment_id ] = true;
+                $snapshot = self::build_post_snapshot( 'update', 'attachment', $attachment_id );
+                $changed = false;
+                $attachment_update = array( 'ID' => $attachment_id );
+                $title = isset( $image['title'] ) ? $image['title'] : null;
+                $caption = isset( $image['caption'] ) ? $image['caption'] : self::array_value( $settings, 'caption', null );
+                if ( is_string( $title ) ) {
+                    $attachment_update['post_title'] = sanitize_text_field( $title );
+                }
+                if ( is_string( $caption ) ) {
+                    $attachment_update['post_excerpt'] = wp_kses_post( $caption );
+                }
+                if ( count( $attachment_update ) > 1 ) {
+                    $attachment_result = wp_update_post( $attachment_update, true );
+                    $changed = ! is_wp_error( $attachment_result );
+                }
+                $alt = isset( $image['alt'] ) ? $image['alt'] : self::array_value( $settings, 'alt', null );
+                if ( is_string( $alt ) ) {
+                    update_post_meta( $attachment_id, '_wp_attachment_image_alt', sanitize_text_field( $alt ) );
+                    $changed = true;
+                }
+                if ( $changed ) {
+                    $synced++;
+                    $change_id = self::record_object_change(
+                        'elementor_sync_media_metadata',
+                        array( 'post_id' => $attachment_id ),
+                        $snapshot,
+                        array( 'success' => true, 'post_id' => $attachment_id )
+                    );
+                    if ( $change_id ) {
+                        $change_ids[] = $change_id;
+                    }
+                }
+            }
+            if ( isset( $element['elements'] ) && is_array( $element['elements'] ) ) {
+                $synced += self::sync_image_metadata_to_library( $element['elements'], $visited, $change_ids );
+            }
+        }
+        return $synced;
+    }
+
+    private static function record_object_change( $tool, $args, $snapshot, $payload ) {
+        if ( ! class_exists( 'StifliFlexMcp_ChangeTracker' ) || ! is_array( $snapshot ) || empty( $snapshot['before_state'] ) ) {
+            return 0;
+        }
+        $result = array(
+            'result' => array(
+                'content' => array( array( 'type' => 'text', 'text' => wp_json_encode( $payload ) ) ),
+                'structuredContent' => $payload,
+            ),
+        );
+        return (int) StifliFlexMcp_ChangeTracker::getInstance()->recordChange( $tool, $args, $snapshot, $result );
     }
 
     private static function replace_text_value( $value, $find, $replace, $case_insensitive, &$counter ) {

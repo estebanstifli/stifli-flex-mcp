@@ -234,6 +234,18 @@ class StifliFlexMcp_ChangeTracker {
 		if ( 'wp_create_preview_link' === $tool ) {
 			return null;
 		}
+		if ( 'wp_update_permalink_structure' === $tool ) {
+			return array(
+				'operation_type' => 'update',
+				'object_type' => 'option',
+				'object_id' => 'permalink_structure',
+				'object_subtype' => 'wp_options',
+				'before_state' => array(
+					'option_name' => 'permalink_structure',
+					'option_value' => get_option( 'permalink_structure', '' ),
+				),
+			);
+		}
 
 		// Check known tools first
 		if ( isset( self::$tracked_tools[ $tool ] ) ) {
@@ -1233,7 +1245,17 @@ class StifliFlexMcp_ChangeTracker {
 
 			case 'option':
 				if ( isset( $before['option_name'], $before['option_value'] ) ) {
-					update_option( $before['option_name'], $before['option_value'] );
+					if ( 'permalink_structure' === $before['option_name'] ) {
+						global $wp_rewrite;
+						if ( is_object( $wp_rewrite ) && method_exists( $wp_rewrite, 'set_permalink_structure' ) ) {
+							$wp_rewrite->set_permalink_structure( (string) $before['option_value'] );
+						} else {
+							update_option( $before['option_name'], $before['option_value'] );
+						}
+						flush_rewrite_rules( false );
+					} else {
+						update_option( $before['option_name'], $before['option_value'] );
+					}
 					return array( 'success' => true, 'message' => "Restored option '{$before['option_name']}'." );
 				}
 				return array( 'success' => false, 'message' => 'Incomplete option before-state.' );
@@ -1562,7 +1584,17 @@ class StifliFlexMcp_ChangeTracker {
 
 			case 'option':
 				if ( isset( $state['option_name'], $state['option_value'] ) ) {
-					update_option( $state['option_name'], $state['option_value'] );
+					if ( 'permalink_structure' === $state['option_name'] ) {
+						global $wp_rewrite;
+						if ( is_object( $wp_rewrite ) && method_exists( $wp_rewrite, 'set_permalink_structure' ) ) {
+							$wp_rewrite->set_permalink_structure( (string) $state['option_value'] );
+						} else {
+							update_option( $state['option_name'], $state['option_value'] );
+						}
+						flush_rewrite_rules( false );
+					} else {
+						update_option( $state['option_name'], $state['option_value'] );
+					}
 					return array( 'success' => true, 'message' => "Re-applied option '{$state['option_name']}'." );
 				}
 				break;

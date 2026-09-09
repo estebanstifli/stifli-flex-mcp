@@ -44,6 +44,7 @@ class StifliFlexMcpUtils {
 		}
 
 		$is_object_schema = 'object' === $schema['type'] || ( is_array( $schema['type'] ) && in_array( 'object', $schema['type'], true ) ) || ! isset( $schema['type'] );
+		$is_array_schema = 'array' === $schema['type'] || ( is_array( $schema['type'] ) && in_array( 'array', $schema['type'], true ) );
 
 		if ( $is_object_schema ) {
 			if ( isset( $schema['required'] ) && ! is_array( $schema['required'] ) ) {
@@ -93,8 +94,16 @@ class StifliFlexMcpUtils {
 			unset( $schema['required'] );
 		}
 
-		if ( isset( $schema['items'] ) && is_array( $schema['items'] ) ) {
-			$schema['items'] = self::normalizeToolInputSchema( $schema['items'] );
+		if ( $is_array_schema ) {
+			if ( ! isset( $schema['items'] ) || ( ! is_array( $schema['items'] ) && ! is_object( $schema['items'] ) ) ) {
+				$schema['items'] = new stdClass();
+			} elseif ( is_array( $schema['items'] ) ) {
+				$schema['items'] = self::normalizeToolInputSchema( $schema['items'] );
+			}
+		}
+
+		if ( isset( $schema['additionalProperties'] ) && is_array( $schema['additionalProperties'] ) ) {
+			$schema['additionalProperties'] = self::normalizeToolInputSchema( $schema['additionalProperties'] );
 		}
 
 		foreach ( array( 'oneOf', 'anyOf', 'allOf' ) as $compound_key ) {
@@ -191,6 +200,20 @@ class StifliFlexMcpUtils {
 		}
 		$utf8 = wp_check_invalid_utf8($value);
 		return is_string($utf8) ? $utf8 : '';
+	}
+	public static function prepareStrictWriteUrl( $value, $field_name = 'url' ) {
+		if ( ! is_string( $value ) ) {
+			return new WP_Error( 'invalid_url_input', $field_name . ' must be a string.' );
+		}
+		$utf8 = self::sanitizeJsonString( $value );
+		$sanitized = esc_url_raw( $utf8 );
+		if ( '' === $sanitized ) {
+			return new WP_Error( 'invalid_url_input', $field_name . ' must be a valid URL.' );
+		}
+		if ( $sanitized !== $value ) {
+			return new WP_Error( 'input_fidelity_failed', $field_name . ' would be altered by URL sanitization; no changes were saved.' );
+		}
+		return $sanitized;
 	}
 	public static function sanitizeCheckboxMap($values) {
 		if (!is_array($values)) {

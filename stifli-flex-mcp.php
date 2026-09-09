@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.5.0
+Version: 3.5.1
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -1109,6 +1109,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_get_option', 'Get a WordPress option by key.', 'WordPress - Options', 1),
 		array('wp_get_plugin_settings', 'Safely inspect plugin-related wp_options by plugin_slug/prefixes with recursive secret redaction.', 'WordPress - Options', 1),
 		array('wp_update_option', 'Update a WordPress option.', 'WordPress - Options', 1),
+		array('wp_update_permalink_structure', 'Update the permalink structure while preserving native WordPress tokens.', 'WordPress - Settings', 1),
 		array('wp_get_post_meta', 'Get post meta by post_id and meta_key.', 'WordPress - Meta', 1),
 		array('wp_add_post_meta', 'Add post meta without overwriting existing rows.', 'WordPress - Meta', 1),
 		array('wp_update_post_meta', 'Update post meta.', 'WordPress - Meta', 1),
@@ -1390,7 +1391,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.09.09.1' );
+	define( 'SFLMCP_DB_VERSION', '2026.09.09.2' );
 }
 
 /**
@@ -1425,6 +1426,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_338_seed_css_tools();
 	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
+	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	stifli_flex_mcp_upgrade_retire_custom_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
@@ -2270,6 +2272,80 @@ function stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools() {
 						array( '%d', '%s' )
 					);
 				}
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.5.1): add builder workflow and permalink fidelity tools.
+ */
+function stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_351_seed_builder_fidelity_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'wp_update_permalink_structure', 'Update the permalink structure while preserving native WordPress tokens.', 'WordPress - Settings', 1 ),
+		array( 'elementor_apply_template_to_page', 'Apply a local Elementor template to a page in replace or append mode.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_repair_render', 'Repair one Elementor document with valid existing builder data.', 'Plugins - Elementor', 1 ),
+		array( 'elementor_repair_render_bulk', 'Repair up to 50 Elementor documents with valid existing builder data.', 'Plugins - Elementor', 1 ),
+		array( 'divi_clone_page', 'Clone a Divi page or post while preserving builder content and metadata.', 'Plugins - Divi', 1 ),
+		array( 'divi_replace_image', 'Replace an exact image URL in Divi content with dry-run and count guard.', 'Plugins - Divi', 1 ),
+		array( 'divi_apply_library_template', 'Apply a validated local Divi Library layout to a page or post.', 'Plugins - Divi', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( ! $exists ) {
+			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	if ( stifli_flex_mcp_table_exists( $profiles_table ) && stifli_flex_mcp_table_exists( $profile_tools_table ) ) {
+		$profile_id = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+				'WordPress Full Management'
+			)
+		);
+		if ( $profile_id ) {
+			$exists = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+					(int) $profile_id,
+					'wp_update_permalink_structure'
+				)
+			);
+			if ( ! $exists ) {
+				$wpdb->insert(
+					$profile_tools_table,
+					array( 'profile_id' => (int) $profile_id, 'tool_name' => 'wp_update_permalink_structure' ),
+					array( '%d', '%s' )
+				);
 			}
 		}
 	}
@@ -4399,6 +4475,7 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_upgrade_wave1_tools();
 	stifli_flex_mcp_upgrade_349_seed_order_detail_tool();
 	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
+	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
@@ -4575,6 +4652,7 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_upgrade_wave1_tools();
 	stifli_flex_mcp_upgrade_349_seed_order_detail_tool();
 	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
+	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_rankmath_profile_detach();
 	stifli_flex_mcp_apply_plugin_integration_overrides();

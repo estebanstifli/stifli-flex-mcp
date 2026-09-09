@@ -264,6 +264,7 @@ class StifliFlexMcpModel {
             'wp_generate_video',
             // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
             'wp_update_option',
+			'wp_update_permalink_structure',
             'wp_css_set_global',
             'wp_css_set_scoped',
             'wp_add_post_meta','wp_update_post_meta','wp_delete_post_meta',
@@ -305,9 +306,10 @@ class StifliFlexMcpModel {
             'snippet_activate','snippet_deactivate',
             // Elementor write operations
             'elementor_clone_page','elementor_replace_text','elementor_replace_image',
-            'elementor_replace_link','elementor_import_template',
+            'elementor_replace_link','elementor_import_template','elementor_apply_template_to_page',
+            'elementor_repair_render','elementor_repair_render_bulk',
             // Divi write operations
-            'divi_replace_text',
+            'divi_replace_text','divi_clone_page','divi_replace_image','divi_apply_library_template',
             // Changelog write operations
             'mcp_rollback_change','mcp_redo_change','mcp_rollback_session',
             
@@ -1090,6 +1092,17 @@ class StifliFlexMcpModel {
                             'value'  => array('type' => 'string'),
                         ),
                         'required' => array('option','value'),
+                    ),
+                ),
+                'wp_update_permalink_structure' => array(
+                    'name' => 'wp_update_permalink_structure',
+                    'description' => 'Update the WordPress permalink structure while preserving native tokens and percent-encoded input. Flushes rewrite rules after a successful change.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'structure' => array( 'type' => 'string', 'description' => 'Structure such as /%category%/%postname%/ or an empty string for plain permalinks.' ),
+                        ),
+                        'required' => array( 'structure' ),
                     ),
                 ),
                 // wp_delete_option intentionally removed for safety: cannot be reliably undone.
@@ -2349,6 +2362,7 @@ class StifliFlexMcpModel {
             'wp_switch_theme' => 'switch_themes',
             // options/meta/settings
             'wp_update_option' => 'manage_options',
+			'wp_update_permalink_structure' => 'manage_options',
             'wp_css_set_global' => 'edit_theme_options',
             'wp_css_set_scoped' => 'manage_options',
             'wp_get_plugin_settings' => 'manage_options',
@@ -2969,7 +2983,7 @@ class StifliFlexMcpModel {
             if ('wp_create_post' !== $tool) {
                 return;
             }
-            $encoded = wp_json_encode($payload);
+			$encoded = wp_json_encode(StifliFlexMcpUtils::redactSecrets($payload));
             if (false === $encoded) {
                 $encoded = '[unserializable]';
             }
@@ -3379,7 +3393,7 @@ class StifliFlexMcpModel {
                     'args' => $args,
                 ));
                 if ($wpCreatePostVerboseTrace) {
-                    stifli_flex_mcp_log('[MCP wp_create_post] Raw args: ' . wp_json_encode($args));
+					stifli_flex_mcp_log('[MCP wp_create_post] Raw args: ' . wp_json_encode(StifliFlexMcpUtils::redactSecrets($args)));
                 }
 
                 $cp_warnings = array();
@@ -3512,7 +3526,7 @@ class StifliFlexMcpModel {
                     }
                 }
                 if ($wpCreatePostVerboseTrace) {
-                    stifli_flex_mcp_log('[MCP wp_create_post] Normalized args: ' . wp_json_encode($ins));
+                    stifli_flex_mcp_log('[MCP wp_create_post] Normalized args: ' . wp_json_encode(StifliFlexMcpUtils::redactSecrets($ins)));
                 }
                 $traceWpCreatePost('tool/before-insert', array('insert_args' => $ins));
 
@@ -3592,7 +3606,7 @@ class StifliFlexMcpModel {
                         $cp_response['warnings'] = $cp_warnings;
                     }
                     if ($wpCreatePostVerboseTrace) {
-                        stifli_flex_mcp_log('[MCP wp_create_post] Final response: ' . wp_json_encode($cp_response));
+                        stifli_flex_mcp_log('[MCP wp_create_post] Final response: ' . wp_json_encode(StifliFlexMcpUtils::redactSecrets($cp_response)));
                     }
                     $traceWpCreatePost('tool/success-response', array('response' => $cp_response));
 
@@ -7860,6 +7874,59 @@ class StifliFlexMcpModel {
                 } else {
                     $addResultText($r, 'No se pudo actualizar la opción (' . $option . ').');
                 }
+                break;
+            case 'wp_update_permalink_structure':
+                if ( ! current_user_can( 'manage_options' ) ) {
+                    $r['error'] = array( 'code' => 'permission_denied', 'message' => 'Insufficient permissions to update permalink settings.' );
+                    break;
+                }
+                if ( ! array_key_exists( 'structure', $args ) || ! is_string( $args['structure'] ) ) {
+                    $r['error'] = array( 'code' => 'invalid_params', 'message' => 'structure must be a string.' );
+                    break;
+                }
+                $permalink_structure = StifliFlexMcpUtils::sanitizeJsonString( $args['structure'] );
+                if ( trim( $permalink_structure ) !== $permalink_structure || preg_match( '/[\x00-\x20\x7F?#]/', $permalink_structure ) ) {
+                    $r['error'] = array( 'code' => 'invalid_params', 'message' => 'structure cannot contain whitespace, control characters, a query string, or a fragment.' );
+                    break;
+                }
+                preg_match_all( '/%([A-Za-z_]+)%/', $permalink_structure, $permalink_tokens );
+                $allowed_permalink_tokens = array( 'year', 'monthnum', 'day', 'hour', 'minute', 'second', 'post_id', 'postname', 'category', 'author' );
+                $unknown_permalink_tokens = array_values( array_diff( array_unique( isset( $permalink_tokens[1] ) ? $permalink_tokens[1] : array() ), $allowed_permalink_tokens ) );
+                if ( ! empty( $unknown_permalink_tokens ) ) {
+                    $r['error'] = array( 'code' => 'invalid_params', 'message' => 'Unsupported permalink token(s): ' . implode( ', ', $unknown_permalink_tokens ) . '.' );
+                    break;
+                }
+
+                $old_permalink_structure = (string) get_option( 'permalink_structure', '' );
+                global $wp_rewrite;
+                if ( is_object( $wp_rewrite ) && method_exists( $wp_rewrite, 'set_permalink_structure' ) ) {
+                    $wp_rewrite->set_permalink_structure( $permalink_structure );
+                } else {
+                    update_option( 'permalink_structure', $permalink_structure );
+                }
+                flush_rewrite_rules( false );
+                $persisted_permalink_structure = (string) get_option( 'permalink_structure', '' );
+                if ( $persisted_permalink_structure !== $permalink_structure ) {
+                    if ( is_object( $wp_rewrite ) && method_exists( $wp_rewrite, 'set_permalink_structure' ) ) {
+                        $wp_rewrite->set_permalink_structure( $old_permalink_structure );
+                    } else {
+                        update_option( 'permalink_structure', $old_permalink_structure );
+                    }
+                    flush_rewrite_rules( false );
+                    $r['error'] = array( 'code' => 'write_verification_failed', 'message' => 'WordPress did not persist the requested permalink structure exactly.' );
+                    break;
+                }
+                $permalink_payload = array(
+                    'success' => true,
+                    'before' => $old_permalink_structure,
+                    'structure' => $persisted_permalink_structure,
+                    'tokens' => isset( $permalink_tokens[1] ) ? array_values( array_unique( $permalink_tokens[1] ) ) : array(),
+                    'rewrite_rules_flushed' => true,
+                );
+                $r['result'] = array(
+                    'content' => array( array( 'type' => 'text', 'text' => wp_json_encode( $permalink_payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ) ),
+                    'structuredContent' => $permalink_payload,
+                );
                 break;
             // wp_delete_option intentionally removed: too destructive without reliable undo.
             case 'wp_get_settings':

@@ -488,7 +488,7 @@ class StifliFlexMcp {
 		if (!$this->isVerboseTraceEnabled()) {
 			return;
 		}
-		$encoded = wp_json_encode($payload);
+		$encoded = wp_json_encode(StifliFlexMcpUtils::redactSecrets($payload));
 		if (false === $encoded) {
 			$encoded = '[unserializable]';
 		}
@@ -502,7 +502,7 @@ class StifliFlexMcp {
 		if (!$this->isVerboseTraceEnabled()) {
 			return;
 		}
-		$encoded = wp_json_encode($payload);
+		$encoded = wp_json_encode(StifliFlexMcpUtils::redactSecrets($payload));
 		if (false === $encoded) {
 			$encoded = '[unserializable]';
 		}
@@ -1033,7 +1033,7 @@ class StifliFlexMcp {
 		if (false === $toolLog) {
 			$toolLog = is_scalar($tool) ? (string) $tool : '[unserializable]';
 		}
-		$argsLog = wp_json_encode($arguments);
+		$argsLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets($arguments));
 		if (false === $argsLog) {
 			$argsLog = '[unserializable]';
 		}
@@ -1041,7 +1041,7 @@ class StifliFlexMcp {
 		$this->traceMcpRequest('tools-call/parsed', array(
 			'id' => $id,
 			'tool' => is_scalar($tool) ? (string) $tool : '',
-			'arguments' => $arguments,
+			'arguments' => StifliFlexMcpUtils::redactSecrets($arguments),
 			'task_augmented' => $isTaskAugmented,
 		));
 		if ('wp_create_post' === $tool) {
@@ -1373,20 +1373,17 @@ class StifliFlexMcp {
 			   'header_auth' => $hdr,
 			   'query_token' => $qp,
 			   'body_len' => strlen($body),
-			   'body_sample' => substr((string) $body, 0, 1400),
 		   ));
 		   if (false !== strpos((string) $body, 'wp_create_post')) {
 			   $this->traceWpCreatePost('messages/entry-body-hit', array(
 				   'session' => $sess,
 				   'remote' => $remote,
 				   'body_len' => strlen($body),
-				   'body_sample' => substr((string) $body, 0, 1400),
 			   ));
 		   }
 		   stifli_flex_mcp_log(sprintf('handleMessage: session=%s remote=%s header=%s query=%s body_len=%d', $sess, $remote, $hdr, $qp, strlen($body)));
-		   stifli_flex_mcp_log('handleMessage: RAW BODY: ' . $body);
 		   $data = json_decode($body, true);
-		   $decodedForLog = wp_json_encode($data);
+		   $decodedForLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets($data));
 		   if (false === $decodedForLog) {
 			   $decodedForLog = '[unserializable]';
 		   }
@@ -1823,7 +1820,7 @@ class StifliFlexMcp {
 			if (false === $toolLog) {
 				$toolLog = is_scalar($tool) ? (string) $tool : '[unserializable]';
 			}
-			$argsLog = wp_json_encode($args);
+			$argsLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets($args));
 			if (false === $argsLog) {
 				$argsLog = '[unserializable]';
 			}
@@ -1835,7 +1832,7 @@ class StifliFlexMcp {
 			$this->traceMcpRequest('execute/start', array(
 				'id' => $id,
 				'tool' => is_scalar($tool) ? (string) $tool : '',
-				'args' => is_array($args) ? $args : array(),
+				'args' => is_array($args) ? StifliFlexMcpUtils::redactSecrets($args) : array(),
 			));
 			if ('wp_create_post' === $tool) {
 				$this->traceWpCreatePost('execute/start', array(
@@ -2719,7 +2716,11 @@ class StifliFlexMcp {
 			return $cached;
 		}
 
-		$url = home_url('/.well-known/oauth-authorization-server');
+		$url = (string) apply_filters(
+			'stifli_flex_mcp_oauth_metadata_url',
+			home_url('/.well-known/oauth-authorization-server'),
+			'oauth-authorization-server'
+		);
 		$result = array(
 			'status' => 'unknown',
 			'blocked' => false,
@@ -2737,7 +2738,11 @@ class StifliFlexMcp {
 		$result['provider'] = isset($primaryProbe['provider']) ? (string) $primaryProbe['provider'] : '';
 
 		if ('ok' !== $result['status']) {
-			$openidUrl = home_url('/.well-known/openid-configuration');
+			$openidUrl = (string) apply_filters(
+				'stifli_flex_mcp_oauth_metadata_url',
+				home_url('/.well-known/openid-configuration'),
+				'openid-configuration'
+			);
 			$openidProbe = $this->probeOAuthMetadataEndpoint($openidUrl);
 			if (isset($openidProbe['status']) && 'ok' === (string) $openidProbe['status']) {
 				$result['status'] = 'ok';

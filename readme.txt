@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
 Tested up to: 7.1
-Stable tag: 3.5.0
+Stable tag: 3.5.1
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -451,6 +451,18 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.5.1 =
+* New: Added undo-aware `divi_clone_page`, `divi_replace_image`, and `divi_apply_library_template` tools, preserving Divi content and `_et_*` metadata for Divi 4 and alternate Divi 5 storage.
+* New: Added `elementor_apply_template_to_page` with replace and append modes, including support for ordinary pages that do not yet contain Elementor data.
+* New: Added single and bulk Elementor render repair tools that validate and re-save existing builder data, restore required metadata, searchable fallback content, and caches without inventing missing layouts.
+* New: Added undoable `wp_update_permalink_structure` with native token validation, exact write verification, `%XX` preservation, and rewrite-rule refresh on update, rollback, and redo.
+* Improvement: `elementor_replace_text` now supports an expected-count guard, nested image alt/title/caption replacement, and optional synchronization to editable Media Library attachments.
+* Improvement: Elementor clones now populate `post_content` with a safe textual fallback extracted from builder widgets so WordPress core search can find cloned content.
+* Improvement: URL write sanitization now detects input mangling before Elementor or Divi changes and preserves percent-encoded and templated URL segments.
+* Fix: Tool schema normalization now supplies a valid `items` schema for every array and normalizes schema-valued `additionalProperties` for strict MCP clients.
+* Security: MCP debug logs now redact sensitive arguments and decoded payloads and no longer store raw request bodies.
+* Developer: Added `stifli_flex_mcp_oauth_metadata_url` to override OAuth and OpenID metadata probe URLs on hosts that intercept `/.well-known/` routes.
+
 = 3.5.0 =
 * New: Added optional Divi integration with six MCP tools for page format inspection, layout outlines, shortcode validation, local template discovery, Divi Library retrieval, and structure-safe text replacement with dry-run support.
 * New: Added `wp_publish_and_promote` to publish draft, pending, or scheduled content and add it to a navigation menu in one undoable workflow.

@@ -70,6 +70,46 @@ class StifliFlexMcp_Divi {
 					'required' => array( 'layout_id' ),
 				),
 			),
+			'divi_clone_page' => array(
+				'name' => 'divi_clone_page',
+				'description' => 'Clone a Divi page or post, preserving builder content and Divi metadata. The new item is undoable through change tracking.',
+				'inputSchema' => array(
+					'type' => 'object',
+					'properties' => array(
+						'source_post_id' => array( 'type' => 'integer' ),
+						'new_title' => array( 'type' => 'string' ),
+						'new_status' => array( 'type' => 'string', 'enum' => array( 'draft', 'pending', 'private', 'publish' ), 'description' => 'Defaults to draft.' ),
+					),
+					'required' => array( 'source_post_id', 'new_title' ),
+				),
+			),
+			'divi_replace_image' => array(
+				'name' => 'divi_replace_image',
+				'description' => 'Replace an exact image URL in Divi content without rebuilding shortcode structure. Supports dry-run and an expected-count guard.',
+				'inputSchema' => array(
+					'type' => 'object',
+					'properties' => array(
+						'post_id' => array( 'type' => 'integer' ),
+						'old_url' => array( 'type' => 'string' ),
+						'new_url' => array( 'type' => 'string' ),
+						'expected_count' => array( 'type' => 'integer', 'minimum' => 0 ),
+						'dry_run' => array( 'type' => 'boolean' ),
+					),
+					'required' => array( 'post_id', 'old_url', 'new_url' ),
+				),
+			),
+			'divi_apply_library_template' => array(
+				'name' => 'divi_apply_library_template',
+				'description' => 'Apply a local Divi Library layout to an editable page or post after validating its shortcode structure.',
+				'inputSchema' => array(
+					'type' => 'object',
+					'properties' => array(
+						'post_id' => array( 'type' => 'integer' ),
+						'layout_id' => array( 'type' => 'integer' ),
+					),
+					'required' => array( 'post_id', 'layout_id' ),
+				),
+			),
 			'divi_replace_text' => array(
 				'name' => 'divi_replace_text',
 				'description' => 'Replace visible text between Divi shortcodes while preserving shortcode tags and attributes. Supports Unicode matching and dry_run.',
@@ -95,12 +135,28 @@ class StifliFlexMcp_Divi {
 			'divi_validate_layout' => 'edit_posts',
 			'divi_list_local_templates' => 'edit_posts',
 			'divi_library_get' => 'edit_posts',
+			'divi_clone_page' => 'edit_posts',
+			'divi_replace_image' => 'edit_posts',
+			'divi_apply_library_template' => 'edit_posts',
 			'divi_replace_text' => 'edit_posts',
 		);
 	}
 
 	public static function getChangeTrackerSnapshot( $tool, $args ) {
-		if ( 'divi_replace_text' !== $tool || self::is_truthy( self::array_value( $args, 'dry_run', false ) ) ) {
+		if ( 'divi_clone_page' === $tool ) {
+			$source_id = absint( self::array_value( $args, 'source_post_id', 0 ) );
+			$source = $source_id > 0 ? get_post( $source_id ) : null;
+			return array(
+				'operation_type' => 'create',
+				'object_type' => 'post',
+				'object_id' => null,
+				'object_subtype' => $source ? $source->post_type : 'post',
+				'before_state' => null,
+			);
+		}
+
+		if ( ! in_array( $tool, array( 'divi_replace_text', 'divi_replace_image', 'divi_apply_library_template' ), true )
+			|| self::is_truthy( self::array_value( $args, 'dry_run', false ) ) ) {
 			return null;
 		}
 
@@ -147,6 +203,15 @@ class StifliFlexMcp_Divi {
 					break;
 				case 'divi_library_get':
 					$payload = self::library_get( $args );
+					break;
+				case 'divi_clone_page':
+					$payload = self::clone_page( $args );
+					break;
+				case 'divi_replace_image':
+					$payload = self::replace_image( $args );
+					break;
+				case 'divi_apply_library_template':
+					$payload = self::apply_library_template( $args );
 					break;
 				case 'divi_replace_text':
 					$payload = self::replace_text( $args );
@@ -244,6 +309,162 @@ class StifliFlexMcp_Divi {
 			'outline' => self::build_outline( $post->post_content ),
 			'validation' => self::validate_content( $post->post_content ),
 		);
+	}
+
+	private static function clone_page( $args ) {
+		$source = self::require_editable_post( $args, 'source_post_id' );
+		$new_title = sanitize_text_field( (string) self::array_value( $args, 'new_title', '' ) );
+		$new_status = sanitize_key( (string) self::array_value( $args, 'new_status', 'draft' ) );
+		if ( '' === $new_title ) {
+			throw new Exception( 'new_title is required.' );
+		}
+		if ( ! in_array( $new_status, array( 'draft', 'pending', 'private', 'publish' ), true ) ) {
+			$new_status = 'draft';
+		}
+		if ( 'publish' === $new_status ) {
+			$post_type = get_post_type_object( $source->post_type );
+			$publish_cap = $post_type && ! empty( $post_type->cap->publish_posts ) ? $post_type->cap->publish_posts : 'publish_posts';
+			if ( ! current_user_can( $publish_cap ) ) {
+				throw new Exception( 'Insufficient permissions to publish this post type.' );
+			}
+		}
+
+		$new_id = wp_insert_post( array(
+			'post_title' => $new_title,
+			'post_content' => wp_slash( $source->post_content ),
+			'post_excerpt' => wp_slash( $source->post_excerpt ),
+			'post_status' => $new_status,
+			'post_type' => $source->post_type,
+			'post_author' => get_current_user_id() ? get_current_user_id() : $source->post_author,
+			'page_template' => get_page_template_slug( $source->ID ),
+		), true );
+		if ( is_wp_error( $new_id ) ) {
+			throw new Exception( $new_id->get_error_message() );
+		}
+
+		self::copy_divi_meta( $source->ID, $new_id );
+		clean_post_cache( $new_id );
+		return array(
+			'success' => true,
+			'id' => (int) $new_id,
+			'post_id' => (int) $new_id,
+			'source_post_id' => (int) $source->ID,
+			'status' => $new_status,
+			'edit_url' => get_edit_post_link( $new_id, 'raw' ),
+			'view_url' => 'publish' === $new_status ? get_permalink( $new_id ) : get_preview_post_link( $new_id ),
+		);
+	}
+
+	private static function replace_image( $args ) {
+		$post = self::require_editable_post( $args, 'post_id' );
+		$old_url = StifliFlexMcpUtils::prepareStrictWriteUrl( self::array_value( $args, 'old_url', '' ), 'old_url' );
+		$new_url = StifliFlexMcpUtils::prepareStrictWriteUrl( self::array_value( $args, 'new_url', '' ), 'new_url' );
+		if ( is_wp_error( $old_url ) || is_wp_error( $new_url ) ) {
+			$error = is_wp_error( $old_url ) ? $old_url : $new_url;
+			throw new Exception( $error->get_error_message() );
+		}
+		$dry_run = self::is_truthy( self::array_value( $args, 'dry_run', false ) );
+		$has_expected_count = array_key_exists( 'expected_count', $args );
+		$expected_count = $has_expected_count ? absint( $args['expected_count'] ) : null;
+		if ( '' === $old_url || '' === $new_url ) {
+			throw new Exception( 'old_url and new_url are required valid URLs.' );
+		}
+
+		$updated = str_replace( $old_url, $new_url, (string) $post->post_content, $content_count );
+		$meta_updates = array();
+		$meta_count = 0;
+		foreach ( get_post_meta( $post->ID ) as $meta_key => $meta_values ) {
+			if ( 0 !== strpos( $meta_key, '_et_' ) ) {
+				continue;
+			}
+			$current_value = get_post_meta( $post->ID, $meta_key, true );
+			$updated_value = self::replace_url_in_value( $current_value, $old_url, $new_url, $meta_count );
+			if ( $updated_value !== $current_value ) {
+				$meta_updates[ $meta_key ] = $updated_value;
+			}
+		}
+		$count = $content_count + $meta_count;
+		if ( $has_expected_count && $count !== $expected_count ) {
+			throw new Exception( 'Expected ' . $expected_count . ' image replacements but found ' . $count . '; no changes were saved.' );
+		}
+		if ( ! $dry_run && $count > 0 ) {
+			if ( $content_count > 0 ) {
+				$result = wp_update_post( array( 'ID' => $post->ID, 'post_content' => wp_slash( $updated ) ), true );
+				if ( is_wp_error( $result ) ) {
+					throw new Exception( $result->get_error_message() );
+				}
+			}
+			foreach ( $meta_updates as $meta_key => $meta_value ) {
+				update_post_meta( $post->ID, $meta_key, $meta_value );
+			}
+			clean_post_cache( $post->ID );
+		}
+
+		return array(
+			'success' => true,
+			'post_id' => (int) $post->ID,
+			'replacements' => (int) $count,
+			'content_replacements' => (int) $content_count,
+			'meta_replacements' => (int) $meta_count,
+			'dry_run' => $dry_run,
+			'old_url' => $old_url,
+			'new_url' => $new_url,
+		);
+	}
+
+	private static function apply_library_template( $args ) {
+		$post = self::require_editable_post( $args, 'post_id' );
+		$layout = self::require_editable_post( $args, 'layout_id' );
+		if ( self::LIBRARY_POST_TYPE !== $layout->post_type ) {
+			throw new Exception( 'Divi Library layout not found.' );
+		}
+		$validation = self::validate_content( $layout->post_content );
+		if ( ! $validation['valid'] ) {
+			throw new Exception( 'The selected Divi Library layout has invalid shortcode structure.' );
+		}
+
+		$result = wp_update_post( array( 'ID' => $post->ID, 'post_content' => wp_slash( $layout->post_content ) ), true );
+		if ( is_wp_error( $result ) ) {
+			throw new Exception( $result->get_error_message() );
+		}
+		update_post_meta( $post->ID, '_et_pb_use_builder', 'on' );
+		self::copy_divi_meta( $layout->ID, $post->ID );
+		clean_post_cache( $post->ID );
+
+		return array(
+			'success' => true,
+			'post_id' => (int) $post->ID,
+			'layout_id' => (int) $layout->ID,
+			'content_length' => self::text_length( $layout->post_content ),
+			'shortcode_count' => (int) $validation['shortcode_count'],
+		);
+	}
+
+	private static function copy_divi_meta( $source_id, $target_id ) {
+		$all_meta = get_post_meta( $source_id );
+		foreach ( $all_meta as $key => $values ) {
+			if ( 0 !== strpos( $key, '_et_' ) && '_wp_page_template' !== $key ) {
+				continue;
+			}
+			delete_post_meta( $target_id, $key );
+			foreach ( (array) $values as $value ) {
+				add_post_meta( $target_id, $key, maybe_unserialize( $value ) );
+			}
+		}
+	}
+
+	private static function replace_url_in_value( $value, $old_url, $new_url, &$count ) {
+		if ( is_string( $value ) ) {
+			$updated = str_replace( $old_url, $new_url, $value, $local_count );
+			$count += $local_count;
+			return $updated;
+		}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = self::replace_url_in_value( $item, $old_url, $new_url, $count );
+			}
+		}
+		return $value;
 	}
 
 	private static function replace_text( $args ) {
