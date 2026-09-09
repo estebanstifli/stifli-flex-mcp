@@ -44,6 +44,17 @@ class StifliFlexMcp_WC_Orders {
                     'required' => array(),
                 ),
             ),
+            'wc_get_order' => array(
+                'name' => 'wc_get_order',
+                'description' => 'Get one WooCommerce order with customer addresses, line items, fee lines, shipping lines, totals, and payment method ID.',
+                'inputSchema' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'order_id' => array('type' => 'integer'),
+                    ),
+                    'required' => array('order_id'),
+                ),
+            ),
             'wc_create_order' => array(
                 'name' => 'wc_create_order',
                 'description' => 'Create a WooCommerce order (customer_id, billing, shipping, line_items, shipping_lines, fee_lines, coupon_lines, status, payment_method).',
@@ -242,6 +253,7 @@ class StifliFlexMcp_WC_Orders {
     public static function getCapabilities() {
         return array(
             'wc_get_orders' => 'edit_shop_orders',
+            'wc_get_order' => 'edit_shop_orders',
             'wc_create_order' => 'edit_shop_orders',
             'wc_update_order' => 'edit_shop_orders',
             'wc_delete_order' => 'delete_shop_orders',
@@ -368,6 +380,34 @@ class StifliFlexMcp_WC_Orders {
 
             return $row;
         };
+        $buildOrderDetail = function($order) use ($buildOrderRow) {
+            $detail = $buildOrderRow($order, false, true, true, true);
+            $detail['billing'] = $order->get_address('billing');
+            $detail['shipping'] = $order->get_address('shipping');
+            $detail['shipping_lines'] = array();
+            foreach ($order->get_shipping_methods() as $shippingItem) {
+                $detail['shipping_lines'][] = array(
+                    'item_id' => $shippingItem->get_id(),
+                    'method_id' => $shippingItem->get_method_id(),
+                    'method_title' => $shippingItem->get_name(),
+                    'total' => $shippingItem->get_total(),
+                    'total_tax' => $shippingItem->get_total_tax(),
+                    'taxes' => $shippingItem->get_taxes(),
+                );
+            }
+            $detail['fee_lines'] = array();
+            foreach ($order->get_fees() as $fee) {
+                $detail['fee_lines'][] = array(
+                    'item_id' => $fee->get_id(),
+                    'name' => $fee->get_name(),
+                    'total' => $fee->get_total(),
+                    'total_tax' => $fee->get_total_tax(),
+                    'taxes' => $fee->get_taxes(),
+                );
+            }
+            $detail['customer_note'] = $order->get_customer_note();
+            return $detail;
+        };
         
         switch ($tool) {
             case 'wc_get_orders':
@@ -452,6 +492,28 @@ class StifliFlexMcp_WC_Orders {
                 }
                 
                 $addResultText($r, 'Found ' . count($result) . ' orders: ' . wp_json_encode($payload, JSON_PRETTY_PRINT));
+                return true;
+
+            case 'wc_get_order':
+                $order_id = intval($utils::getArrayValue($args, 'order_id', 0));
+                if (empty($order_id)) {
+                    $r['error'] = array('code' => -50001, 'message' => 'order_id is required');
+                    return true;
+                }
+
+                $order = wc_get_order($order_id);
+                if (!$isOrderObject($order)) {
+                    $r['error'] = array('code' => -50002, 'message' => 'Order not found');
+                    return true;
+                }
+
+                $detail = $buildOrderDetail($order);
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => wp_json_encode($detail, JSON_PRETTY_PRINT)),
+                    ),
+                    'structuredContent' => $detail,
+                );
                 return true;
                 
             case 'wc_create_order':
@@ -561,8 +623,23 @@ class StifliFlexMcp_WC_Orders {
                 
                 $order->calculate_totals();
                 $order->save();
-                
-                $addResultText($r, 'Order updated: ' . $order_id);
+
+                $saved_order = wc_get_order($order_id);
+                if (!$isOrderObject($saved_order)) {
+                    $r['error'] = array('code' => -50003, 'message' => 'Order updated but could not be reloaded');
+                    return true;
+                }
+
+                $saved_detail = $buildOrderDetail($saved_order);
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => 'Order updated and verified: ' . wp_json_encode($saved_detail, JSON_PRETTY_PRINT)),
+                    ),
+                    'structuredContent' => array(
+                        'success' => true,
+                        'order' => $saved_detail,
+                    ),
+                );
                 return true;
                 
             case 'wc_delete_order':

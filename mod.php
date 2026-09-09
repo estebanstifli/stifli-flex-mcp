@@ -40,6 +40,7 @@ class StifliFlexMcp {
 			}
 			add_action('admin_init', array($this, 'registerSettings'));
 			add_action('admin_init', array($this, 'handleOAuthWellKnownNoticeDismiss'));
+			add_action('admin_init', array($this, 'handleOAuthWellKnownRecheck'));
 			add_action('admin_init', array($this, 'handleWpMcpHubPromoNoticeDismiss'));
 			add_action('admin_notices', array($this, 'renderOAuthWellKnownNotice'));
 			add_action('admin_notices', array($this, 'renderWpMcpHubPromoNotice'), 20);
@@ -2645,6 +2646,7 @@ class StifliFlexMcp {
 		$result = array(
 			'status' => 'unknown',
 			'blocked' => false,
+			'provider' => '',
 			'url' => $url,
 			'code' => 0,
 			'message' => '',
@@ -2663,7 +2665,14 @@ class StifliFlexMcp {
 
 		$code = (int) wp_remote_retrieve_response_code($response);
 		$body = (string) wp_remote_retrieve_body($response);
+		$server = strtolower((string) wp_remote_retrieve_header($response, 'server'));
+		$sucuriId = (string) wp_remote_retrieve_header($response, 'x-sucuri-id');
+		$sucuriCache = (string) wp_remote_retrieve_header($response, 'x-sucuri-cache');
+		$bodyLower = strtolower($body);
 		$result['code'] = $code;
+		if ('' !== $sucuriId || '' !== $sucuriCache || false !== strpos($server, 'sucuri') || false !== strpos($server, 'cloudproxy') || false !== strpos($bodyLower, 'sucuri website firewall') || false !== strpos($bodyLower, 'cloudproxy')) {
+			$result['provider'] = 'sucuri';
+		}
 
 		if (200 === $code) {
 			$bodyHead = strtolower(ltrim($body));
@@ -2725,6 +2734,7 @@ class StifliFlexMcp {
 		$result['blocked'] = !empty($primaryProbe['blocked']);
 		$result['code'] = isset($primaryProbe['code']) ? (int) $primaryProbe['code'] : 0;
 		$result['message'] = isset($primaryProbe['message']) ? (string) $primaryProbe['message'] : '';
+		$result['provider'] = isset($primaryProbe['provider']) ? (string) $primaryProbe['provider'] : '';
 
 		if ('ok' !== $result['status']) {
 			$openidUrl = home_url('/.well-known/openid-configuration');
@@ -2735,6 +2745,9 @@ class StifliFlexMcp {
 				$result['url'] = $openidUrl;
 				$result['code'] = isset($openidProbe['code']) ? (int) $openidProbe['code'] : 200;
 				$result['message'] = '';
+				$result['provider'] = '';
+			} elseif (empty($result['provider']) && !empty($openidProbe['provider'])) {
+				$result['provider'] = (string) $openidProbe['provider'];
 			}
 		}
 
@@ -2766,8 +2779,30 @@ class StifliFlexMcp {
 			}
 		}
 
-		set_transient($transientKey, $result, (int) $this->oauthWellKnownProbeTtl);
+		$probeTtl = !empty($result['blocked']) ? 10 * MINUTE_IN_SECONDS : (int) $this->oauthWellKnownProbeTtl;
+		set_transient($transientKey, $result, $probeTtl);
 		return $result;
+	}
+
+	public function handleOAuthWellKnownRecheck() {
+		if (!current_user_can('manage_options')) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified below.
+		$recheck = isset($_GET['sflmcp_recheck_oauth_well_known']) ? sanitize_text_field(wp_unslash($_GET['sflmcp_recheck_oauth_well_known'])) : '';
+		if ('1' !== $recheck) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce is explicitly validated.
+		$nonce = isset($_GET['_sflmcpnonce']) ? sanitize_text_field(wp_unslash($_GET['_sflmcpnonce'])) : '';
+		if (!wp_verify_nonce($nonce, 'sflmcp_recheck_oauth_well_known')) {
+			return;
+		}
+
+		$this->invalidateOAuthWellKnownProbeCache();
+		$redirect = remove_query_arg(array('sflmcp_recheck_oauth_well_known', '_sflmcpnonce'));
+		wp_safe_redirect($redirect);
+		exit;
 	}
 
 	public function handleOAuthWellKnownNoticeDismiss() {
@@ -2944,12 +2979,23 @@ class StifliFlexMcp {
 			'sflmcp_dismiss_oauth_well_known_notice',
 			'_sflmcpnonce'
 		);
+		$recheckUrl = wp_nonce_url(
+			add_query_arg(array('sflmcp_recheck_oauth_well_known' => '1')),
+			'sflmcp_recheck_oauth_well_known',
+			'_sflmcpnonce'
+		);
 		$endpoint = isset($check['url']) ? (string) $check['url'] : home_url('/.well-known/oauth-authorization-server');
 		$code = isset($check['code']) ? (int) $check['code'] : 0;
 		$status = isset($check['status']) ? (string) $check['status'] : '';
+		$provider = isset($check['provider']) ? (string) $check['provider'] : '';
 		$title = __('OAuth discovery endpoint may be blocked by hosting.', 'stifli-flex-mcp');
 		$description = __('External MCP connectors (Claude/ChatGPT) may fail to open the authorization window if this endpoint is unreachable:', 'stifli-flex-mcp');
-		if ('body_is_html' === $status) {
+		$providerHelpUrl = '';
+		if ('sucuri' === $provider) {
+			$title = __('Sucuri or CloudProxy is blocking OAuth discovery.', 'stifli-flex-mcp');
+			$description = __('Allow the OAuth discovery and registration paths in Sucuri Website Firewall, then re-check the connection:', 'stifli-flex-mcp');
+			$providerHelpUrl = 'https://docs.sucuri.net/website-firewall/troubleshooting/whitelist-and-blacklist/';
+		} elseif ('body_is_html' === $status) {
 			$title = __('OAuth discovery endpoint is returning HTML instead of JSON.', 'stifli-flex-mcp');
 			$description = __('A membership plugin, theme, firewall, or host rule may be intercepting this endpoint before the OAuth metadata reaches the client:', 'stifli-flex-mcp');
 		} elseif ('register_redirect' === $status) {
@@ -2967,7 +3013,11 @@ class StifliFlexMcp {
 				<?php endif; ?>
 			</p>
 			<p>
+				<a class="button button-primary" href="<?php echo esc_url($recheckUrl); ?>"><?php echo esc_html__('Re-check now', 'stifli-flex-mcp'); ?></a>
 				<a class="button button-secondary" href="<?php echo esc_url($helpUrl); ?>"><?php echo esc_html__('View manual fix', 'stifli-flex-mcp'); ?></a>
+				<?php if ('' !== $providerHelpUrl) : ?>
+					<a class="button button-secondary" href="<?php echo esc_url($providerHelpUrl); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('Sucuri fix guide', 'stifli-flex-mcp'); ?></a>
+				<?php endif; ?>
 				<a class="button button-link" href="<?php echo esc_url($dismissUrl); ?>"><?php echo esc_html__('Dismiss', 'stifli-flex-mcp'); ?></a>
 			</p>
 		</div>

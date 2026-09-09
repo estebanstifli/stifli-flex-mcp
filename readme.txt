@@ -4,8 +4,8 @@ Contributors: estebandezafra
 Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, chatgpt, claude, woocommerce ai, copilot
 Requires at least: 5.9
-Tested up to: 7.0
-Stable tag: 3.4.8
+Tested up to: 7.1
+Stable tag: 3.5.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -451,6 +451,22 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
 
 == Changelog ==
+= 3.5.0 =
+* New: Added optional Divi integration with six MCP tools for page format inspection, layout outlines, shortcode validation, local template discovery, Divi Library retrieval, and structure-safe text replacement with dry-run support.
+* New: Added `wp_publish_and_promote` to publish draft, pending, or scheduled content and add it to a navigation menu in one undoable workflow.
+* New: Added `wp_create_menu` and extended `wp_create_nav_menu` with optional theme-location assignment.
+* New: Added `wp_create_preview_link` for expiring, cryptographically protected public previews of non-public content, with no-cache and noindex headers.
+* Improvement: Post revision results now include Unicode-aware content length for safer revision selection and restoration workflows.
+* Improvement: Elementor and Divi text replacement tools now warn when replacement text contains literal escape sequences, helping prevent accidental escaped markup or formatting.
+* Improvement: OAuth diagnostics now identify Sucuri/CloudProxy blocks, provide provider-specific guidance, offer a nonce-protected Re-check now action, and retry blocked checks sooner.
+* Improvement: Added upgrade seeding, profile registration, optional integration discovery, and complete undo/redo tracking for the new editorial and Divi tools.
+
+= 3.4.9 =
+* New: Added `wc_get_order` for detailed retrieval of one WooCommerce order, including customer addresses, line items, fee lines, shipping lines, totals, customer note, and raw payment method ID.
+* Improvement: Added `wc_get_order` to WooCommerce Read Only, WooCommerce Store Management, Complete E-commerce, and Safe Mode profiles, with an upgrade migration for existing installations.
+* Improvement: `wc_update_order` and `wc_update_product` now reload and return the actual persisted object after saving, improving write verification.
+* Fix: `elementor_replace_text` case-insensitive matching now supports Unicode text, including accented characters.
+
 = 3.4.8 =
 * Fix: Restored legacy SSE response delivery so Claude Desktop connectors receive `initialize` and other JSON-RPC responses through their active SSE session.
 

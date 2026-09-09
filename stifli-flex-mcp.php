@@ -3,7 +3,7 @@
 Plugin Name: StifLi Flex MCP - MCP Server with undo for ChatGPT, Claude & Gemini
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Transform your WordPress site into a Model Context Protocol (MCP) server. Expose 125+ tools across WordPress, WooCommerce, SEO, plugin integrations, and WordPress Abilities that AI agents like ChatGPT, Claude, and LibreChat can use via JSON-RPC 2.0.
-Version: 3.4.8
+Version: 3.5.0
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -162,8 +162,11 @@ require_once __DIR__ . '/models/dispatcher.php';
 require_once __DIR__ . '/models/req.php';
 require_once __DIR__ . '/models/model.php';
 require_once __DIR__ . '/models/class-change-tracker.php';
+require_once __DIR__ . '/models/class-preview-links.php';
 require_once __DIR__ . '/controller.php';
 require_once __DIR__ . '/mod.php';
+
+StifliFlexMcp_Preview_Links::init();
 
 StifliFlexMcp_Addons::register_admin_hooks();
 
@@ -1029,6 +1032,8 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_update_post', 'Update a post by ID with fields object.', 'WordPress - Posts', 1),
 		array('wp_delete_post', 'Delete a post by ID.', 'WordPress - Posts', 1),
 		array('wp_set_featured_image', 'Set or remove the featured image (post thumbnail) of a post.', 'WordPress - Posts', 1),
+		array('wp_publish_and_promote', 'Publish a draft and add it to a navigation menu atomically.', 'WordPress - Posts', 1),
+		array('wp_create_preview_link', 'Create a temporary shareable preview link for a non-public post.', 'WordPress - Posts', 1),
 		
 		// Pages
 		array('wp_get_pages', 'List pages with filters (post_status, search, limit, offset, orderby, order).', 'WordPress - Pages', 1),
@@ -1094,6 +1099,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_get_menus', 'List all navigation menus (alias for wp_get_nav_menus).', 'WordPress - Menus', 1),
 		array('wp_get_menu', 'Get a specific menu with its items.', 'WordPress - Menus', 1),
 		array('wp_create_nav_menu', 'Create a new navigation menu.', 'WordPress - Menus', 1),
+		array('wp_create_menu', 'Create a navigation menu with optional theme-location assignment.', 'WordPress - Menus', 1),
 		array('wp_reorder_menu_items', 'Reorder items in a navigation menu (batch update menu_order/parent).', 'WordPress - Menus', 1),
 		
 		// Options y Meta
@@ -1226,6 +1232,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 	
 	// WooCommerce Orders
 	$tools[] = array('wc_get_orders', 'List WooCommerce orders with filters.', 'WooCommerce - Orders', 1);
+	$tools[] = array('wc_get_order', 'Get one WooCommerce order with line items, fees, shipping, and payment details.', 'WooCommerce - Orders', 1);
 	$tools[] = array('wc_create_order', 'Create a new WooCommerce order.', 'WooCommerce - Orders', 1);
 	$tools[] = array('wc_update_order', 'Update a WooCommerce order by ID.', 'WooCommerce - Orders', 1);
 	$tools[] = array('wc_delete_order', 'Delete a WooCommerce order by ID.', 'WooCommerce - Orders', 1);
@@ -1383,7 +1390,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.07.12.1' );
+	define( 'SFLMCP_DB_VERSION', '2026.09.09.1' );
 }
 
 /**
@@ -1417,6 +1424,7 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_338_seed_css_tools();
+	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	stifli_flex_mcp_upgrade_retire_custom_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
@@ -2121,6 +2129,155 @@ function stifli_flex_mcp_upgrade_wave1_tools() {
 }
 
 /**
+ * Upgrade routine (3.4.9): seed the detailed WooCommerce order tool and
+ * attach it to the relevant system profiles for existing installs.
+ */
+function stifli_flex_mcp_upgrade_349_seed_order_detail_tool() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_349_seed_order_detail_tool_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+	$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", 'wc_get_order' ) );
+	if ( ! $exists ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$tools_table,
+			array(
+				'tool_name' => 'wc_get_order',
+				'tool_description' => 'Get one WooCommerce order with line items, fees, shipping, and payment details.',
+				'category' => 'WooCommerce - Orders',
+				'enabled' => 1,
+				'created_at' => $now,
+				'updated_at' => $now,
+			),
+			array( '%s', '%s', '%s', '%d', '%s', '%s' )
+		);
+	}
+
+	if ( stifli_flex_mcp_table_exists( $profiles_table ) && stifli_flex_mcp_table_exists( $profile_tools_table ) ) {
+		$profile_names = array( 'WooCommerce Read Only', 'WooCommerce Store Management', 'Complete E-commerce', 'Safe Mode' );
+		foreach ( $profile_names as $profile_name ) {
+			$profile_id = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+					$profile_name
+				)
+			);
+			if ( ! $profile_id ) {
+				continue;
+			}
+			$profile_tool_exists = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+					(int) $profile_id,
+					'wc_get_order'
+				)
+			);
+			if ( ! $profile_tool_exists ) {
+				$wpdb->insert(
+					$profile_tools_table,
+					array( 'profile_id' => (int) $profile_id, 'tool_name' => 'wc_get_order' ),
+					array( '%d', '%s' )
+				);
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
+ * Upgrade routine (3.5.0): add Divi integration and editorial workflow tools.
+ */
+function stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools() {
+	global $wpdb;
+	$flag = 'sflmcp_upgrade_350_seed_divi_editorial_tools_done';
+	if ( get_option( $flag ) ) {
+		return;
+	}
+
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
+	$profile_tools_table = $wpdb->prefix . 'sflmcp_profile_tools';
+	if ( ! stifli_flex_mcp_table_exists( $tools_table ) ) {
+		return;
+	}
+
+	$now = current_time( 'mysql', true );
+	$new_tools = array(
+		array( 'wp_publish_and_promote', 'Publish a draft and add it to a navigation menu atomically.', 'WordPress - Posts', 1 ),
+		array( 'wp_create_preview_link', 'Create a temporary shareable preview link for a non-public post.', 'WordPress - Posts', 1 ),
+		array( 'wp_create_menu', 'Create a navigation menu with optional theme-location assignment.', 'WordPress - Menus', 1 ),
+		array( 'divi_get_page_format', 'Inspect Divi Builder mode, page layout, shortcode count, and content size.', 'Plugins - Divi', 1 ),
+		array( 'divi_get_page_outline', 'Get a compact ordered outline of Divi layout shortcodes.', 'Plugins - Divi', 1 ),
+		array( 'divi_validate_layout', 'Validate Divi shortcode nesting and balance without executing it.', 'Plugins - Divi', 1 ),
+		array( 'divi_list_local_templates', 'List layouts from the local Divi Library.', 'Plugins - Divi', 1 ),
+		array( 'divi_library_get', 'Get one Divi Library layout with content, outline, and validation.', 'Plugins - Divi', 1 ),
+		array( 'divi_replace_text', 'Safely replace visible text between Divi shortcodes with dry-run support.', 'Plugins - Divi', 1 ),
+	);
+
+	foreach ( $new_tools as $tool ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tools_table} WHERE tool_name = %s", $tool[0] ) );
+		if ( ! $exists ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->insert(
+				$tools_table,
+				array(
+					'tool_name' => $tool[0],
+					'tool_description' => $tool[1],
+					'category' => $tool[2],
+					'enabled' => $tool[3],
+					'created_at' => $now,
+					'updated_at' => $now,
+				),
+				array( '%s', '%s', '%s', '%d', '%s', '%s' )
+			);
+		}
+	}
+
+	if ( stifli_flex_mcp_table_exists( $profiles_table ) && stifli_flex_mcp_table_exists( $profile_tools_table ) ) {
+		$profile_id = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_system = 1 LIMIT 1",
+				'WordPress Full Management'
+			)
+		);
+		if ( $profile_id ) {
+			foreach ( array( 'wp_publish_and_promote', 'wp_create_preview_link', 'wp_create_menu' ) as $tool_name ) {
+				$exists = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$profile_tools_table} WHERE profile_id = %d AND tool_name = %s",
+						(int) $profile_id,
+						$tool_name
+					)
+				);
+				if ( ! $exists ) {
+					$wpdb->insert(
+						$profile_tools_table,
+						array( 'profile_id' => (int) $profile_id, 'tool_name' => $tool_name ),
+						array( '%d', '%s' )
+					);
+				}
+			}
+		}
+	}
+
+	update_option( $flag, '1' );
+}
+
+/**
  * Upgrade routine: add Google Search Console SEO tools for existing installs.
  */
 function stifli_flex_mcp_upgrade_gsc_tools() {
@@ -2361,6 +2518,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				// Posts (6)
 				'wp_get_posts', 'wp_get_post', 'wp_create_post', 'wp_update_post', 'wp_delete_post', 'wp_set_featured_image',
+				'wp_publish_and_promote', 'wp_create_preview_link',
 				// Pages (4)
 				'wp_get_pages', 'wp_create_page', 'wp_update_page', 'wp_delete_page',
 				// Comments (4)
@@ -2384,7 +2542,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Tags (4)
 				'wp_get_tags', 'wp_create_tag', 'wp_update_tag', 'wp_delete_tag',
 				// Menus (4)
-				'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_create_nav_menu', 'wp_reorder_menu_items',
+				'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_create_nav_menu', 'wp_create_menu', 'wp_reorder_menu_items',
 				// Options (3)
 				'wp_css_get_global', 'wp_css_set_global', 'wp_css_set_scoped',
 				'wp_get_option', 'wp_get_plugin_settings', 'wp_update_option',
@@ -2413,7 +2571,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				'wc_get_products', 'wc_get_product_variations', 'wc_get_variation', 'wc_get_product_categories', 'wc_get_product_tags', 'wc_get_product_reviews',
 				'wc_get_product_attributes', 'wc_get_attribute_terms',
-				'wc_get_orders', 'wc_get_order_notes',
+				'wc_get_orders', 'wc_get_order', 'wc_get_order_notes',
 				// Removed for WordPress.org compliance: wc_get_customers
 				'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count',
 				'wc_get_low_stock_products',
@@ -2436,7 +2594,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_product_tags', 'wc_create_product_tag', 'wc_update_product_tag', 'wc_delete_product_tag',
 				'wc_get_product_reviews', 'wc_create_product_review', 'wc_update_product_review', 'wc_delete_product_review',
 				// Orders & Refunds
-				'wc_get_orders', 'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
+				'wc_get_orders', 'wc_get_order', 'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
 				'wc_get_order_notes', 'wc_create_order_note', 'wc_delete_order_note',
 				'wc_create_refund', 'wc_get_refunds', 'wc_delete_refund',
 				// Coupons (Customers removed for WordPress.org compliance)
@@ -2459,7 +2617,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_product_tags', 'wc_create_product_tag', 'wc_update_product_tag', 'wc_delete_product_tag',
 				'wc_get_product_reviews', 'wc_create_product_review', 'wc_update_product_review', 'wc_delete_product_review',
 				'wc_update_stock', 'wc_get_low_stock_products', 'wc_set_stock_status',
-				'wc_get_orders', 'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
+				'wc_get_orders', 'wc_get_order', 'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
 				'wc_get_order_notes', 'wc_create_order_note', 'wc_delete_order_note',
 				'wc_create_refund', 'wc_get_refunds', 'wc_delete_refund',
 				// Customers removed for WordPress.org compliance
@@ -2503,7 +2661,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'wc_get_product_attributes', 'wc_get_attribute_terms',
 				'wc_get_product_categories', 'wc_get_product_tags',
 				'wc_get_product_reviews',
-				'wc_get_orders', 'wc_get_order_notes',
+				'wc_get_orders', 'wc_get_order', 'wc_get_order_notes',
 				// Removed for WordPress.org compliance: wc_get_customers
 				'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count',
 				'wc_get_low_stock_products',
@@ -4239,6 +4397,8 @@ function stifli_flex_mcp_activate() {
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
 	stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool();
 	stifli_flex_mcp_upgrade_wave1_tools();
+	stifli_flex_mcp_upgrade_349_seed_order_detail_tool();
+	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_sync_tool_token_estimates();
 	stifli_flex_mcp_ensure_clean_queue_event();
@@ -4413,6 +4573,8 @@ add_action('plugins_loaded', function() {
 	stifli_flex_mcp_upgrade_elementor_integration_tools();
 	stifli_flex_mcp_upgrade_3311_seed_elementor_add_widget_tool();
 	stifli_flex_mcp_upgrade_wave1_tools();
+	stifli_flex_mcp_upgrade_349_seed_order_detail_tool();
+	stifli_flex_mcp_upgrade_350_seed_divi_editorial_tools();
 	stifli_flex_mcp_upgrade_gsc_tools();
 	stifli_flex_mcp_upgrade_rankmath_profile_detach();
 	stifli_flex_mcp_apply_plugin_integration_overrides();

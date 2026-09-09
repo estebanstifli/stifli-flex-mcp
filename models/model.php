@@ -80,6 +80,33 @@ class StifliFlexMcpModel {
         return $this->maybeLoadFile( 'integrations/class-elementor.php', 'StifliFlexMcp_Elementor' );
     }
 
+    private function isDiviRuntimeAvailable() {
+        if ( class_exists( 'StifliFlexMcp_Divi' ) ) {
+            return StifliFlexMcp_Divi::isAvailable();
+        }
+
+        $theme = wp_get_theme();
+        $template = strtolower( (string) $theme->get_template() );
+        $stylesheet = strtolower( (string) $theme->get_stylesheet() );
+        return defined( 'ET_BUILDER_VERSION' )
+            || class_exists( 'ET_Builder_Plugin' )
+            || in_array( $template, array( 'divi', 'extra' ), true )
+            || in_array( $stylesheet, array( 'divi', 'extra' ), true )
+            || $this->isPluginMarkedActive( 'divi-builder/divi-builder.php' );
+    }
+
+    private function maybeLoadDiviIntegrationModule() {
+        if ( class_exists( 'StifliFlexMcp_Divi' ) ) {
+            return true;
+        }
+
+        if ( ! $this->isDiviRuntimeAvailable() ) {
+            return false;
+        }
+
+        return $this->maybeLoadFile( 'integrations/class-divi.php', 'StifliFlexMcp_Divi' );
+    }
+
     private function maybeLoadGoogleSearchConsoleModule() {
         if ( class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) ) {
             StifliFlexMcp_GoogleSearchConsole::init();
@@ -217,6 +244,7 @@ class StifliFlexMcpModel {
         // Escritura/mutación
         $WRITE = array(
             'wp_create_post','wp_update_post','wp_delete_post',
+            'wp_publish_and_promote','wp_create_preview_link',
             'wp_set_featured_image',
             'wp_tec_save_event','wp_tec_save_entity','wp_tec_trash_event',
             'wp_create_comment','wp_update_comment','wp_delete_comment',
@@ -242,7 +270,7 @@ class StifliFlexMcpModel {
             'wp_create_term','wp_delete_term',
             'wp_update_term',
             'wp_update_term_meta','wp_delete_term_meta',
-            'wp_create_nav_menu','wp_add_nav_menu_item','wp_update_nav_menu_item','wp_delete_nav_menu_item','wp_delete_nav_menu',
+            'wp_create_nav_menu','wp_create_menu','wp_add_nav_menu_item','wp_update_nav_menu_item','wp_delete_nav_menu_item','wp_delete_nav_menu',
             'wp_reorder_menu_items',
             'wp_create_page','wp_update_page','wp_delete_page',
             'wp_create_category','wp_update_category','wp_delete_category',
@@ -278,6 +306,8 @@ class StifliFlexMcpModel {
             // Elementor write operations
             'elementor_clone_page','elementor_replace_text','elementor_replace_image',
             'elementor_replace_link','elementor_import_template',
+            // Divi write operations
+            'divi_replace_text',
             // Changelog write operations
             'mcp_rollback_change','mcp_redo_change','mcp_rollback_session',
             
@@ -315,6 +345,7 @@ class StifliFlexMcpModel {
             'wp_get_term_meta',     // may include private/encoded data
             // WooCommerce sensitive reads (wc_get_customers removed for WordPress.org compliance)
             'wc_get_orders',        // order data privacy
+            'wc_get_order',         // full order includes customer addresses and payment method
             'wc_get_order_notes',   // order notes may contain sensitive info
             'wc_get_system_status', // system information
             'wc_get_settings',      // WooCommerce settings
@@ -528,6 +559,33 @@ class StifliFlexMcpModel {
                             'featured_media' => array('type' => 'integer', 'description' => 'Attachment ID to set as featured image.'),
                         ),
                         'required' => array(),
+                    ),
+                ),
+                'wp_publish_and_promote' => array(
+                    'name' => 'wp_publish_and_promote',
+                    'description' => 'Publish an editable draft and add it to a navigation menu in one operation. If menu insertion fails, the original post status is restored.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                            'menu_id' => array('type' => 'integer'),
+                            'menu_location' => array('type' => 'string'),
+                            'menu_item_title' => array('type' => 'string'),
+                            'menu_item_parent_id' => array('type' => 'integer'),
+                        ),
+                        'required' => array('post_id'),
+                    ),
+                ),
+                'wp_create_preview_link' => array(
+                    'name' => 'wp_create_preview_link',
+                    'description' => 'Create a cryptographically random, temporary shareable preview link for a draft, pending, or scheduled post.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'post_id' => array('type' => 'integer'),
+                            'ttl_minutes' => array('type' => 'integer', 'description' => 'Lifetime from 5 minutes to 7 days. Default 60.'),
+                        ),
+                        'required' => array('post_id'),
                     ),
                 ),
                 'wp_set_featured_image' => array(
@@ -845,11 +903,24 @@ class StifliFlexMcpModel {
                 ),
                 'wp_create_nav_menu' => array(
                     'name' => 'wp_create_nav_menu',
-                    'description' => 'Create a new navigation menu. Requires menu_name.',
+                    'description' => 'Create a new navigation menu with optional theme-location assignment. Requires menu_name.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'menu_name' => array('type' => 'string'),
+                            'theme_location' => array('type' => 'string'),
+                        ),
+                        'required' => array('menu_name'),
+                    ),
+                ),
+                'wp_create_menu' => array(
+                    'name' => 'wp_create_menu',
+                    'description' => 'Create a WordPress navigation menu with optional theme-location assignment.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'menu_name' => array('type' => 'string'),
+                            'theme_location' => array('type' => 'string'),
                         ),
                         'required' => array('menu_name'),
                     ),
@@ -1907,6 +1978,11 @@ class StifliFlexMcpModel {
                 $tools = array_merge( $tools, StifliFlexMcp_Elementor::getTools() );
             }
 
+            // Merge Divi tools when Divi Builder or a Divi theme is active.
+            if ( $this->maybeLoadDiviIntegrationModule() && class_exists( 'StifliFlexMcp_Divi' ) ) {
+                $tools = array_merge( $tools, StifliFlexMcp_Divi::getTools() );
+            }
+
             // Merge Google Search Console tools only when the optional SEO add-on is enabled.
             if ( $this->isGoogleSearchConsoleRuntimeEnabled() && $this->maybeLoadGoogleSearchConsoleModule() && class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) ) {
                 $tools = array_merge( $tools, StifliFlexMcp_GoogleSearchConsole::getTools() );
@@ -2298,6 +2374,7 @@ class StifliFlexMcpModel {
             'wp_get_menus' => 'edit_theme_options',
             'wp_get_menu' => 'edit_theme_options',
             'wp_create_nav_menu' => 'edit_theme_options',
+            'wp_create_menu' => 'edit_theme_options',
             'wp_add_nav_menu_item' => 'edit_theme_options',
             'wp_update_nav_menu_item' => 'edit_theme_options',
             'wp_delete_nav_menu_item' => 'edit_theme_options',
@@ -2363,6 +2440,10 @@ class StifliFlexMcpModel {
 
         if ( $this->maybeLoadElementorIntegrationModule() && class_exists( 'StifliFlexMcp_Elementor' ) ) {
             $map = array_merge( $map, StifliFlexMcp_Elementor::getCapabilities() );
+        }
+
+        if ( $this->maybeLoadDiviIntegrationModule() && class_exists( 'StifliFlexMcp_Divi' ) ) {
+            $map = array_merge( $map, StifliFlexMcp_Divi::getCapabilities() );
         }
 
         if ( $this->maybeLoadSearchImageModule() && class_exists( 'StifliFlexMcp_Search_Image' ) ) {
@@ -3773,6 +3854,88 @@ class StifliFlexMcpModel {
                     ),
                 );
                 break;
+            case 'wp_publish_and_promote':
+                $promote_post_id = intval($utils::getArrayValue($args, 'post_id', 0));
+                $promote_post = $promote_post_id > 0 ? get_post($promote_post_id) : null;
+                if (!$promote_post) {
+                    $r['error'] = array('code' => -42600, 'message' => 'Post not found');
+                    break;
+                }
+                if (!in_array($promote_post->post_status, array('draft', 'pending', 'future'), true)) {
+                    $r['error'] = array('code' => -42602, 'message' => 'Only draft, pending, or scheduled posts can be published and promoted.');
+                    break;
+                }
+                $promote_type = get_post_type_object($promote_post->post_type);
+                $promote_publish_cap = $promote_type && !empty($promote_type->cap->publish_posts) ? $promote_type->cap->publish_posts : 'publish_posts';
+                if (!current_user_can('edit_post', $promote_post_id) || !current_user_can($promote_publish_cap)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to publish this post.');
+                    break;
+                }
+                if (!current_user_can('edit_theme_options')) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Insufficient permissions to edit navigation menus.');
+                    break;
+                }
+                $promote_menu_id = intval($utils::getArrayValue($args, 'menu_id', 0));
+                $promote_location = sanitize_key((string) $utils::getArrayValue($args, 'menu_location', ''));
+                if (!$promote_menu_id && '' !== $promote_location) {
+                    $promote_locations = get_nav_menu_locations();
+                    $promote_menu_id = isset($promote_locations[$promote_location]) ? intval($promote_locations[$promote_location]) : 0;
+                }
+                if (!$promote_menu_id || !wp_get_nav_menu_object($promote_menu_id)) {
+                    $r['error'] = array('code' => -42602, 'message' => 'A valid menu_id or assigned menu_location is required.');
+                    break;
+                }
+                $promote_original_status = $promote_post->post_status;
+                $promote_updated = wp_update_post(array('ID' => $promote_post_id, 'post_status' => 'publish'), true);
+                if (is_wp_error($promote_updated)) {
+                    $r['error'] = array('code' => $promote_updated->get_error_code(), 'message' => $promote_updated->get_error_message());
+                    break;
+                }
+                $promote_item_id = wp_update_nav_menu_item($promote_menu_id, 0, array(
+                    'menu-item-title' => sanitize_text_field((string) $utils::getArrayValue($args, 'menu_item_title', $promote_post->post_title)),
+                    'menu-item-type' => 'post_type',
+                    'menu-item-object' => $promote_post->post_type,
+                    'menu-item-object-id' => $promote_post_id,
+                    'menu-item-parent-id' => intval($utils::getArrayValue($args, 'menu_item_parent_id', 0)),
+                    'menu-item-status' => 'publish',
+                ));
+                if (is_wp_error($promote_item_id)) {
+                    wp_update_post(array('ID' => $promote_post_id, 'post_status' => $promote_original_status));
+                    $r['error'] = array('code' => $promote_item_id->get_error_code(), 'message' => 'Menu insertion failed; publication was reverted. ' . $promote_item_id->get_error_message());
+                    break;
+                }
+                $promote_payload = array(
+                    'success' => true,
+                    'post_id' => $promote_post_id,
+                    'post_status' => get_post_status($promote_post_id),
+                    'permalink' => get_permalink($promote_post_id),
+                    'menu_id' => $promote_menu_id,
+                    'menu_item_id' => (int) $promote_item_id,
+                );
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($promote_payload, JSON_PRETTY_PRINT))),
+                    'structuredContent' => $promote_payload,
+                );
+                break;
+            case 'wp_create_preview_link':
+                $preview_post_id = intval($utils::getArrayValue($args, 'post_id', 0));
+                if (!$preview_post_id || !current_user_can('edit_post', $preview_post_id)) {
+                    $r['error'] = array('code' => 'permission_denied', 'message' => 'Post not found or insufficient permissions.');
+                    break;
+                }
+                $preview_payload = StifliFlexMcp_Preview_Links::create(
+                    $preview_post_id,
+                    intval($utils::getArrayValue($args, 'ttl_minutes', 60))
+                );
+                if (is_wp_error($preview_payload)) {
+                    $r['error'] = array('code' => $preview_payload->get_error_code(), 'message' => $preview_payload->get_error_message());
+                    break;
+                }
+                $r['result'] = array(
+                    'content' => array(array('type' => 'text', 'text' => wp_json_encode($preview_payload, JSON_PRETTY_PRINT))),
+                    'structuredContent' => $preview_payload,
+                );
+                break;
             case 'wp_set_featured_image':
                 $post_id = intval( $utils::getArrayValue( $args, 'post_id', 0 ) );
                 if ( ! $post_id ) {
@@ -4876,6 +5039,7 @@ class StifliFlexMcpModel {
                 $addResultText($r, wp_json_encode($out, JSON_PRETTY_PRINT));
                 break;
             case 'wp_create_nav_menu':
+            case 'wp_create_menu':
                 if (empty($args['menu_name'])) {
                     $r['error'] = array('code' => -42602, 'message' => 'menu_name required');
                     break;
@@ -4884,7 +5048,24 @@ class StifliFlexMcpModel {
                 if (is_wp_error($menu_id)) {
                     $r['error'] = array('code' => $menu_id->get_error_code(), 'message' => $menu_id->get_error_message());
                 } else {
-                    $addResultText($r, 'Navigation menu created with ID ' . $menu_id);
+                    $theme_location = sanitize_key((string) $utils::getArrayValue($args, 'theme_location', ''));
+                    if ('' !== $theme_location) {
+                        $registered_locations = get_registered_nav_menus();
+                        if (!isset($registered_locations[$theme_location])) {
+                            wp_delete_nav_menu($menu_id);
+                            $r['error'] = array('code' => -42602, 'message' => 'Unknown theme_location; menu creation was reverted.');
+                            break;
+                        }
+                        $locations = get_theme_mod('nav_menu_locations', array());
+                        $locations = is_array($locations) ? $locations : array();
+                        $locations[$theme_location] = (int) $menu_id;
+                        set_theme_mod('nav_menu_locations', $locations);
+                    }
+                    $menu_payload = array('success' => true, 'menu_id' => (int) $menu_id, 'menu_name' => sanitize_text_field($args['menu_name']), 'theme_location' => $theme_location);
+                    $r['result'] = array(
+                        'content' => array(array('type' => 'text', 'text' => wp_json_encode($menu_payload, JSON_PRETTY_PRINT))),
+                        'structuredContent' => $menu_payload,
+                    );
                 }
                 break;
             case 'wp_add_nav_menu_item':
@@ -7754,6 +7935,7 @@ class StifliFlexMcpModel {
                         'post_date' => $revision->post_date,
                         'post_title' => $revision->post_title,
                         'post_modified' => $revision->post_modified,
+                        'content_length' => function_exists('mb_strlen') ? mb_strlen((string) $revision->post_content, 'UTF-8') : strlen((string) $revision->post_content),
                     );
                 }
                 
@@ -8051,6 +8233,27 @@ class StifliFlexMcpModel {
 
                     if ( class_exists( 'StifliFlexMcp_Elementor' ) ) {
                         $result = StifliFlexMcp_Elementor::dispatch( $tool, $args, $r, $addResultText, $utils );
+                        if ( $result !== null ) {
+                            $recordChangeIfNeeded();
+                            return $r;
+                        }
+                    }
+                }
+
+                // Try Divi module (divi_* tools)
+                if ( strpos( $tool, 'divi_' ) === 0 ) {
+                    if ( ! $this->maybeLoadDiviIntegrationModule() ) {
+                        $r['error'] = array(
+                            'code' => -32603,
+                            'message' => $this->isDiviRuntimeAvailable()
+                                ? 'Divi integration module is not available.'
+                                : 'Divi Builder or a Divi theme is not active.',
+                        );
+                        return $r;
+                    }
+
+                    if ( class_exists( 'StifliFlexMcp_Divi' ) ) {
+                        $result = StifliFlexMcp_Divi::dispatch( $tool, $args, $r, $addResultText, $utils );
                         if ( $result !== null ) {
                             $recordChangeIfNeeded();
                             return $r;

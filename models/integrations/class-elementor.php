@@ -406,7 +406,7 @@ class StifliFlexMcp_Elementor {
             self::clear_elementor_cache( $post_id );
         }
 
-        return array(
+        $payload = array(
             'success' => true,
             'post_id' => $post_id,
             'replacements' => (int) $counter['count'],
@@ -414,6 +414,10 @@ class StifliFlexMcp_Elementor {
             'find' => $find,
             'replace' => $replace,
         );
+        if ( 1 === preg_match( '/\\\\(?:n|r|t|["\'\\\\])/', $replace ) ) {
+            $payload['warnings'] = array( 'Replacement text contains literal escape sequences such as \\n, \\t, or escaped quotes. Verify that literal backslashes are intended.' );
+        }
+        return $payload;
     }
 
     private static function replace_image( $args ) {
@@ -1456,7 +1460,17 @@ class StifliFlexMcp_Elementor {
     private static function replace_text_value( $value, $find, $replace, $case_insensitive, &$counter ) {
         if ( is_string( $value ) ) {
             $count = 0;
-            $updated = $case_insensitive ? str_ireplace( $find, $replace, $value, $count ) : str_replace( $find, $replace, $value, $count );
+            if ( $case_insensitive && '' !== $find ) {
+                $pattern = '/' . preg_quote( $find, '/' ) . '/iu';
+                $updated = preg_replace_callback( $pattern, function() use ( $replace ) {
+                    return $replace;
+                }, $value, -1, $count );
+                if ( null === $updated ) {
+                    $updated = str_ireplace( $find, $replace, $value, $count );
+                }
+            } else {
+                $updated = str_replace( $find, $replace, $value, $count );
+            }
             $counter['count'] += $count;
             return $updated;
         }

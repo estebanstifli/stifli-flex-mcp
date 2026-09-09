@@ -44,6 +44,7 @@ class StifliFlexMcp_ChangeTracker {
 		// --- WordPress Posts / Pages ---
 		'wp_create_post'            => array( 'create', 'post', null ),
 		'wp_update_post'            => array( 'update', 'post', 'ID' ),
+		'wp_publish_and_promote'    => array( 'update', 'post', 'post_id' ),
 		'wp_delete_post'            => array( 'delete', 'post', 'ID' ),
 		'wp_set_featured_image'     => array( 'update', 'post', 'post_id' ),
 		'wp_create_page'            => array( 'create', 'page', null ),
@@ -77,6 +78,7 @@ class StifliFlexMcp_ChangeTracker {
 		'wp_delete_media_item'      => array( 'file_delete', 'media', 'ID' ),
 		// --- Navigation Menus ---
 		'wp_create_nav_menu'        => array( 'create', 'nav_menu', null ),
+		'wp_create_menu'            => array( 'create', 'nav_menu', null ),
 		'wp_add_nav_menu_item'      => array( 'create', 'nav_menu_item', null ),
 		'wp_update_nav_menu_item'   => array( 'update', 'nav_menu_item', 'menu_item_id' ),
 		'wp_delete_nav_menu_item'   => array( 'delete', 'nav_menu_item', 'menu_item_id' ),
@@ -229,6 +231,10 @@ class StifliFlexMcp_ChangeTracker {
 	 * @return array|null Snapshot array or null if tool is not tracked.
 	 */
 	public function captureBeforeState( $tool, $args ) {
+		if ( 'wp_create_preview_link' === $tool ) {
+			return null;
+		}
+
 		// Check known tools first
 		if ( isset( self::$tracked_tools[ $tool ] ) ) {
 			$meta = self::$tracked_tools[ $tool ];
@@ -289,6 +295,13 @@ class StifliFlexMcp_ChangeTracker {
 			}
 		}
 
+		if ( class_exists( 'StifliFlexMcp_Divi' ) && method_exists( 'StifliFlexMcp_Divi', 'getChangeTrackerSnapshot' ) ) {
+			$snapshot = StifliFlexMcp_Divi::getChangeTrackerSnapshot( $tool, $args );
+			if ( is_array( $snapshot ) ) {
+				return $snapshot;
+			}
+		}
+
 		if ( class_exists( 'StifliFlexMcp_GoogleSearchConsole' ) && method_exists( 'StifliFlexMcp_GoogleSearchConsole', 'getChangeTrackerSnapshot' ) ) {
 			$snapshot = StifliFlexMcp_GoogleSearchConsole::getChangeTrackerSnapshot( $tool, $args );
 			if ( is_array( $snapshot ) ) {
@@ -323,11 +336,25 @@ class StifliFlexMcp_ChangeTracker {
 
 		// Extract created object id from result text when possible
 		$object_id = isset( $snapshot['object_id'] ) ? $snapshot['object_id'] : null;
+		$structured = isset( $result['result']['structuredContent'] ) && is_array( $result['result']['structuredContent'] )
+			? $result['result']['structuredContent']
+			: array();
+		if ( null === $object_id ) {
+			foreach ( array( 'id', 'post_id', 'menu_id', 'menu_item_id', 'term_id', 'order_id', 'product_id' ) as $id_key ) {
+				if ( isset( $structured[ $id_key ] ) && is_numeric( $structured[ $id_key ] ) ) {
+					$object_id = (int) $structured[ $id_key ];
+					break;
+				}
+			}
+		}
 		if ( null === $object_id && isset( $result['result']['content'][0]['text'] ) ) {
 			$object_id = $this->extractObjectIdFromResult( $result['result']['content'][0]['text'], $snapshot['object_type'] );
 		}
 
 		$after_state  = $this->captureAfterState( $snapshot, $object_id, $args );
+		if ( 'wp_publish_and_promote' === $tool && is_array( $after_state ) && ! empty( $structured['menu_item_id'] ) ) {
+			$after_state['_sflmcp_promoted_menu_item_id'] = (int) $structured['menu_item_id'];
+		}
 		$before_json  = isset( $snapshot['before_state'] ) ? wp_json_encode( $snapshot['before_state'], JSON_UNESCAPED_SLASHES ) : null;
 		$after_json   = null !== $after_state ? wp_json_encode( $after_state, JSON_UNESCAPED_SLASHES ) : null;
 		$args_json    = wp_json_encode( $args, JSON_UNESCAPED_SLASHES );
@@ -1025,6 +1052,21 @@ class StifliFlexMcp_ChangeTracker {
 		$before   = ! empty( $row['before_state'] ) ? json_decode( $row['before_state'], true ) : null;
 		$after    = ! empty( $row['after_state'] ) ? json_decode( $row['after_state'], true ) : null;
 
+		if ( 'wp_publish_and_promote' === $row['tool_name'] && 'update' === $op ) {
+			if ( null === $before ) {
+				return array( 'success' => false, 'message' => 'No before-state available for rollback.' );
+			}
+			$post_result = $this->rollbackUpdate( 'post', $obj_id, $before );
+			$menu_item_id = is_array( $after ) && ! empty( $after['_sflmcp_promoted_menu_item_id'] )
+				? (int) $after['_sflmcp_promoted_menu_item_id']
+				: 0;
+			$menu_deleted = $menu_item_id <= 0 || false !== wp_delete_post( $menu_item_id, true );
+			if ( ! empty( $post_result['success'] ) && $menu_deleted ) {
+				return array( 'success' => true, 'message' => "Restored post #{$obj_id} and removed promoted menu item #{$menu_item_id}." );
+			}
+			return array( 'success' => false, 'message' => 'Rollback was only partially completed; review the post status and navigation menu.' );
+		}
+
 		switch ( $op ) {
 			case 'create':
 				return $this->rollbackCreate( $obj_type, $obj_id );
@@ -1471,6 +1513,15 @@ class StifliFlexMcp_ChangeTracker {
 		$after    = ! empty( $row['after_state'] ) ? json_decode( $row['after_state'], true ) : null;
 		$args     = ! empty( $row['args_json'] ) ? json_decode( $row['args_json'], true ) : array();
 
+		if ( 'wp_publish_and_promote' === $row['tool_name'] && class_exists( 'StifliFlexMcpModel' ) ) {
+			$model = new StifliFlexMcpModel();
+			$result = $model->dispatchTool( $row['tool_name'], $args );
+			if ( ! isset( $result['error'] ) ) {
+				return array( 'success' => true, 'message' => 'Re-published the post and restored its menu promotion.' );
+			}
+			return array( 'success' => false, 'message' => 'Redo failed: ' . ( isset( $result['error']['message'] ) ? $result['error']['message'] : 'Unknown error' ) );
+		}
+
 		if ( 'create' === $op || 'file_create' === $op ) {
 			// Re-execute the original tool with the same arguments
 			if ( class_exists( 'StifliFlexMcpModel' ) ) {
@@ -1503,7 +1554,7 @@ class StifliFlexMcp_ChangeTracker {
 			case 'post':
 			case 'page':
 				$data = $state;
-				unset( $data['meta'] );
+				unset( $data['meta'], $data['_sflmcp_promoted_menu_item_id'] );
 				$data['ID'] = (int) $obj_id;
 				$data = $this->preparePostWriteData( $data );
 				wp_update_post( $data );

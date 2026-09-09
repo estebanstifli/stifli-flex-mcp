@@ -846,9 +846,24 @@ class StifliFlexMcp_WC_Products {
                     $tag_ids = array_map('intval', (array) $args['tags']);
                     $product->set_tag_ids($tag_ids);
                 }
-                
+
                 $product->save();
-                $addResultText($r, 'Product updated: ' . $product_id);
+                $saved_product = wc_get_product($product_id);
+                if (!$saved_product) {
+                    $r['error'] = array('code' => -50003, 'message' => 'Product updated but could not be reloaded');
+                    return true;
+                }
+
+                $saved_product_data = $buildProductRow($saved_product, false, true, true, true, true);
+                $r['result'] = array(
+                    'content' => array(
+                        array('type' => 'text', 'text' => 'Product updated and verified: ' . wp_json_encode($saved_product_data, JSON_PRETTY_PRINT)),
+                    ),
+                    'structuredContent' => array(
+                        'success' => true,
+                        'product' => $saved_product_data,
+                    ),
+                );
                 return true;
                 
             case 'wc_delete_product':

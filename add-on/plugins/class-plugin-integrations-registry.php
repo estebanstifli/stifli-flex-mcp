@@ -186,6 +186,26 @@ class StifliFlexMcp_Plugin_Integrations_Registry {
                 ),
             ),
             array(
+                'id' => 'divi',
+                'name' => 'Divi',
+                'description' => 'Inspect, validate, and safely update Divi Builder layouts and local library templates.',
+                'plugin_files' => array( 'divi-builder/divi-builder.php' ),
+                'match_classes' => array( 'ET_Builder_Plugin' ),
+                'match_constants' => array( 'ET_BUILDER_VERSION' ),
+                'install_slug' => 'divi-builder',
+                'match' => array(
+                    'prefixes' => array( 'divi_' ),
+                ),
+                'catalog_tools' => array(
+                    'divi_get_page_format',
+                    'divi_get_page_outline',
+                    'divi_validate_layout',
+                    'divi_list_local_templates',
+                    'divi_library_get',
+                    'divi_replace_text',
+                ),
+            ),
+            array(
                 'id' => 'the_events_calendar',
                 'name' => 'The Events Calendar',
                 'description' => 'Manage events, venues, and organizers through the native The Events Calendar REST API.',
