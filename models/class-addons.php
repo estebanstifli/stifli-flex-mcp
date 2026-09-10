@@ -150,7 +150,7 @@ class StifliFlexMcp_Addons {
 			'sflmcp-admin-styles',
 			plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin-styles.css',
 			array(),
-			'1.0.6'
+			defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4'
 		);
 	}
 

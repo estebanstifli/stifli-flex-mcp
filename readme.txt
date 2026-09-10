@@ -453,6 +453,7 @@ When using the MCP server with external AI clients (ChatGPT, Claude Desktop, Lib
 == Changelog ==
 = 3.5.4 =
 * Branding: Renamed the user-facing plugin name from StifLi Flex MCP to Flex MCP across WordPress metadata, admin screens, MCP server identity, messages, and documentation; technical slugs and integration identifiers remain unchanged.
+* Fix: MCP Server and Plugin Integrations admin styles now load reliably when optional AI modules are disabled, invalidate stale browser caches with the plugin version, preserve native WordPress table layout for tool rows, and keep legacy OAuth tab links fully styled and interactive.
 * MCP: The `2025-11-25` initialize response now advertises the WordPress Site Icon through the protocol-standard `serverInfo.icons` structure and reports the plugin version on both direct and SSE transports; older negotiated protocol versions remain unchanged.
 * MCP: Unknown methods now return the standard JSON-RPC `-32601` code consistently across direct and legacy SSE flows, including task methods, preventing strict clients from treating probes as reconnect failures.
 * OAuth: Discovery now accepts RFC path-scoped metadata URLs for the MCP `sse` and `messages` resources, including WordPress installations hosted in subdirectories.

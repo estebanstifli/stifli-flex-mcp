@@ -3227,26 +3227,33 @@ class StifliFlexMcp {
 	 * Enqueue admin scripts and styles
 	 */
 	public function enqueueAdminScripts($hook) {
+		$asset_version = defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4';
+
 		// Load Multimedia page assets on its own page
-		if ($hook === 'stifli-flex-mcp_page_sflmcp-multimedia') {
+		$page = isset($_GET['page']) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
+		if ($hook === 'stifli-flex-mcp_page_sflmcp-multimedia' || 'sflmcp-multimedia' === $page) {
 			$this->enqueueMultimediaAssets();
 			return;
 		}
 
 		$is_top_level_fallback = 'toplevel_page_stifli-flex-mcp' === $hook && ! stifli_flex_mcp_addon_enabled( 'ai_chat' );
-		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server' && ! $is_top_level_fallback) {
+		$is_mcp_server_page = 'sflmcp-server' === $page || ( 'stifli-flex-mcp' === $page && ! stifli_flex_mcp_addon_enabled( 'ai_chat' ) );
+		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server' && ! $is_top_level_fallback && ! $is_mcp_server_page) {
 			return;
 		}
 
 		// Get active tab early for conditional loading
 		$active_tab = isset($_GET['tab']) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'settings'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 'oauth' === $active_tab ) {
+			$active_tab = 'settings';
+		}
 
 		// Enqueue Settings tab JavaScript
 		wp_enqueue_script(
 			'sflmcp-admin-settings',
 			plugin_dir_url(__FILE__) . 'assets/admin-settings.js',
 			array(),
-			'1.0.4',
+			$asset_version,
 			true
 		);
 
@@ -3267,7 +3274,7 @@ class StifliFlexMcp {
 			'sflmcp-admin-profiles',
 			plugin_dir_url(__FILE__) . 'assets/admin-profiles.js',
 			array(),
-			'1.0.1',
+			$asset_version,
 			true
 		);
 
@@ -3284,7 +3291,7 @@ class StifliFlexMcp {
 			'sflmcp-admin-styles',
 			plugin_dir_url(__FILE__) . 'assets/admin-styles.css',
 			array(),
-			'1.0.7'
+			$asset_version
 		);
 
 		// Enqueue Custom Tools assets for legacy tab.
@@ -3298,13 +3305,13 @@ class StifliFlexMcp {
 				'sflmcp-admin-abilities',
 				plugin_dir_url(__FILE__) . 'assets/admin-abilities.css',
 				array(),
-				'1.0.0'
+				$asset_version
 			);
 			wp_enqueue_script(
 				'sflmcp-admin-abilities',
 				plugin_dir_url(__FILE__) . 'assets/admin-abilities.js',
 				array('jquery'),
-				'1.0.0',
+				$asset_version,
 				true
 			);
 			wp_localize_script('sflmcp-admin-abilities', 'sflmcpAbilities', array(
@@ -3345,14 +3352,14 @@ class StifliFlexMcp {
 			wp_enqueue_style(
 				'sflmcp-admin-oauth',
 				plugin_dir_url(__FILE__) . 'assets/admin-oauth.css',
-				array(),
-				'1.0.0'
+				array('sflmcp-admin-styles'),
+				$asset_version
 			);
 			wp_enqueue_script(
 				'sflmcp-admin-oauth',
 				plugin_dir_url(__FILE__) . 'assets/admin-oauth.js',
 				array('jquery'),
-				'1.0.0',
+				$asset_version,
 				true
 			);
 			wp_localize_script('sflmcp-admin-oauth', 'sflmcpOAuth', array(
@@ -3377,7 +3384,7 @@ class StifliFlexMcp {
 				'sflmcp-admin-tools',
 				plugin_dir_url(__FILE__) . 'assets/admin-tools.js',
 				array('jquery'),
-				'1.0.5',
+				$asset_version,
 				true
 			);
 			wp_localize_script('sflmcp-admin-tools', 'sflmcpTools', array(
@@ -3396,36 +3403,15 @@ class StifliFlexMcp {
 	}
 
 	/**
-	 * Enqueue assets used by the Custom Tools UI.
+	 * Ensure shared styles are present for modular tool-management tabs.
 	 */
 	public function enqueueCustomToolsAssets() {
-		return;
-
 		wp_enqueue_style(
-			'sflmcp-admin-custom-tools',
-			plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.css',
+			'sflmcp-admin-styles',
+			plugin_dir_url(__FILE__) . 'assets/admin-styles.css',
 			array(),
-			'1.0.5'
+			defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4'
 		);
-		wp_enqueue_script(
-			'sflmcp-admin-custom-tools',
-			plugin_dir_url(__FILE__) . 'assets/admin-custom-tools.js',
-			array('jquery'),
-			'1.0.5',
-			true
-		);
-		wp_localize_script('sflmcp-admin-custom-tools', 'sflmcpCustom', array(
-			'ajaxUrl' => admin_url('admin-ajax.php'),
-			'nonce' => wp_create_nonce('sflmcp_custom_tools'),
-			'i18n' => array(
-				'confirmDelete' => __('Are you sure you want to delete this tool?', 'stifli-flex-mcp'),
-				'errorSaving' => __('Error saving tool', 'stifli-flex-mcp'),
-				'saved' => __('Tool saved successfully', 'stifli-flex-mcp'),
-				'testing' => __('Testing...', 'stifli-flex-mcp'),
-				'success' => __('Success', 'stifli-flex-mcp'),
-				'failed' => __('Failed', 'stifli-flex-mcp'),
-			),
-		));
 	}
 
 	/**
@@ -3438,6 +3424,9 @@ class StifliFlexMcp {
 		
 		// Get active tab
 		$active_tab = isset($_GET['tab']) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'settings'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- tab selection is a read-only navigation parameter
+		if ( 'oauth' === $active_tab ) {
+			$active_tab = 'settings';
+		}
 		
 		$tabs = array(
 			'settings' => __('Settings', 'stifli-flex-mcp'),
@@ -3973,8 +3962,10 @@ class StifliFlexMcp {
 								?>
 								<tr>
 									<td class="sflmcp-tools-col-checkbox">
-										<input type="checkbox" class="sflmcp-tool-checkbox" data-id="<?php echo intval($tool['id']); ?>" data-tokens="<?php echo intval($tool['token_estimate']); ?>" data-mode="<?php echo esc_attr($tool_mode); ?>" <?php checked($is_enabled); ?> />
-										<code><?php echo esc_html($tool['tool_name']); ?></code>
+										<div class="sflmcp-tools-col-checkbox-content">
+											<input type="checkbox" class="sflmcp-tool-checkbox" data-id="<?php echo intval($tool['id']); ?>" data-tokens="<?php echo intval($tool['token_estimate']); ?>" data-mode="<?php echo esc_attr($tool_mode); ?>" <?php checked($is_enabled); ?> />
+											<code><?php echo esc_html($tool['tool_name']); ?></code>
+										</div>
 									</td>
 									<td class="sflmcp-tools-col-desc"><?php echo esc_html($tool['tool_description']); ?></td>
 									<td class="sflmcp-tools-col-mode"><span class="sflmcp-tool-mode-badge <?php echo esc_attr($mode_class); ?>"><?php echo esc_html($tool_mode); ?></span></td>
@@ -4120,8 +4111,10 @@ class StifliFlexMcp {
 								?>
 								<tr>
 									<td class="sflmcp-tools-col-checkbox">
-										<input type="checkbox" class="sflmcp-tool-checkbox" data-id="<?php echo intval($tool['id']); ?>" data-tokens="<?php echo intval($tool['token_estimate']); ?>" data-mode="<?php echo esc_attr($tool_mode); ?>" <?php checked($is_enabled); ?> />
-										<code><?php echo esc_html($tool['tool_name']); ?></code>
+										<div class="sflmcp-tools-col-checkbox-content">
+											<input type="checkbox" class="sflmcp-tool-checkbox" data-id="<?php echo intval($tool['id']); ?>" data-tokens="<?php echo intval($tool['token_estimate']); ?>" data-mode="<?php echo esc_attr($tool_mode); ?>" <?php checked($is_enabled); ?> />
+											<code><?php echo esc_html($tool['tool_name']); ?></code>
+										</div>
 									</td>
 									<td class="sflmcp-tools-col-desc"><?php echo esc_html($tool['tool_description']); ?></td>
 									<td class="sflmcp-tools-col-mode"><span class="sflmcp-tool-mode-badge <?php echo esc_attr($mode_class); ?>"><?php echo esc_html($tool_mode); ?></span></td>
@@ -5546,17 +5539,18 @@ class StifliFlexMcp {
 	 * Enqueue assets for the Multimedia submenu page.
 	 */
 	private function enqueueMultimediaAssets() {
+		$asset_version = defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4';
 		wp_enqueue_style(
 			'sflmcp-admin-multimedia',
 			plugin_dir_url(__FILE__) . 'assets/admin-multimedia.css',
 			array(),
-			'1.4.0'
+			$asset_version
 		);
 		wp_enqueue_script(
 			'sflmcp-admin-multimedia',
 			plugin_dir_url(__FILE__) . 'assets/admin-multimedia.js',
 			array('jquery'),
-			'1.7.0',
+			$asset_version,
 			true
 		);
 		wp_localize_script('sflmcp-admin-multimedia', 'sflmcpMultimedia', array(

@@ -595,8 +595,10 @@ class StifliFlexMcp_Plugin_Integrations_Admin {
 
                     echo '<tr class="sflmcp-plugin-tool-row">';
                     echo '<td class="sflmcp-tools-col-checkbox">';
+                    echo '<div class="sflmcp-tools-col-checkbox-content">';
                     echo '<input type="checkbox" class="sflmcp-plugin-tool-checkbox" data-mode="' . esc_attr( $tool_mode_display ) . '" data-tokens="' . esc_attr( $tool_token_estimate ) . '" name="enabled_tools[' . esc_attr( $integration_id ) . '][]" value="' . esc_attr( $tool_name ) . '" ' . checked( $is_checked, true, false ) . ' />';
                     echo '<code>' . esc_html( $tool_name ) . '</code>';
+                    echo '</div>';
                     echo '</td>';
                     echo '<td class="sflmcp-tools-col-desc">';
                     if ( '' !== $tool_description ) {
