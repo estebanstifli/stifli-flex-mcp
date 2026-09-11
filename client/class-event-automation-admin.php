@@ -54,16 +54,20 @@ class StifliFlexMcp_Event_Automation_Admin {
 	 * @param string $hook Current admin page hook.
 	 */
 	public function enqueue_assets( $hook ) {
-		if ( 'stifli-flex-mcp_page_sflmcp-events' !== $hook ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$valid_hooks = array( 'flex-mcp_page_sflmcp-events', 'stifli-flex-mcp_page_sflmcp-events' );
+		if ( ! in_array( $hook, $valid_hooks, true ) && 'sflmcp-events' !== $page ) {
 			return;
 		}
+		$asset_version = defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4';
 
 		// Use the same CSS as automation tasks for consistent styling
 		wp_enqueue_style(
 			'sflmcp-automation',
 			plugins_url( 'assets/automation.css', __FILE__ ),
 			array(),
-			filemtime( plugin_dir_path( __FILE__ ) . 'assets/automation.css' )
+			$asset_version
 		);
 
 		// Additional events-specific styles
@@ -71,14 +75,14 @@ class StifliFlexMcp_Event_Automation_Admin {
 			'sflmcp-events',
 			plugins_url( 'assets/events.css', __FILE__ ),
 			array( 'sflmcp-automation' ),
-			filemtime( plugin_dir_path( __FILE__ ) . 'assets/events.css' )
+			$asset_version
 		);
 
 		wp_enqueue_script(
 			'sflmcp-events',
 			plugins_url( 'assets/events.js', __FILE__ ),
 			array( 'jquery' ),
-			filemtime( plugin_dir_path( __FILE__ ) . 'assets/events.js' ),
+			$asset_version,
 			true
 		);
 

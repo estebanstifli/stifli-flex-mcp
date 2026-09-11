@@ -42,22 +42,26 @@ class StifliFlexMcp_SEO_Admin {
 	}
 
 	public function enqueue_assets( $hook ) {
-		if ( 'stifli-flex-mcp_page_sflmcp-seo' !== $hook ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$valid_hooks = array( 'flex-mcp_page_sflmcp-seo', 'stifli-flex-mcp_page_sflmcp-seo' );
+		if ( ! in_array( $hook, $valid_hooks, true ) && 'sflmcp-seo' !== $page ) {
 			return;
 		}
+		$asset_version = defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4';
 
 		wp_enqueue_style(
 			'sflmcp-admin-seo',
 			plugin_dir_url( dirname( __DIR__, 2 ) . '/stifli-flex-mcp.php' ) . 'assets/admin-seo.css',
 			array(),
-			'1.0.1'
+			$asset_version
 		);
 
 		wp_enqueue_script(
 			'sflmcp-admin-seo',
 			plugin_dir_url( dirname( __DIR__, 2 ) . '/stifli-flex-mcp.php' ) . 'assets/admin-seo.js',
 			array( 'jquery' ),
-			'1.0.1',
+			$asset_version,
 			true
 		);
 

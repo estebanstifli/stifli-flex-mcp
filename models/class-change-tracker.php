@@ -376,7 +376,7 @@ class StifliFlexMcp_ChangeTracker {
 		$file_backup  = isset( $snapshot['file_backup_path'] ) ? $snapshot['file_backup_path'] : null;
 		$src          = self::detectSource();
 
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$this->table,
 			array(
 				'session_id'       => $this->session_id ? $this->session_id : null,
@@ -397,6 +397,12 @@ class StifliFlexMcp_ChangeTracker {
 			),
 			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);
+		if ( false === $inserted ) {
+			stifli_flex_mcp_log(
+				'ChangeTracker insert failed for ' . sanitize_text_field( $tool ) . ': ' . $wpdb->last_error
+			);
+			return 0;
+		}
 
 		return $wpdb->insert_id ? (int) $wpdb->insert_id : 0;
 	}

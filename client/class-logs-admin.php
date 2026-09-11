@@ -59,9 +59,13 @@ class StifliFlexMcp_Logs_Admin {
 	 * @param string $hook Current admin page hook.
 	 */
 	public function enqueue_assets( $hook ) {
-		if ( 'stifli-flex-mcp_page_sflmcp-logs' !== $hook ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$valid_hooks = array( 'flex-mcp_page_sflmcp-logs', 'stifli-flex-mcp_page_sflmcp-logs' );
+		if ( ! in_array( $hook, $valid_hooks, true ) && 'sflmcp-logs' !== $page ) {
 			return;
 		}
+		$asset_version = defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4';
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading tab param only
 		$active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'changelog';
@@ -72,13 +76,13 @@ class StifliFlexMcp_Logs_Admin {
 				'sflmcp-admin-changelog',
 				plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin-changelog.css',
 				array(),
-				'1.0.0'
+				$asset_version
 			);
 			wp_enqueue_script(
 				'sflmcp-admin-changelog',
 				plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin-changelog.js',
 				array( 'jquery' ),
-				'1.0.0',
+				$asset_version,
 				true
 			);
 			wp_localize_script( 'sflmcp-admin-changelog', 'sflmcpChangelog', array(
@@ -117,13 +121,13 @@ class StifliFlexMcp_Logs_Admin {
 				'sflmcp-admin-logs',
 				plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin-logs.css',
 				array(),
-				'1.0.4'
+				$asset_version
 			);
 			wp_enqueue_script(
 				'sflmcp-admin-logs',
 				plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin-logs.js',
 				array( 'jquery' ),
-				'1.0.4',
+				$asset_version,
 				true
 			);
 			wp_localize_script( 'sflmcp-admin-logs', 'sflmcpLogs', array(

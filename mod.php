@@ -2869,8 +2869,10 @@ class StifliFlexMcp {
 			return;
 		}
 
-		$allowedScreens = array('stifli-flex-mcp_page_sflmcp-server', 'plugins');
-		if (!in_array((string) $screen->id, $allowedScreens, true)) {
+		$allowedScreens = array('flex-mcp_page_sflmcp-server', 'stifli-flex-mcp_page_sflmcp-server');
+		$page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
+		$is_mcp_server_screen = in_array((string) $screen->id, $allowedScreens, true) || 'sflmcp-server' === $page;
+		if ('plugins' !== (string) $screen->id && ! $is_mcp_server_screen) {
 			return;
 		}
 		$helpUrl = admin_url('admin.php?page=sflmcp-server&tab=help#troubleshooting');
@@ -3231,14 +3233,16 @@ class StifliFlexMcp {
 
 		// Load Multimedia page assets on its own page
 		$page = isset($_GET['page']) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
-		if ($hook === 'stifli-flex-mcp_page_sflmcp-multimedia' || 'sflmcp-multimedia' === $page) {
+		$multimedia_hooks = array('flex-mcp_page_sflmcp-multimedia', 'stifli-flex-mcp_page_sflmcp-multimedia');
+		if (in_array($hook, $multimedia_hooks, true) || 'sflmcp-multimedia' === $page) {
 			$this->enqueueMultimediaAssets();
 			return;
 		}
 
 		$is_top_level_fallback = 'toplevel_page_stifli-flex-mcp' === $hook && ! stifli_flex_mcp_addon_enabled( 'ai_chat' );
 		$is_mcp_server_page = 'sflmcp-server' === $page || ( 'stifli-flex-mcp' === $page && ! stifli_flex_mcp_addon_enabled( 'ai_chat' ) );
-		if ($hook !== 'stifli-flex-mcp_page_sflmcp-server' && ! $is_top_level_fallback && ! $is_mcp_server_page) {
+		$mcp_server_hooks = array('flex-mcp_page_sflmcp-server', 'stifli-flex-mcp_page_sflmcp-server');
+		if (!in_array($hook, $mcp_server_hooks, true) && ! $is_top_level_fallback && ! $is_mcp_server_page) {
 			return;
 		}
 

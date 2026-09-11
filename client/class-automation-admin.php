@@ -67,22 +67,26 @@ class StifliFlexMcp_Automation_Admin {
 	 * @param string $hook Current admin page.
 	 */
 	public function enqueue_assets( $hook ) {
-		if ( 'stifli-flex-mcp_page_sflmcp-automation' !== $hook ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- admin page routing only.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$valid_hooks = array( 'flex-mcp_page_sflmcp-automation', 'stifli-flex-mcp_page_sflmcp-automation' );
+		if ( ! in_array( $hook, $valid_hooks, true ) && 'sflmcp-automation' !== $page ) {
 			return;
 		}
+		$asset_version = defined( 'SFLMCP_VERSION' ) ? SFLMCP_VERSION : '3.5.4';
 
 		wp_enqueue_style(
 			'sflmcp-automation',
 			plugin_dir_url( __FILE__ ) . 'assets/automation.css',
 			array(),
-			'2.1.0'
+			$asset_version
 		);
 
 		wp_enqueue_script(
 			'sflmcp-automation',
 			plugin_dir_url( __FILE__ ) . 'assets/automation.js',
 			array( 'jquery' ),
-			'2.1.0',
+			$asset_version,
 			true
 		);
 
