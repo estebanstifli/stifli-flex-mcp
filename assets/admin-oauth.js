@@ -13,6 +13,26 @@
 		},
 
 		bindEvents: function() {
+			$(document).on('click', '.sflmcp-oauth-approve-client', function() {
+				var $button = $(this).prop('disabled', true);
+				$.post(sflmcpOAuth.ajaxUrl, { action: 'sflmcp_oauth_approve_client', nonce: sflmcpOAuth.nonce, client_id: $button.data('client-id') })
+					.done(function(response) {
+						if (response.success) {
+							$button.closest('tr').find('.sflmcp-oauth-pending').remove();
+							$button.remove();
+						} else {
+							OAuthAdmin.showNotice(response.data.message || sflmcpOAuth.i18n.error, 'error');
+						}
+					}).fail(function() { OAuthAdmin.showNotice(sflmcpOAuth.i18n.error, 'error'); })
+					.always(function() { $button.prop('disabled', false); });
+			});
+			$(document).on('click', '.sflmcp-oauth-check-header', function() {
+				var $button = $(this).prop('disabled', true);
+				$.ajax({ url: sflmcpOAuth.ajaxUrl, type: 'POST', headers: { Authorization: 'Bearer sflmcp-header-probe' }, data: { action: 'sflmcp_oauth_check_header', nonce: sflmcpOAuth.nonce } })
+					.done(function(response) { OAuthAdmin.showNotice(response.data.message || sflmcpOAuth.i18n.error, response.success && response.data.received ? 'success' : 'error'); })
+					.fail(function() { OAuthAdmin.showNotice(sflmcpOAuth.i18n.error, 'error'); })
+					.always(function() { $button.prop('disabled', false); });
+			});
 			// Toggle tokens detail row
 			$(document).on('click', '.sflmcp-oauth-toggle-tokens', function(e) {
 				e.preventDefault();
@@ -89,20 +109,26 @@
 			});
 
 			// Toggle auto-approve setting
-			$(document).on('change', '#sflmcp_oauth_auto_approve', function() {
-				var enabled = $(this).is(':checked') ? '1' : '0';
+			$(document).on('change', '#sflmcp_oauth_auto_approve, #sflmcp_oauth_require_approval', function() {
+				var $control = $(this).prop('disabled', true);
+				var enabled = $('#sflmcp_oauth_auto_approve').is(':checked') ? '1' : '0';
 
 				$.post(sflmcpOAuth.ajaxUrl, {
 					action: 'sflmcp_oauth_save_settings',
 					nonce: sflmcpOAuth.nonce,
-					auto_approve: enabled
+					auto_approve: enabled,
+					require_approval: $('#sflmcp_oauth_require_approval').is(':checked') ? '1' : '0'
 				}, function(response) {
 					if (response.success) {
 						OAuthAdmin.showNotice(sflmcpOAuth.i18n.settingsSaved);
 					} else {
 						OAuthAdmin.showNotice(response.data.message || sflmcpOAuth.i18n.error, 'error');
+						$control.prop('checked', !$control.prop('checked'));
 					}
-				});
+				}).fail(function() {
+					$control.prop('checked', !$control.prop('checked'));
+					OAuthAdmin.showNotice(sflmcpOAuth.i18n.error, 'error');
+				}).always(function() { $control.prop('disabled', false); });
 			});
 
 			// Reset OAuth sessions

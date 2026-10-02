@@ -421,12 +421,23 @@ class StifliFlexMcpModel {
         }
         
         // Filter tools by enabled status
+        $compact_tools = null;
+        if ( $table_exists && function_exists( 'stifli_flex_mcp_compact_profile_tools' ) ) {
+            $profiles_table = StifliFlexMcpUtils::getPrefixedTable( 'sflmcp_profiles', false );
+            $compact_active = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$profiles_table} WHERE profile_name = %s AND is_active = 1 AND is_system = 1 LIMIT 1", 'Compact Site' ) );
+            if ( $compact_active ) {
+                $compact_tools = stifli_flex_mcp_compact_profile_tools();
+            }
+        }
         $filtered_tools = array();
         foreach ($tools as $tool) {
             $name = StifliFlexMcpUtils::getArrayValue($tool, 'name', '');
             if ('' === $name) {
                 continue;
             }
+			if ( is_array( $compact_tools ) && ! in_array( $name, $compact_tools, true ) ) {
+				continue;
+			}
 
             // Always emit a valid object schema for MCP clients.
             $tool['inputSchema'] = StifliFlexMcpUtils::normalizeToolInputSchema(
@@ -484,6 +495,22 @@ class StifliFlexMcpModel {
         if (empty($this->tools)) {
             $tools = array(
                 // Diagnóstico
+                'wp_verify_rendered_page' => array(
+                    'name' => 'wp_verify_rendered_page',
+                    'description' => 'Verify public server-rendered HTML on this site after an edit: HTTP status, title, canonical, description and expected text. Does not execute JavaScript, send cookies or follow redirects. Use the final public URL without query parameters.',
+                    'inputSchema' => array(
+                        'type' => 'object',
+                        'properties' => array(
+                            'url' => array('type' => 'string', 'maxLength' => 2048),
+                            'expected_status' => array('type' => 'integer', 'minimum' => 100, 'maximum' => 599),
+                            'expected_title' => array('type' => 'string'),
+                            'expected_canonical' => array('type' => 'string'),
+                            'expected_description' => array('type' => 'string'),
+                            'expected_text' => array('type' => 'array', 'maxItems' => 20, 'items' => array('type' => 'string', 'minLength' => 1, 'maxLength' => 2000)),
+                        ),
+                        'required' => array('url'),
+                    ),
+                ),
                 'mcp_ping' => array(
                     'name' => 'mcp_ping',
                     'description' => 'Connectivity check with optional lightweight diagnostics. Returns the current GMT time, site info, and optional DNS/reachability details.',
@@ -1152,12 +1179,14 @@ class StifliFlexMcpModel {
                 ),
                 'wp_update_option' => array(
                     'name' => 'wp_update_option',
-                    'description' => 'Update a WordPress option.',
+                    'description' => 'Update a WordPress option. Use dry_run to preview allowed changes and receive a state_hash; pass it as expected_hash to reject stale writes.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'option' => array('type' => 'string'),
                             'value'  => array('type' => 'string'),
+                            'dry_run' => array('type' => 'boolean', 'default' => false),
+                            'expected_hash' => array('type' => 'string'),
                         ),
                         'required' => array('option','value'),
                     ),
@@ -1895,11 +1924,13 @@ class StifliFlexMcpModel {
                 ),
                 'wp_update_settings' => array(
                     'name' => 'wp_update_settings',
-                    'description' => 'Update WordPress settings. Pass "settings" object with key-value pairs.',
+                    'description' => 'Update WordPress settings. Use dry_run to preview changes and blocked options. Pass the returned state_hash as expected_hash to reject stale writes.',
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
                             'settings' => array('type' => 'object'),
+                            'dry_run' => array('type' => 'boolean', 'default' => false),
+                            'expected_hash' => array('type' => 'string'),
                         ),
                         'required' => array('settings'),
                     ),
@@ -2480,6 +2511,7 @@ class StifliFlexMcpModel {
             'wp_switch_theme' => 'switch_themes',
             // options/meta/settings
             'wp_update_option' => 'manage_options',
+            'wp_verify_rendered_page' => 'edit_posts',
 			'wp_update_permalink_structure' => 'manage_options',
             'wp_css_set_global' => 'edit_theme_options',
             'wp_css_set_scoped' => 'manage_options',
@@ -3187,6 +3219,24 @@ class StifliFlexMcpModel {
         }
 
         // Change Tracker: capture before-state for mutating tools
+        if ( in_array( $tool, array( 'wp_update_option', 'wp_update_settings' ), true ) ) {
+            $dry_run = true === StifliFlexMcpUtils::getArrayValue( $args, 'dry_run', false );
+            $expected_hash = StifliFlexMcpUtils::getArrayValue( $args, 'expected_hash', '' );
+            if ( $dry_run || '' !== $expected_hash ) {
+                $settings = 'wp_update_option' === $tool
+                    ? array( StifliFlexMcpUtils::getArrayValue( $args, 'option', '' ) => StifliFlexMcpUtils::getArrayValue( $args, 'value', null ) )
+                    : StifliFlexMcpUtils::getArrayValue( $args, 'settings', array() );
+                $plan = StifliFlexMcpUtils::buildOptionWritePlan( $settings );
+                if ( '' !== $expected_hash && ! hash_equals( $plan['state_hash'], $expected_hash ) ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Settings changed since preview. Run dry_run again before writing.' );
+                    return $r;
+                }
+                if ( $dry_run ) {
+                    $r['result'] = array( 'content' => array( array( 'type' => 'text', 'text' => wp_json_encode( $plan, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ) ), 'structuredContent' => $plan );
+                    return $r;
+                }
+            }
+        }
         $changeSnapshot = null;
         if ( class_exists( 'StifliFlexMcp_ChangeTracker' ) && get_option( 'sflmcp_changelog_enabled', true ) ) {
             $changeTracker  = StifliFlexMcp_ChangeTracker::getInstance();
@@ -3312,6 +3362,17 @@ class StifliFlexMcpModel {
 
         try {
         switch ($tool) {
+            case 'wp_verify_rendered_page':
+                $verification = StifliFlexMcpUtils::verifyRenderedPage( $args );
+                if ( is_wp_error( $verification ) ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => $verification->get_error_message() );
+                    break;
+                }
+                $r['result'] = array(
+                    'content' => array( array( 'type' => 'text', 'text' => wp_json_encode( $verification, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ) ),
+                    'structuredContent' => $verification,
+                );
+                break;
             case 'wp_search_image':
                 if ( $this->maybeLoadSearchImageModule() && class_exists( 'StifliFlexMcp_Search_Image' ) ) {
                     $r = StifliFlexMcp_Search_Image::dispatch( $tool, $args, $id );

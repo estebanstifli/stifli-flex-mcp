@@ -5,7 +5,7 @@ Donate link: https://github.com/estebanstifli/stifli-flex-mcp
 Tags:  mcp, abilities, chatgpt, claude, gemini
 Requires at least: 5.9
 Tested up to: 7.1
-Stable tag: 3.5.4
+Stable tag: 3.6.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -218,7 +218,19 @@ Flex MCP integrates with:
 
 **📐 MCP Spec Compliance**
 
-Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specification](https://modelcontextprotocol.io/specification/2025-11-25/) for lifecycle and tool operations over JSON-RPC 2.0, while keeping legacy SSE compatibility for older MCP clients.
+Flex MCP supports [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/) with stateless POST requests, `server/discover`, per-request capabilities, result types and private cache hints. Legacy `initialize` and SSE remain available for 2025-11-25, 2025-06-18 and 2025-03-26. Modern image/video tasks require the client to declare the `io.modelcontextprotocol/tasks` extension; other clients keep the repeat-call fallback. Subscriptions are not advertised.
+
+Modern clients use `/wp-json/stifli-flex-mcp/v1/messages` with matching `MCP-Protocol-Version`, `Mcp-Method` and, for tools/resources, `Mcp-Name` headers, plus protocol version and object-valued client capabilities in `params._meta`. They do not use the legacy initialize handshake or standalone GET streams.
+
+**Safety and diagnostics in 3.6.0**
+
+* OAuth adds issuer responses, public-PKCE CIMD clients, optional administrator approval for new clients, and an Authorization-header check. Existing clients remain authorized; pending clients still require approval or deletion after the setting is disabled. Private-key JWT client authentication is not supported.
+* REST discovery alternatives are available under `/wp-json/stifli-flex-mcp/v1/.well-known/`: `oauth-authorization-server` and `oauth-protected-resource?endpoint=messages` (or `endpoint=sse`).
+* Rate limiting allows 180 requests/minute per authenticated user and 30/minute per unauthenticated IP, with `Retry-After` on HTTP 429. The `sflmcp_authenticated_rate_limit` filter adjusts the authenticated limit. Forwarded IPs are ignored except `CF-Connecting-IP` from exact proxy IPs configured through `sflmcp_trusted_proxy_ips`.
+* `wp_update_option` and `wp_update_settings` support `dry_run` previews and `expected_hash` checks against the returned `state_hash`. Previews do not write or create change snapshots; permissions and blocked-option rules remain in force. Hash checks detect intervening changes but are not atomic transactions.
+* `wp_verify_rendered_page` verifies public same-origin HTML, not JavaScript or visual layout. It requires PHP DOM, rejects query parameters, sends no cookies and follows no redirects. On upgrades it starts disabled; enable it manually or apply a profile containing it.
+* **Compact Site** is an optional 12-tool editorial profile that includes writes. It limits discovery, not WordPress permissions. Upgrades keep the active profile and current tool toggles.
+* **Logs & Roll Back > Protocol** provides optional local aggregate statistics with 30-day retention and a clear button. This feature stores no tool arguments, tokens, Authorization headers or source IPs. Client names are self-reported; debug logs are separate.
 
 == Installation ==
 
@@ -228,7 +240,7 @@ Flex MCP implements the [Model Context Protocol (MCP) 2025-11-25 specification](
 2. Activate the plugin
 3. Choose the addons you want on the first-activation screen. Leave them unchecked for the lightweight MCP Server-only setup.
 4. Continue to **Flex MCP → MCP Server**
-5. Copy the SSE URL and connect your MCP client through OAuth 2.1
+5. Connect your MCP client through OAuth 2.1 using the messages URL for MCP 2026-07-28, or the SSE URL for legacy connectors
 
 Multimedia tools and Logs & Roll Back are included in the MCP Server layer and are always available. Addons can be changed later from **MCP Server → Add-ons**; disabled addons do not load their PHP classes, menus, hooks, or background jobs.
 
@@ -448,9 +460,21 @@ This plugin connects to third-party AI services to power the AI Chat Agent, AI C
 * **Google Search Console** - Used only when you connect your Google account in the SEO settings, for read-only site/search performance data.
   [Terms of Service](https://policies.google.com/terms) | [Privacy Policy](https://policies.google.com/privacy)
 
-When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), API requests are made by the AI client's backend servers to your WordPress MCP endpoint. The plugin itself does not send data to third parties in this scenario — the external MCP client initiates all communication.
+When using the MCP server with external AI clients (ChatGPT, Claude Desktop, LibreChat, etc.), requests arrive at your WordPress MCP endpoint. For CIMD clients, the plugin retrieves the client's public HTTPS metadata document during OAuth authorization/token processing and may cache it for up to one hour. It sends no WordPress cookies or access tokens with that metadata request. The public HTML verification tool requests a page from your own site. Tools that explicitly use other external services follow the settings and disclosures above.
 
 == Changelog ==
+= 3.6.0 =
+* Identity: Recent MCP versions include the configured site URL, description and a domain/path display title without renaming the server or tools; older identity formats are preserved.
+* Fix: Plugin-setting reads preserve empty strings and null values in sensitive fields while continuing to hide configured secrets and sensitive containers.
+* MCP: Added 2026-07-28 stateless discovery, request metadata/header validation, result types, private cache hints and protocol-specific HTTP errors while retaining legacy 2025 clients and SSE.
+* Tasks: Added the negotiated Tasks extension adapter with flat task handles, result polling, cancellation and owner isolation over the existing media worker.
+* OAuth: Added RFC 9207 issuer responses, REST discovery alternatives, public-PKCE CIMD, optional approval for new clients and an Authorization-header diagnostic.
+* Security: Added identity-aware rate limits with Retry-After, explicit trusted-proxy handling, and removal of Authorization fragments from authentication logs.
+* Safety: Added dry-run previews and optimistic state checks for option/settings updates, plus public HTML verification after edits.
+* Profiles: Added the optional Compact Site editorial profile without changing existing active profiles or enabling the new tool on upgrades.
+* Diagnostics: Added opt-in, bounded local protocol statistics with 30-day retention and manual deletion.
+* Developer: Added isolated PHP regressions and validation of emitted responses against official MCP and Tasks JSON schemas. Live WordPress/client interoperability remains a deployment check.
+
 = 3.5.4 =
 * Branding: Renamed the user-facing plugin name from StifLi Flex MCP to Flex MCP across WordPress metadata, admin screens, MCP server identity, messages, and documentation; technical slugs and integration identifiers remain unchanged.
 * Fix: MCP Server, Multimedia, SEO, Plugin Integrations, Logs, Automation Tasks, and Event Automations admin assets now load reliably with the current Flex MCP page hooks, preserve compatibility with legacy hooks, invalidate stale browser caches with the plugin version, preserve native WordPress table layout for tool rows, and keep legacy OAuth tab links fully styled and interactive.

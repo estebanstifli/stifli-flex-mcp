@@ -225,6 +225,9 @@ class StifliFlexMcp_OAuth_Storage {
 	 */
 	public function get_client( $client_id ) {
 		global $wpdb;
+		if ( is_string( $client_id ) && 0 === strpos( $client_id, 'https://' ) ) {
+			return $this->get_cimd_client( $client_id );
+		}
 
 		$table = $wpdb->prefix . 'sflmcp_oauth_clients';
 
@@ -232,6 +235,98 @@ class StifliFlexMcp_OAuth_Storage {
 		return $wpdb->get_row(
 			$wpdb->prepare( "SELECT * FROM {$table} WHERE client_id = %s", $client_id )
 		);
+	}
+
+	public static function client_storage_id( $client_id ) {
+		return is_string( $client_id ) && 0 === strpos( $client_id, 'https://' ) ? 'cimd_' . hash( 'sha256', $client_id ) : $client_id;
+	}
+
+	public function client_is_pending( $client_id ) {
+		return 'pending' === get_option( 'sflmcp_oauth_review_' . hash( 'sha256', self::client_storage_id( $client_id ) ), '' );
+	}
+
+	public function mark_new_client_for_review( $client_id ) {
+		if ( '1' === get_option( 'sflmcp_oauth_require_approval', '0' ) ) {
+			add_option( 'sflmcp_oauth_review_' . hash( 'sha256', self::client_storage_id( $client_id ) ), 'pending', '', false );
+		}
+	}
+
+	public static function validate_cimd_document( $client_id, $document ) {
+		if ( ! is_array( $document ) || self::value( $document, 'client_id' ) !== $client_id
+			|| ! is_string( self::value( $document, 'client_name' ) ) || '' === trim( $document['client_name'] )
+			|| ! is_array( self::value( $document, 'redirect_uris' ) ) || empty( $document['redirect_uris'] )
+			|| count( $document['redirect_uris'] ) > 20 || 'none' !== self::value( $document, 'token_endpoint_auth_method', 'none' ) ) {
+			return false;
+		}
+		foreach ( $document['redirect_uris'] as $redirect ) {
+			if ( ! is_string( $redirect ) || strlen( $redirect ) > 2048 || preg_match( '/[\x00-\x20\x7f]/', $redirect ) ) {
+				return false;
+			}
+			$parts = wp_parse_url( $redirect );
+			$scheme = strtolower( self::value( $parts, 'scheme', '' ) );
+			if ( '' === $scheme || in_array( $scheme, array( 'javascript', 'data', 'file' ), true ) || isset( $parts['fragment'] ) || isset( $parts['user'] )
+				|| ( 'https' === $scheme && empty( $parts['host'] ) )
+				|| ( 'http' === $scheme && ! in_array( self::value( $parts, 'host' ), array( 'localhost', '127.0.0.1', '[::1]' ), true ) ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static function value( $values, $key, $default = null ) {
+		return StifliFlexMcpUtils::getArrayValue( $values, $key, $default );
+	}
+
+	private function get_cimd_client( $client_id ) {
+		global $wpdb;
+		$parts = wp_parse_url( $client_id );
+		if ( strlen( $client_id ) > 2048 || ! is_array( $parts ) || 'https' !== self::value( $parts, 'scheme' )
+			|| empty( $parts['host'] ) || empty( $parts['path'] ) || '/' === $parts['path'] || isset( $parts['fragment'] ) || isset( $parts['user'] )
+			|| ( isset( $parts['port'] ) && 443 !== $parts['port'] ) || ! wp_http_validate_url( $client_id ) ) {
+			return null;
+		}
+		$storage_id = self::client_storage_id( $client_id );
+		$cache_key = 'sflmcp_cimd_' . hash( 'sha256', $client_id );
+		$document = get_transient( $cache_key );
+		if ( ! is_array( $document ) ) {
+			if ( is_wp_error( StifliFlexMcpUtils::checkRateLimit( 'cimd:' . StifliFlexMcpUtils::getClientIp(), 10 ) ) ) {
+				return null;
+			}
+			$response = wp_safe_remote_get( $client_id, array( 'timeout' => 5, 'redirection' => 0, 'limit_response_size' => 65536, 'headers' => array( 'Accept' => 'application/json' ), 'cookies' => array() ) );
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+				return null;
+			}
+			$document = json_decode( wp_remote_retrieve_body( $response ), true );
+			if ( ! self::validate_cimd_document( $client_id, $document ) ) {
+				return null;
+			}
+			$cache_control = (string) wp_remote_retrieve_header( $response, 'cache-control' );
+			$ttl = preg_match( '/max-age\s*=\s*(\d+)/i', $cache_control, $matches ) ? min( 3600, (int) $matches[1] ) : 300;
+			if ( $ttl > 0 && ! preg_match( '/no-store|no-cache/i', $cache_control ) ) {
+				set_transient( $cache_key, $document, $ttl );
+			}
+		}
+		if ( ! self::validate_cimd_document( $client_id, $document ) ) {
+			return null;
+		}
+		$existing = $this->get_client( $storage_id );
+		$values = array( 'client_name' => sanitize_text_field( $document['client_name'] ), 'client_uri' => $client_id, 'redirect_uris' => wp_json_encode( $document['redirect_uris'] ), 'token_endpoint_auth_method' => 'none', 'scope' => 'mcp' );
+		if ( $existing ) {
+			$saved = $wpdb->update( $wpdb->prefix . 'sflmcp_oauth_clients', $values, array( 'client_id' => $storage_id ) );
+		} else {
+			$values['client_id'] = $storage_id;
+			$values['created_at'] = gmdate( 'Y-m-d H:i:s' );
+			$saved = $wpdb->insert( $wpdb->prefix . 'sflmcp_oauth_clients', $values );
+			if ( false !== $saved ) {
+				$this->mark_new_client_for_review( $storage_id );
+			}
+		}
+		if ( false === $saved ) {
+			return null;
+		}
+		$values['client_id'] = $client_id;
+		$values['client_secret_hash'] = null;
+		return (object) $values;
 	}
 
 	/**
@@ -281,6 +376,7 @@ class StifliFlexMcp_OAuth_Storage {
 	 */
 	public function create_code( $client_id, $user_id, $redirect_uri, $scope, $code_challenge, $code_challenge_method, $resource = null ) {
 		global $wpdb;
+		$client_id = self::client_storage_id( $client_id );
 
 		$code      = bin2hex( random_bytes( 16 ) );
 		$code_hash = hash( 'sha256', $code );
@@ -373,6 +469,7 @@ class StifliFlexMcp_OAuth_Storage {
 	 */
 	public function create_token_pair( $client_id, $user_id, $scope, $resource = null ) {
 		global $wpdb;
+		$client_id = self::client_storage_id( $client_id );
 
 		$access_token  = bin2hex( random_bytes( 32 ) );
 		$refresh_token = bin2hex( random_bytes( 32 ) );
@@ -445,6 +542,7 @@ class StifliFlexMcp_OAuth_Storage {
 	 */
 	public function user_has_active_grant( $client_id, $user_id ) {
 		global $wpdb;
+		$client_id = self::client_storage_id( $client_id );
 
 		$table = $wpdb->prefix . 'sflmcp_oauth_tokens';
 		$now   = gmdate( 'Y-m-d H:i:s' );
@@ -473,6 +571,7 @@ class StifliFlexMcp_OAuth_Storage {
 	 */
 	public function refresh_token( $refresh_token, $client_id ) {
 		global $wpdb;
+		$client_id = self::client_storage_id( $client_id );
 
 		$hash  = hash( 'sha256', $refresh_token );
 		$table = $wpdb->prefix . 'sflmcp_oauth_tokens';
@@ -664,6 +763,8 @@ class StifliFlexMcp_OAuth_Storage {
 	 */
 	public function delete_client( $client_id ) {
 		global $wpdb;
+		$client_id = self::client_storage_id( $client_id );
+		$client = $this->get_client( $client_id );
 
 		// Revoke all tokens for this client.
 		$tokens_table = $wpdb->prefix . 'sflmcp_oauth_tokens';
@@ -676,6 +777,14 @@ class StifliFlexMcp_OAuth_Storage {
 		$clients_table = $wpdb->prefix . 'sflmcp_oauth_clients';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- plugin-managed OAuth table.
 		$deleted = $wpdb->delete( $clients_table, array( 'client_id' => $client_id ), array( '%s' ) );
+
+		if ( false !== $deleted ) {
+			$wpdb->delete( $wpdb->prefix . 'sflmcp_oauth_codes', array( 'client_id' => $client_id ), array( '%s' ) );
+			delete_option( 'sflmcp_oauth_review_' . hash( 'sha256', $client_id ) );
+			if ( $client && 0 === strpos( $client_id, 'cimd_' ) && ! empty( $client->client_uri ) ) {
+				delete_transient( 'sflmcp_cimd_' . hash( 'sha256', $client->client_uri ) );
+			}
+		}
 
 		return false !== $deleted;
 	}

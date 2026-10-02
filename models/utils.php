@@ -6,6 +6,164 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Utilidades mínimas para StifliFlexMcp (stub)
 class StifliFlexMcpUtils {
+	public static function pruneProtocolUsage() {
+		$usage = get_option( 'sflmcp_protocol_usage', array() );
+		$usage = is_array( $usage ) ? $usage : array();
+		$cutoff = gmdate( 'Y-m-d', time() - 29 * 86400 );
+		$kept = array_filter( $usage, static function( $day ) use ( $cutoff ) { return $day >= $cutoff; }, ARRAY_FILTER_USE_KEY );
+		if ( $kept !== $usage ) {
+			update_option( 'sflmcp_protocol_usage', $kept, false );
+		}
+		return $kept;
+	}
+
+	public static function recordProtocolUsage( $request, $response ) {
+		if ( ! get_option( 'sflmcp_protocol_usage_enabled', false ) || 'POST' !== $request->get_method() ) {
+			return;
+		}
+		$data = json_decode( $request->get_body(), true );
+		$params = self::getArrayValue( $data, 'params', array() );
+		$meta = self::getArrayValue( $params, '_meta', array() );
+		$version = self::getArrayValue( $meta, 'io.modelcontextprotocol/protocolVersion', $request->get_header( 'MCP-Protocol-Version' ) ?: self::getArrayValue( $params, 'protocolVersion', 'unspecified' ) );
+		$client = self::getArrayValue( $meta, 'io.modelcontextprotocol/clientInfo', self::getArrayValue( $params, 'clientInfo', array() ) );
+		$client_name = self::getArrayValue( $client, 'name', 'Unidentified' );
+		$method = self::getArrayValue( $data, 'method', 'invalid' );
+		$body = $response->get_data();
+		$error = $response->get_status() >= 400 || isset( $body['error'] ) || ! empty( $body['result']['isError'] );
+		$started = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime( true );
+		$elapsed = (int) min( 3600000, max( 0, ( microtime( true ) - $started ) * 1000 ) );
+		$usage = self::pruneProtocolUsage();
+		$day = gmdate( 'Y-m-d' );
+		foreach ( array( 'versions' => $version, 'clients' => $client_name, 'methods' => $method ) as $dimension => $label ) {
+			$label = is_string( $label ) ? substr( sanitize_text_field( $label ), 0, 80 ) : 'invalid';
+			$buckets = isset( $usage[$day][$dimension] ) ? $usage[$day][$dimension] : array();
+			if ( ! isset( $buckets[$label] ) && count( $buckets ) >= 30 ) {
+				$label = 'Other';
+			}
+			$bucket = isset( $buckets[$label] ) ? $buckets[$label] : array( 'requests' => 0, 'errors' => 0, 'total_ms' => 0 );
+			$bucket['requests']++;
+			$bucket['errors'] += $error ? 1 : 0;
+			$bucket['total_ms'] += $elapsed;
+			$usage[$day][$dimension][$label] = $bucket;
+		}
+		update_option( 'sflmcp_protocol_usage', $usage, false );
+	}
+
+	public static function verifyRenderedPage( array $args ) {
+		$url = self::getArrayValue( $args, 'url', '' );
+		if ( ! is_string( $url ) || '' === $url || strlen( $url ) > 2048 ) {
+			return new WP_Error( 'invalid_url', 'A site URL is required.' );
+		}
+		$site = wp_parse_url( home_url( '/' ) );
+		$target = wp_parse_url( $url );
+		if ( ! is_array( $target ) || isset( $target['user'] ) || isset( $target['pass'] )
+			|| strtolower( (string) self::getArrayValue( $target, 'host', '' ) ) !== strtolower( $site['host'] )
+			|| self::getArrayValue( $target, 'scheme', '' ) !== $site['scheme']
+			|| self::getArrayValue( $target, 'port', 'https' === $site['scheme'] ? 443 : 80 ) !== self::getArrayValue( $site, 'port', 'https' === $site['scheme'] ? 443 : 80 ) ) {
+			return new WP_Error( 'invalid_url', 'Only URLs on this site origin are permitted.' );
+		}
+		$path = rawurldecode( self::getArrayValue( $target, 'path', '/' ) );
+		if ( preg_match( '~(?:^|/)(?:wp-admin|wp-json|wp-login\.php|wp-cron\.php|xmlrpc\.php)(?:/|$)~i', $path ) || isset( $target['query'] ) ) {
+			return new WP_Error( 'invalid_url', 'Only public page URLs without query parameters are permitted.' );
+		}
+		$response = wp_safe_remote_get( $url, array( 'timeout' => 10, 'redirection' => 0, 'limit_response_size' => 1048576, 'headers' => array( 'Accept' => 'text/html', 'Cache-Control' => 'no-cache' ), 'cookies' => array() ) );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		$html = wp_remote_retrieve_body( $response );
+		$status = wp_remote_retrieve_response_code( $response );
+		$type = strtolower( (string) wp_remote_retrieve_header( $response, 'content-type' ) );
+		if ( false === strpos( $type, 'text/html' ) && false === strpos( $type, 'application/xhtml+xml' ) ) {
+			return new WP_Error( 'not_html', 'The page did not return HTML (HTTP ' . $status . ').' );
+		}
+		if ( ! class_exists( 'DOMDocument' ) ) {
+			return new WP_Error( 'dom_unavailable', 'The PHP DOM extension is required for HTML verification.' );
+		}
+		$previous = libxml_use_internal_errors( true );
+		try {
+			$document = new DOMDocument();
+			$loaded = $document->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NONET );
+			if ( ! $loaded ) {
+				return new WP_Error( 'invalid_html', 'The page HTML could not be parsed.' );
+			}
+			$xpath = new DOMXPath( $document );
+			$title = trim( $xpath->evaluate( 'string((//title)[1])' ) );
+			$canonical = trim( $xpath->evaluate( 'string((//link[@rel="canonical"]/@href)[1])' ) );
+			$description = trim( $xpath->evaluate( 'string((//meta[@name="description"]/@content)[1])' ) );
+			foreach ( $xpath->query( '//script|//style|//template' ) as $node ) {
+				$node->parentNode->removeChild( $node );
+			}
+			$text = preg_replace( '/\s+/u', ' ', $xpath->evaluate( 'string(//body)' ) );
+			$checks = array( 'http_status' => $status === self::getArrayValue( $args, 'expected_status', 200 ), 'complete_body' => strlen( $html ) < 1048576 );
+			foreach ( array( 'title' => $title, 'canonical' => $canonical, 'description' => $description ) as $field => $actual ) {
+				if ( array_key_exists( 'expected_' . $field, $args ) ) {
+					$checks[$field] = $args['expected_' . $field] === $actual;
+				}
+			}
+			$text_checks = array();
+			foreach ( array_slice( (array) self::getArrayValue( $args, 'expected_text', array() ), 0, 20 ) as $expected ) {
+				$found = is_string( $expected ) && '' !== $expected && false !== strpos( (string) $text, preg_replace( '/\s+/u', ' ', $expected ) );
+				$text_checks[] = array( 'text' => $expected, 'found' => $found );
+				$checks['expected_text'] = self::getArrayValue( $checks, 'expected_text', true ) && $found;
+			}
+			return array( 'url' => $url, 'checked_at' => gmdate( 'c' ), 'mode' => 'server_html', 'javascript_executed' => false, 'http_status' => $status, 'title' => $title, 'canonical' => $canonical, 'description' => $description, 'checks' => $checks, 'text_checks' => $text_checks, 'verified' => ! in_array( false, $checks, true ) );
+		} finally {
+			libxml_clear_errors();
+			libxml_use_internal_errors( $previous );
+		}
+	}
+
+	public static function buildOptionWritePlan( array $settings ) {
+		$state = array();
+		$changes = array();
+		$blocked = array();
+		foreach ( $settings as $name => $value ) {
+			$name = sanitize_text_field( (string) $name );
+			$allowed = self::checkOptionWritable( $name );
+			if ( true !== $allowed ) {
+				$blocked[$name] = $allowed;
+				continue;
+			}
+			$missing = new stdClass();
+			$before = get_option( $name, $missing );
+			$exists = $missing !== $before;
+			$state[$name] = array( 'exists' => $exists, 'value' => $exists ? $before : null );
+			if ( ! $exists || $before !== $value ) {
+				$changes[$name] = array( 'exists' => $exists, 'before' => $exists ? self::redactSecrets( $before, $name ) : null, 'after' => self::redactSecrets( $value, $name ) );
+			}
+		}
+		ksort( $state );
+		return array( 'dry_run' => true, 'state_hash' => hash( 'sha256', wp_json_encode( $state ) ), 'changes' => (object) $changes, 'blocked' => (object) $blocked );
+	}
+
+	public static function getClientIp() {
+		$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+		$trusted = (array) apply_filters( 'sflmcp_trusted_proxy_ips', array() );
+		if ( in_array( $remote, $trusted, true ) ) {
+			$forwarded = isset( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ? (string) $_SERVER['HTTP_CF_CONNECTING_IP'] : '';
+			if ( filter_var( $forwarded, FILTER_VALIDATE_IP ) ) {
+				return $forwarded;
+			}
+		}
+		return filter_var( $remote, FILTER_VALIDATE_IP ) ? $remote : 'unknown';
+	}
+
+	public static function checkRateLimit( $identity, $limit, $window = 60 ) {
+		$key = 'sflmcp_rate_' . md5( $identity );
+		$now = time();
+		$data = get_transient( $key );
+		if ( ! is_array( $data ) || $now >= $data['start'] + $window ) {
+			$data = array( 'count' => 0, 'start' => $now );
+		}
+		$retry = max( 1, $data['start'] + $window - $now );
+		if ( $data['count'] >= max( 1, (int) $limit ) ) {
+			return new WP_Error( 'rate_limit_exceeded', 'Rate limit exceeded.', array( 'status' => 429, 'retry_after' => $retry ) );
+		}
+		$data['count']++;
+		set_transient( $key, $data, $retry );
+		return true;
+	}
+
 	/**
 	 * Check whether an array is sequential (list-like) and not an associative map.
 	 *
@@ -620,17 +778,13 @@ if ( ! function_exists( 'sflmcp_redact_sensitive_value' ) ) {
 		};
 
 		if ( $key_is_sensitive( (string) $key ) ) {
-			return '[REDACTED]';
+			return null === $value || '' === $value ? $value : '[REDACTED]';
 		}
 
 		if ( is_array( $value ) ) {
 			$out = array();
 			foreach ( $value as $child_key => $child_value ) {
 				$child_key_str = (string) $child_key;
-				if ( $key_is_sensitive( $child_key_str ) ) {
-					$out[ $child_key ] = '[REDACTED]';
-					continue;
-				}
 				$out[ $child_key ] = sflmcp_redact_sensitive_value( $child_value, $child_key_str );
 			}
 			return $out;
@@ -640,10 +794,6 @@ if ( ! function_exists( 'sflmcp_redact_sensitive_value' ) ) {
 			$out = new stdClass();
 			foreach ( get_object_vars( $value ) as $child_key => $child_value ) {
 				$child_key_str = (string) $child_key;
-				if ( $key_is_sensitive( $child_key_str ) ) {
-					$out->{$child_key} = '[REDACTED]';
-					continue;
-				}
 				$out->{$child_key} = sflmcp_redact_sensitive_value( $child_value, $child_key_str );
 			}
 			return $out;

@@ -3,7 +3,7 @@
 Plugin Name: Flex MCP - Connect ChatGPT, Claude and AI agents with MCP, Undo, Abilities and Tools.
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Connect ChatGPT, Claude, Gemini, and other AI agents to WordPress through MCP with OAuth 2.1, Undo, Abilities, and 125+ tools for WordPress, WooCommerce, SEO, media, and plugin integrations.
-Version: 3.5.4
+Version: 3.6.0
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'SFLMCP_VERSION' ) ) {
-	define( 'SFLMCP_VERSION', '3.5.4' );
+	define( 'SFLMCP_VERSION', '3.6.0' );
 }
 
 // define debug constant 
@@ -1113,6 +1113,7 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_get_option', 'Get a WordPress option by key.', 'WordPress - Options', 1),
 		array('wp_get_plugin_settings', 'Safely inspect plugin-related wp_options by plugin_slug/prefixes with recursive secret redaction.', 'WordPress - Options', 1),
 		array('wp_update_option', 'Update a WordPress option.', 'WordPress - Options', 1),
+		array('wp_verify_rendered_page', 'Verify public page HTML after edits without executing JavaScript.', 'WordPress - Posts', 1),
 		array('wp_update_permalink_structure', 'Update the permalink structure while preserving native WordPress tokens.', 'WordPress - Settings', 1),
 		array('wp_get_post_meta', 'Get post meta by post_id and meta_key.', 'WordPress - Meta', 1),
 		array('wp_add_post_meta', 'Add post meta without overwriting existing rows.', 'WordPress - Meta', 1),
@@ -1402,7 +1403,7 @@ function stifli_flex_mcp_upgrade_302() {
  * installs run the migration once and only once.
  */
 if ( ! defined( 'SFLMCP_DB_VERSION' ) ) {
-	define( 'SFLMCP_DB_VERSION', '2026.09.09.4' );
+	define( 'SFLMCP_DB_VERSION', '2026.10.02.1' );
 }
 
 /**
@@ -1440,6 +1441,9 @@ function stifli_flex_mcp_maybe_upgrade_db() {
 	stifli_flex_mcp_upgrade_351_seed_builder_fidelity_tools();
 	stifli_flex_mcp_upgrade_352_seed_reliability_tools();
 	stifli_flex_mcp_upgrade_354_seed_cf7_tools();
+	if ( ! stifli_flex_mcp_upgrade_360() ) {
+		return;
+	}
 	stifli_flex_mcp_upgrade_remove_unified_seo_tools();
 	stifli_flex_mcp_upgrade_retire_custom_tools();
 	update_option( 'sflmcp_db_version', SFLMCP_DB_VERSION, false );
@@ -2636,6 +2640,25 @@ function stifli_flex_mcp_upgrade_rankmath_profile_detach() {
 	update_option( $flag, '1' );
 }
 
+function stifli_flex_mcp_compact_profile_tools() {
+	return array( 'mcp_ping', 'wp_get_posts', 'wp_get_post', 'wp_create_post', 'wp_update_post', 'wp_get_pages', 'wp_get_media', 'wp_get_media_item', 'wp_get_terms', 'wp_get_nav_menus', 'wp_create_preview_link', 'wp_verify_rendered_page' );
+}
+
+function stifli_flex_mcp_upgrade_360() {
+	global $wpdb;
+	$tools_table = $wpdb->prefix . 'sflmcp_tools';
+	$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$tools_table} WHERE tool_name = %s", 'wp_verify_rendered_page' ) );
+	if ( ! $exists ) {
+		$now = current_time( 'mysql', true );
+		$inserted = $wpdb->insert( $tools_table, array( 'tool_name' => 'wp_verify_rendered_page', 'tool_description' => 'Verify public page HTML after edits without executing JavaScript.', 'category' => 'WordPress - Posts', 'enabled' => 0, 'created_at' => $now, 'updated_at' => $now ), array( '%s', '%s', '%s', '%d', '%s', '%s' ) );
+		if ( false === $inserted ) {
+			return false;
+		}
+	}
+	stifli_flex_mcp_seed_system_profiles();
+	return true;
+}
+
 function stifli_flex_mcp_seed_system_profiles() {
 	global $wpdb;
 	$profiles_table = $wpdb->prefix . 'sflmcp_profiles';
@@ -2655,6 +2678,11 @@ function stifli_flex_mcp_seed_system_profiles() {
 	// Define system profiles with their tools
 	$system_profiles = array(
 		array(
+			'name' => 'Compact Site',
+			'description' => 'Twelve editorial tools for context-limited clients. Includes post editing and public HTML verification.',
+			'tools' => stifli_flex_mcp_compact_profile_tools(),
+		),
+		array(
 			'name' => 'WordPress Read Only',
 			'description' => 'WordPress read-only tools without write operations or sensitive data',
 			'tools' => array(
@@ -2662,6 +2690,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				'mcp_ping',
 				// Posts
 				'wp_get_posts', 'wp_get_post',
+				'wp_verify_rendered_page',
 				// Pages
 				'wp_get_pages',
 				// Comments
@@ -2694,6 +2723,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Posts (6)
 				'wp_get_posts', 'wp_get_post', 'wp_create_post', 'wp_update_post', 'wp_delete_post', 'wp_set_featured_image',
 				'wp_publish_and_promote', 'wp_create_preview_link',
+				'wp_verify_rendered_page',
 				// Pages (4)
 				'wp_get_pages', 'wp_create_page', 'wp_update_page', 'wp_delete_page',
 				// Comments (4)
@@ -4645,6 +4675,7 @@ function stifli_flex_mcp_clean_queue() {
 	);
 
 	// Also clean expired OAuth codes and tokens.
+	StifliFlexMcpUtils::pruneProtocolUsage();
 	if ( class_exists( 'StifliFlexMcp_OAuth_Storage' ) ) {
 		StifliFlexMcp_OAuth_Storage::get_instance()->cleanup_expired();
 	}

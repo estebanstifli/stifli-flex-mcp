@@ -163,11 +163,14 @@ class StifliFlexMcp_Logs_Admin {
 				<a href="?page=sflmcp-logs&tab=debug" class="nav-tab <?php echo 'debug' === $active_tab ? 'nav-tab-active' : ''; ?>">
 					<?php echo esc_html__( '📋 Debug Log', 'stifli-flex-mcp' ); ?>
 				</a>
+				<a href="?page=sflmcp-logs&tab=protocol" class="nav-tab <?php echo 'protocol' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Protocol', 'stifli-flex-mcp' ); ?></a>
 			</h2>
 
 			<?php
 			if ( 'changelog' === $active_tab ) {
 				$this->render_changelog_tab();
+			} elseif ( 'protocol' === $active_tab ) {
+				$this->render_protocol_tab();
 			} else {
 				$this->render_debug_tab();
 			}
@@ -179,6 +182,52 @@ class StifliFlexMcp_Logs_Admin {
 	/**
 	 * Render the Debug Log tab
 	 */
+	private function render_protocol_tab() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( isset( $_POST['sflmcp_protocol_action'] ) ) {
+			check_admin_referer( 'sflmcp_protocol_settings' );
+			if ( 'clear' === $_POST['sflmcp_protocol_action'] ) {
+				delete_option( 'sflmcp_protocol_usage' );
+			} else {
+				update_option( 'sflmcp_protocol_usage_enabled', isset( $_POST['sflmcp_protocol_enabled'] ), false );
+			}
+		}
+		?>
+		<form method="post">
+			<?php wp_nonce_field( 'sflmcp_protocol_settings' ); ?>
+			<p><label><input type="checkbox" name="sflmcp_protocol_enabled" value="1" <?php checked( get_option( 'sflmcp_protocol_usage_enabled', false ) ); ?>> <?php esc_html_e( 'Local protocol statistics (30 days)', 'stifli-flex-mcp' ); ?></label></p>
+			<button class="button button-primary" name="sflmcp_protocol_action" value="save"><?php esc_html_e( 'Save', 'stifli-flex-mcp' ); ?></button>
+			<button class="button" name="sflmcp_protocol_action" value="clear"><?php esc_html_e( 'Clear statistics', 'stifli-flex-mcp' ); ?></button>
+		</form>
+		<?php
+		$usage = StifliFlexMcpUtils::pruneProtocolUsage();
+		foreach ( array( 'versions' => __( 'Protocol versions', 'stifli-flex-mcp' ), 'clients' => __( 'Clients (self-reported)', 'stifli-flex-mcp' ), 'methods' => __( 'Methods', 'stifli-flex-mcp' ) ) as $dimension => $title ) {
+			$totals = array();
+			foreach ( $usage as $day ) {
+				foreach ( isset( $day[$dimension] ) ? $day[$dimension] : array() as $label => $bucket ) {
+					foreach ( array( 'requests', 'errors', 'total_ms' ) as $metric ) {
+						$totals[$label][$metric] = ( isset( $totals[$label][$metric] ) ? $totals[$label][$metric] : 0 ) + $bucket[$metric];
+					}
+				}
+			}
+			uasort( $totals, static function( $first, $second ) { return $second['requests'] <=> $first['requests']; } );
+			?>
+			<h3><?php echo esc_html( $title ); ?></h3>
+			<table class="widefat striped">
+				<thead><tr><th><?php esc_html_e( 'Name', 'stifli-flex-mcp' ); ?></th><th><?php esc_html_e( 'Requests', 'stifli-flex-mcp' ); ?></th><th><?php esc_html_e( 'Errors', 'stifli-flex-mcp' ); ?></th><th><?php esc_html_e( 'Mean latency (ms)', 'stifli-flex-mcp' ); ?></th></tr></thead>
+				<tbody>
+				<?php if ( empty( $totals ) ) : ?><tr><td colspan="4"><?php esc_html_e( 'No requests recorded.', 'stifli-flex-mcp' ); ?></td></tr><?php endif; ?>
+				<?php foreach ( $totals as $label => $bucket ) : ?>
+					<tr><td><?php echo esc_html( $label ); ?></td><td><?php echo (int) $bucket['requests']; ?></td><td><?php echo (int) $bucket['errors']; ?></td><td><?php echo (int) round( $bucket['total_ms'] / max( 1, $bucket['requests'] ) ); ?></td></tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+			<?php
+		}
+	}
+
 	private function render_debug_tab() {
 		$logging_enabled = get_option( 'sflmcp_logging_enabled', false );
 		$log_contents    = stifli_flex_mcp_get_log_contents( 500 );
