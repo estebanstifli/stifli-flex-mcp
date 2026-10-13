@@ -1,5 +1,6 @@
 <?php
 define( 'ABSPATH', __DIR__ . '/' );
+define( 'ARRAY_A', 'ARRAY_A' );
 require_once dirname( __DIR__ ) . '/models/utils.php';
 require_once dirname( __DIR__ ) . '/mod.php';
 
@@ -7,12 +8,13 @@ function get_bloginfo( $key ) { return 'Test site'; }
 function get_current_user_id() { return isset( $GLOBALS['test_user'] ) ? $GLOBALS['test_user'] : 1; }
 function sanitize_text_field( $value ) { return (string) $value; }
 function wp_generate_uuid4() { return 'test-uuid'; }
-function stifli_flex_mcp_log( ...$args ) {}
+function stifli_flex_mcp_log( ...$args ) { $GLOBALS['test_logs'][] = $args; }
 function get_option( $key, $default = false ) { return isset( $GLOBALS['options'][$key] ) ? $GLOBALS['options'][$key] : $default; }
 function add_option( $key, $value, ...$args ) { $GLOBALS['options'][$key] = $value; return true; }
 function update_option( $key, $value, ...$args ) { $GLOBALS['options'][$key] = $value; return true; }
 function delete_option( $key ) { unset( $GLOBALS['options'][$key] ); return true; }
 function wp_json_encode( $value, $flags = 0 ) { return json_encode( $value, $flags ); }
+function stifli_flex_mcp_is_gsc_enabled_for_runtime() { return false; }
 function get_transient( $key ) { return isset( $GLOBALS['transients'][$key] ) ? $GLOBALS['transients'][$key] : false; }
 function set_transient( $key, $value, $ttl ) { $GLOBALS['transients'][$key] = $value; return true; }
 function delete_transient( $key ) { unset( $GLOBALS['transients'][$key] ); return true; }
@@ -276,9 +278,19 @@ class ProtocolTestDatabase {
 	public function query( $sql ) { return 1; }
 	public function delete( $table, $where, $format ) { $this->deleted[$table] = $where; return 1; }
 	public function esc_like( $value ) { return $value; }
-	public function prepare( $sql, ...$args ) { return $sql; }
-	public function get_var( $sql ) { return null; }
-	public function get_results( $sql, ...$args ) { return array(); }
+	public function prepare( $sql, ...$args ) { return $sql . ' ' . implode( ' ', $args ); }
+	public function get_var( $sql ) {
+		if ( isset( $GLOBALS['ability_rows'] ) && false !== strpos( $sql, 'wp_sflmcp_abilities' ) ) { return 'wp_sflmcp_abilities'; }
+		if ( isset( $GLOBALS['enabled_tool_rows'] ) && false !== strpos( $sql, 'wp_sflmcp_tools' ) ) { return 'wp_sflmcp_tools'; }
+		return null;
+	}
+	public function get_results( $sql, ...$args ) {
+		if ( isset( $GLOBALS['ability_rows'] ) && false !== strpos( $sql, 'sflmcp_abilities' ) ) {
+			return array_filter( $GLOBALS['ability_rows'], function( $row ) { return ! empty( $row->enabled ); } );
+		}
+		if ( isset( $GLOBALS['enabled_tool_rows'] ) && false !== strpos( $sql, 'sflmcp_tools' ) ) { return $GLOBALS['enabled_tool_rows']; }
+		return array();
+	}
 }
 $GLOBALS['wpdb'] = new ProtocolTestDatabase();
 $cache_key = 'sflmcp_cimd_' . hash( 'sha256', $client_url );
@@ -308,6 +320,151 @@ $result = $model->dispatchTool( 'wp_update_settings', array( 'settings' => array
 check_same( -32603, $result['error']['code'], 'dry-run still requires capability' );
 $GLOBALS['permission'] = true;
 
+foreach ( array( '2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26' ) as $upload_version ) {
+	$catalog_response = $server->handleMessage( new ProtocolRequest( 'tools/list', $upload_version ) );
+	$catalog = array_column( $catalog_response->data['result']['tools'], null, 'name' );
+	check_same( array( 'file' ), $catalog['wp_upload_media']['_meta']['openai/fileParams'], 'file metadata survives discovery ' . $upload_version );
+	check_same( false, $catalog['wp_upload_media']['annotations']['readOnlyHint'], 'upload is advertised as mutating ' . $upload_version );
+	check_same( 'object', $catalog['wp_upload_media']['inputSchema']['properties']['file']['type'], 'file object schema survives discovery ' . $upload_version );
+	check_same( array( 'url' ), $catalog['wp_upload_image_from_url']['inputSchema']['required'], 'legacy URL upload schema preserved ' . $upload_version );
+	check_same( array(), $catalog['wp_upload_image']['inputSchema']['required'], 'image uploads do not require base64 for files ' . $upload_version );
+	check_same( array( 'file' ), $catalog['wp_upload_image']['_meta']['openai/fileParams'], 'image file metadata survives discovery ' . $upload_version );
+	check_same( $catalog['wp_upload_media']['inputSchema']['properties']['file'], $catalog['wp_upload_image']['inputSchema']['properties']['file'], 'upload tools share the OpenAI file schema ' . $upload_version );
+	check_same( 'string', $catalog['wp_upload_image']['inputSchema']['properties']['image_data']['type'], 'legacy image_data remains supported ' . $upload_version );
+	foreach ( $catalog as $tool ) {
+		foreach ( array( 'readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint' ) as $hint ) {
+			check_same( true, isset( $tool['annotations'][$hint] ) && is_bool( $tool['annotations'][$hint] ), $tool['name'] . ' publishes boolean ' . $hint . ' ' . $upload_version );
+		}
+	}
+	check_same( false, $catalog['fetch']['annotations']['readOnlyHint'], 'fetch cannot claim GET-only semantics ' . $upload_version );
+	check_same( true, $catalog['wp_get_posts']['annotations']['readOnlyHint'], 'post queries remain read-only ' . $upload_version );
+}
+
+$catalog_model = new StifliFlexMcpModel();
+$all_definitions = $catalog_model->getTools();
+foreach ( array(
+	'integrations/class-elementor.php' => 'StifliFlexMcp_Elementor',
+	'integrations/class-divi.php' => 'StifliFlexMcp_Divi',
+	'integrations/class-the-events-calendar.php' => 'StifliFlexMcp_TheEventsCalendar',
+	'integrations/class-contact-form-7.php' => 'StifliFlexMcp_ContactForm7',
+	'external-data/class-google-search-console.php' => 'StifliFlexMcp_GoogleSearchConsole',
+	'media/class-search-image.php' => 'StifliFlexMcp_Search_Image',
+	'snippets/snippets.php' => 'StifliFlexMcp_Snippets',
+	'woocommerce/wc-products.php' => 'StifliFlexMcp_WC_Products',
+	'woocommerce/wc-orders.php' => 'StifliFlexMcp_WC_Orders',
+	'woocommerce/wc-customers-coupons.php' => 'StifliFlexMcp_WC_Coupons',
+	'woocommerce/wc-system.php' => 'StifliFlexMcp_WC_System',
+) as $file => $class ) {
+	require_once dirname( __DIR__ ) . '/models/' . $file;
+	$all_definitions = array_merge( $all_definitions, $class::getTools() );
+}
+class AnnotationCatalogModel extends StifliFlexMcpModel {
+	public $definitions;
+	public function getTools() { return $this->definitions; }
+}
+$annotation_model = new AnnotationCatalogModel();
+$annotation_model->definitions = $all_definitions;
+$annotation_model->definitions['wp_get_posts']['annotations'] = array( 'title' => 'Browse posts', 'readOnlyHint' => false );
+$GLOBALS['test_logs'] = array();
+$full_catalog = array_column( $annotation_model->getToolsList(), null, 'name' );
+check_same( count( $all_definitions ), count( $full_catalog ), 'all optional module definitions receive metadata' );
+check_same( true, count( $full_catalog ) >= 224, 'catalog coverage includes dormant integrations and WooCommerce: ' . count( $full_catalog ) . ' tools' );
+check_same( array(), $GLOBALS['test_logs'], 'every built-in and integration tool has an explicit reviewed classification' );
+check_same( 'Browse posts', $full_catalog['wp_get_posts']['annotations']['title'], 'existing annotation titles survive' );
+foreach ( $full_catalog as $name => $tool ) {
+	$metadata = $catalog_model->getToolMetadata( $name );
+	foreach ( $metadata['annotations'] as $hint => $value ) {
+		check_same( $value, $tool['annotations'][$hint], $name . ' consistent ' . $hint );
+	}
+	check_same( $metadata['intent'], $tool['intent'], $name . ' consistent intent' );
+	check_same( 'read' !== $tool['intent'], $tool['requires_confirmation'], $name . ' consistent confirmation' );
+}
+foreach ( array( 'wp_get_posts', 'wp_get_site_health', 'divi_validate_layout', 'elementor_export_template', 'cf7_get_form', 'wc_get_order', 'wp_gsc_query_performance', 'wp_search_image' ) as $name ) {
+	check_same( true, $full_catalog[$name]['annotations']['readOnlyHint'], $name . ' is a reviewed logical read' );
+	check_same( false, $full_catalog[$name]['annotations']['destructiveHint'], $name . ' is non-destructive' );
+}
+foreach ( array( 'fetch', 'yoast_reindex', 'elementor_update_widget', 'elementor_add_widget', 'wc_bulk_assign_product_categories', 'wc_bulk_delete_products', 'wc_create_refund', 'wp_tec_save_event', 'wp_tec_save_entity', 'wc_batch_update_products', 'wp_create_nav_menu', 'wp_create_menu', 'wp_set_featured_image', 'wp_update_option' ) as $name ) {
+	check_same( 'write', $full_catalog[$name]['intent'], $name . ' must not default to read' );
+	check_same( true, $full_catalog[$name]['annotations']['destructiveHint'], $name . ' may replace or remove existing state' );
+}
+foreach ( array( 'wp_upload_image', 'wp_upload_media', 'wp_create_preview_link', 'wp_create_post', 'wp_add_post_meta', 'wc_create_product', 'elementor_import_template' ) as $name ) {
+	check_same( false, $full_catalog[$name]['annotations']['destructiveHint'], $name . ' is additive' );
+	check_same( false, $full_catalog[$name]['annotations']['readOnlyHint'], $name . ' still writes' );
+}
+foreach ( array( 'wc_update_stock', 'wp_css_set_global', 'wp_css_set_scoped', 'wp_update_post', 'snippet_activate', 'mcp_redo_change' ) as $name ) {
+	check_same( false, $full_catalog[$name]['annotations']['idempotentHint'], $name . ' does not promise safe automatic retries' );
+}
+foreach ( array( 'fetch', 'mcp_ping', 'wp_upload_image', 'wp_gsc_query_performance', 'wp_gsc_inspect_url', 'wp_search_image', 'wc_update_order', 'wc_create_order_note', 'wc_create_webhook', 'snippet_activate', 'mcp_redo_change' ) as $name ) {
+	check_same( true, $full_catalog[$name]['annotations']['openWorldHint'], $name . ' can interact with external entities' );
+}
+foreach ( array( 'wp_get_posts', 'wp_get_option', 'wc_get_products', 'divi_validate_layout', 'wp_update_term' ) as $name ) {
+	check_same( false, $full_catalog[$name]['annotations']['openWorldHint'], $name . ' operates on local site data' );
+}
+$conservative = array( 'readOnlyHint' => false, 'destructiveHint' => true, 'idempotentHint' => false, 'openWorldHint' => true );
+foreach ( array( 'wp_get_unreviewed_tool', 'extension_search', 'extension_delete' ) as $name ) {
+	$GLOBALS['test_logs'] = array();
+	$metadata = $catalog_model->getToolMetadata( $name );
+	check_same( $conservative, $metadata['annotations'], 'unknown tool names do not imply safety: ' . $name );
+	check_same( 'write', $metadata['intent'], 'unknown tools require write confirmation: ' . $name );
+	check_same( 1, count( $GLOBALS['test_logs'] ), 'unknown policy is logged: ' . $name );
+}
+$openai_functions = array_column( $annotation_model->getOpenAIFunctions(), null, 'name' );
+check_same( 'write', $openai_functions['fetch']['metadata']['intent'], 'function adapter gets corrected intent' );
+check_same( true, $openai_functions['elementor_add_widget']['metadata']['requires_confirmation'], 'function adapter gets corrected confirmation' );
+
+class AnnotationTestAbility {
+	public $meta;
+	public function __construct( $meta ) { $this->meta = $meta; }
+	public function get_meta() { return $this->meta; }
+	public function execute() { throw new RuntimeException( 'Discovery must not execute Abilities.' ); }
+	public function check_permissions() { throw new RuntimeException( 'Discovery must not invoke Ability permissions.' ); }
+}
+function stifli_flex_mcp_get_ability_safe( $name ) {
+	$GLOBALS['last_ability_slug'] = $name;
+	return isset( $GLOBALS['registered_abilities'][$name] ) ? $GLOBALS['registered_abilities'][$name] : null;
+}
+$ability_slug = 'test-plugin/read-private_data';
+$ability_name = 'ability_test_plugin_read_private_data';
+$ability_definition = array( '_ability_name' => $ability_slug );
+$GLOBALS['registered_abilities'][$ability_slug] = new AnnotationTestAbility( array( 'annotations' => array( 'readonly' => true, 'destructive' => null, 'idempotent' => null ) ) );
+$metadata = $catalog_model->getToolMetadata( $ability_name, $ability_definition );
+check_same( $ability_slug, $GLOBALS['last_ability_slug'], 'Ability metadata lookup uses original slug, not a lossy name reversal' );
+check_same( array( 'readOnlyHint' => true, 'destructiveHint' => false, 'idempotentHint' => true, 'openWorldHint' => true ), $metadata['annotations'], 'WordPress readonly metadata maps to MCP' );
+check_same( 'sensitive_read', $metadata['intent'], 'read-only Abilities retain sensitive intent' );
+check_same( true, $metadata['requires_confirmation'], 'read-only Abilities retain confirmation' );
+foreach ( array( array(), array( 'readonly' => null, 'destructive' => null, 'idempotent' => null ), array( 'readonly' => 'false', 'destructive' => 'false', 'idempotent' => 1, 'openWorldHint' => 0 ), 'invalid' ) as $declared ) {
+	$GLOBALS['registered_abilities'][$ability_slug]->meta = array( 'annotations' => $declared );
+	check_same( $conservative, $catalog_model->getToolMetadata( $ability_name, $ability_definition )['annotations'], 'missing, null or malformed Ability hints remain conservative: ' . json_encode( $declared ) );
+}
+$GLOBALS['registered_abilities'][$ability_slug]->meta = array( 'annotations' => array( 'readonly' => false, 'destructive' => false, 'idempotent' => true, 'openWorldHint' => false ) );
+check_same( array( 'readOnlyHint' => false, 'destructiveHint' => false, 'idempotentHint' => true, 'openWorldHint' => false ), $catalog_model->getToolMetadata( $ability_name, $ability_definition )['annotations'], 'explicit additive idempotent Ability declarations are respected' );
+$GLOBALS['registered_abilities'][$ability_slug]->meta = array( 'annotations' => array( 'readonly' => true ) );
+$GLOBALS['ability_rows'] = array(
+	(object) array( 'ability_name' => $ability_slug, 'ability_description' => 'Read private test data', 'ability_label' => 'Private data', 'ability_category' => 'test', 'input_schema' => '{"type":"object","properties":{}}', 'enabled' => 1 ),
+	(object) array( 'ability_name' => 'test/disabled', 'ability_description' => '', 'ability_label' => 'Disabled', 'ability_category' => 'test', 'input_schema' => '{}', 'enabled' => 0 ),
+);
+$ability_model = new StifliFlexMcpModel();
+$imported = array_column( $ability_model->getToolsList(), null, 'name' );
+check_same( true, $imported[$ability_name]['annotations']['readOnlyHint'], 'imported Ability annotations survive catalog enrichment' );
+check_same( true, $imported[$ability_name]['requires_confirmation'], 'catalog does not overwrite Ability confirmation' );
+check_same( false, isset( $imported['ability_test_disabled'] ), 'disabled Abilities remain undiscoverable' );
+check_same( array( 'intent' => 'sensitive_read', 'requires_confirmation' => true ), $ability_model->getIntentForTool( $ability_name ), 'admin intent lookup resolves the original Ability descriptor' );
+foreach ( array( '2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26' ) as $version ) {
+	$wire = $server->handleMessage( new ProtocolRequest( 'tools/list', $version ) );
+	$wire_catalog = array_column( $wire->data['result']['tools'], null, 'name' );
+	check_same( true, $wire_catalog[$ability_name]['annotations']['readOnlyHint'], 'Ability hints survive wire discovery ' . $version );
+	check_same( true, $wire_catalog[$ability_name]['requires_confirmation'], 'Ability confirmation survives wire discovery ' . $version );
+}
+$GLOBALS['registered_abilities'][$ability_slug]->meta = array( 'annotations' => array( 'readonly' => false ) );
+check_same( array( 'intent' => 'write', 'requires_confirmation' => true ), $ability_model->getIntentForTool( $ability_name ), 'runtime Ability metadata changes are not cached as read-only' );
+unset( $GLOBALS['registered_abilities'][$ability_slug] );
+check_same( $conservative, $ability_model->getToolMetadata( $ability_name, $ability_definition )['annotations'], 'unregistered Abilities do not inherit stale hints' );
+check_same( $conservative, $ability_model->getToolMetadata( 'ability_unknown' )['annotations'], 'unknown Ability names remain conservative' );
+unset( $GLOBALS['ability_rows'] );
+$GLOBALS['enabled_tool_rows'] = array( array( 'tool_name' => 'wp_get_posts', 'token_estimate' => 1 ) );
+check_same( array( 'wp_get_posts' ), array_column( $annotation_model->getToolsList(), 'name' ), 'annotations do not enable disabled tools' );
+unset( $GLOBALS['enabled_tool_rows'] );
+
 if ( in_array( '--schema', $argv, true ) ) {
 	$fixtures = array();
 	foreach ( array( 'server/discover' => 'DiscoverResult', 'prompts/list' => 'ListPromptsResult', 'resources/list' => 'ListResourcesResult', 'resources/templates/list' => 'ListResourceTemplatesResult' ) as $method => $schema ) {
@@ -317,6 +474,9 @@ if ( in_array( '--schema', $argv, true ) ) {
 	$response = $server->handleMessage( new ProtocolRequest( 'tools/list' ) );
 	check_same( true, ! empty( $response->data['result']['tools'] ), 'real tool catalog is nonempty' );
 	$fixtures[] = array( 'source' => 'core', 'schema' => 'ListToolsResult', 'value' => $response->data['result'] );
+	$full_catalog_result = $response->data['result'];
+	$full_catalog_result['tools'] = array_values( $full_catalog );
+	$fixtures[] = array( 'source' => 'core', 'schema' => 'ListToolsResult', 'value' => $full_catalog_result );
 	$request = new ProtocolRequest( 'resources/read' );
 	$request->data['params']['uri'] = $request->headers['Mcp-Name'] = 'wp://site/post-types';
 	$fixtures[] = array( 'source' => 'core', 'schema' => 'ReadResourceResult', 'value' => $server->handleMessage( $request )->data['result'] );

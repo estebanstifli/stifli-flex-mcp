@@ -543,6 +543,15 @@ class StifliFlexMcpUtils {
 			$value = (array) $value;
 		}
 
+		$tool = self::getArrayValue( $value, 'name', self::getArrayValue( $value, 'tool', '' ) );
+		if ( in_array( $tool, array( 'wp_upload_media', 'wp_upload_image' ), true ) ) {
+			foreach ( array( 'arguments', 'args' ) as $arguments_key ) {
+				if ( isset( $value[$arguments_key] ) ) {
+					$value[$arguments_key] = self::redactToolArguments( $tool, $value[$arguments_key] );
+				}
+			}
+		}
+
 		$out = array();
 		foreach ( $value as $k => $v ) {
 			$key_str = (string) $k;
@@ -560,6 +569,18 @@ class StifliFlexMcpUtils {
 			$out[ $k ] = self::redactSecrets( $v, $key_str, $depth + 1 );
 		}
 		return $out;
+	}
+
+	public static function redactToolArguments( $tool, $args ) {
+		if ( ! is_array( $args ) || ( 'wp_upload_media' !== $tool && ! ( 'wp_upload_image' === $tool && array_key_exists( 'file', $args ) ) ) ) {
+			return $args;
+		}
+		foreach ( array( 'file', 'url', 'content_base64', 'image_data' ) as $key ) {
+			if ( array_key_exists( $key, $args ) ) {
+				$args[$key] = '[REDACTED]';
+			}
+		}
+		return $args;
 	}
 
 	/**

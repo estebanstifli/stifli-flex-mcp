@@ -3,7 +3,7 @@
 Plugin Name: Flex MCP - Connect ChatGPT, Claude and AI agents with MCP, Undo, Abilities and Tools.
 Plugin URI: https://github.com/estebanstifli/stifli-flex-mcp
 Description: Connect ChatGPT, Claude, Gemini, and other AI agents to WordPress through MCP with OAuth 2.1, Undo, Abilities, and 125+ tools for WordPress, WooCommerce, SEO, media, and plugin integrations.
-Version: 3.6.0
+Version: 3.6.1
 Author: estebandestifli
 Requires PHP: 7.4
 License: GPL v2 or later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'SFLMCP_VERSION' ) ) {
-	define( 'SFLMCP_VERSION', '3.6.0' );
+	define( 'SFLMCP_VERSION', '3.6.1' );
 }
 
 // define debug constant 
@@ -1072,7 +1072,8 @@ function stifli_flex_mcp_seed_initial_tools() {
 		array('wp_get_media', 'List media items (attachments) with filters.', 'WordPress - Media', 1),
 		array('wp_get_media_item', 'Get a single media item by ID.', 'WordPress - Media', 1),
 		array('wp_upload_image_from_url', 'Upload an image from URL and attach to a post.', 'WordPress - Media', 1),
-		array('wp_upload_image', 'Upload image from base64 data (AI-generated images).', 'WordPress - Media', 1),
+		array('wp_upload_image', 'Upload a ChatGPT conversation image directly; base64 remains available for legacy clients.', 'WordPress - Media', 1),
+		array('wp_upload_media', 'Upload conversation files, HTTPS URLs or base64 with optional image optimization.', 'WordPress - Media', 0),
 		array('wp_update_media_item', 'Update media item metadata.', 'WordPress - Media', 1),
 		array('wp_delete_media_item', 'Delete a media item by ID.', 'WordPress - Media', 1),
 		
@@ -2737,7 +2738,7 @@ function stifli_flex_mcp_seed_system_profiles() {
 				// Themes (1) - Removed: wp_install_theme, wp_switch_theme
 				'wp_get_themes',
 				// Media (6)
-				'wp_get_media', 'wp_get_media_item', 'wp_upload_image_from_url', 'wp_upload_image', 'wp_update_media_item', 'wp_delete_media_item',
+				'wp_get_media', 'wp_get_media_item', 'wp_upload_image_from_url', 'wp_upload_image', 'wp_upload_media', 'wp_update_media_item', 'wp_delete_media_item',
 				// Taxonomies (4)
 				'wp_get_taxonomies', 'wp_get_terms', 'wp_create_term', 'wp_update_term', 'wp_delete_term',
 				// Term meta (3)

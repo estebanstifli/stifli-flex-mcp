@@ -72,6 +72,7 @@ class StifliFlexMcp_ChangeTracker {
 		// --- Media ---
 		'wp_upload_image_from_url'  => array( 'file_create', 'media', null ),
 		'wp_upload_image'           => array( 'file_create', 'media', null ),
+		'wp_upload_media'           => array( 'file_create', 'media', null ),
 		'wp_generate_image'         => array( 'file_create', 'media', null ),
 		'wp_generate_video'         => array( 'file_create', 'media', null ),
 		'wp_update_media_item'      => array( 'update', 'media', 'ID' ),
@@ -372,7 +373,7 @@ class StifliFlexMcp_ChangeTracker {
 		}
 		$before_json  = isset( $snapshot['before_state'] ) ? wp_json_encode( $snapshot['before_state'], JSON_UNESCAPED_SLASHES ) : null;
 		$after_json   = null !== $after_state ? wp_json_encode( $after_state, JSON_UNESCAPED_SLASHES ) : null;
-		$args_json    = wp_json_encode( $args, JSON_UNESCAPED_SLASHES );
+		$args_json    = wp_json_encode( StifliFlexMcpUtils::redactToolArguments( $tool, $args ), JSON_UNESCAPED_SLASHES );
 		$file_backup  = isset( $snapshot['file_backup_path'] ) ? $snapshot['file_backup_path'] : null;
 		$src          = self::detectSource();
 
@@ -1543,6 +1544,9 @@ class StifliFlexMcp_ChangeTracker {
 		$obj_type = $row['object_type'];
 		$after    = ! empty( $row['after_state'] ) ? json_decode( $row['after_state'], true ) : null;
 		$args     = ! empty( $row['args_json'] ) ? json_decode( $row['args_json'], true ) : array();
+		if ( 'wp_upload_media' === $row['tool_name'] || ( 'wp_upload_image' === $row['tool_name'] && isset( $args['file'] ) ) ) {
+			return array( 'success' => false, 'message' => 'Upload sources are not retained. Upload the file again using a fresh download URL or base64.' );
+		}
 
 		if ( 'wp_publish_and_promote' === $row['tool_name'] && class_exists( 'StifliFlexMcpModel' ) ) {
 			$model = new StifliFlexMcpModel();

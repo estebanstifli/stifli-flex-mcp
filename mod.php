@@ -1279,7 +1279,7 @@ class StifliFlexMcp {
 		if (false === $toolLog) {
 			$toolLog = is_scalar($tool) ? (string) $tool : '[unserializable]';
 		}
-		$argsLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets($arguments));
+		$argsLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets(StifliFlexMcpUtils::redactToolArguments($tool, $arguments)));
 		if (false === $argsLog) {
 			$argsLog = '[unserializable]';
 		}
@@ -1287,7 +1287,7 @@ class StifliFlexMcp {
 		$this->traceMcpRequest('tools-call/parsed', array(
 			'id' => $id,
 			'tool' => is_scalar($tool) ? (string) $tool : '',
-			'arguments' => StifliFlexMcpUtils::redactSecrets($arguments),
+			'arguments' => StifliFlexMcpUtils::redactSecrets(StifliFlexMcpUtils::redactToolArguments($tool, $arguments)),
 			'task_augmented' => $isTaskAugmented,
 		));
 		if ('wp_create_post' === $tool) {
@@ -2068,7 +2068,7 @@ class StifliFlexMcp {
 			if (false === $toolLog) {
 				$toolLog = is_scalar($tool) ? (string) $tool : '[unserializable]';
 			}
-			$argsLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets($args));
+			$argsLog = wp_json_encode(StifliFlexMcpUtils::redactSecrets(StifliFlexMcpUtils::redactToolArguments($tool, $args)));
 			if (false === $argsLog) {
 				$argsLog = '[unserializable]';
 			}
@@ -2080,7 +2080,7 @@ class StifliFlexMcp {
 			$this->traceMcpRequest('execute/start', array(
 				'id' => $id,
 				'tool' => is_scalar($tool) ? (string) $tool : '',
-				'args' => is_array($args) ? StifliFlexMcpUtils::redactSecrets($args) : array(),
+				'args' => is_array($args) ? StifliFlexMcpUtils::redactSecrets(StifliFlexMcpUtils::redactToolArguments($tool, $args)) : array(),
 			));
 			if ('wp_create_post' === $tool) {
 				$this->traceWpCreatePost('execute/start', array(
@@ -7447,7 +7447,6 @@ X-Custom-Header: value</code></pre>
 	}
 	/* phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter */
 }
-
 
 
 

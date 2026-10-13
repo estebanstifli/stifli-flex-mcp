@@ -1,5 +1,6 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
+require_once __DIR__ . '/media/class-upload-media.php';
 
 // Model MCP con tools completas + intención/consentimiento
 class StifliFlexMcpModel {
@@ -248,6 +249,14 @@ class StifliFlexMcpModel {
      * Clasificación de intención y confirmación por tool.
      */
     public function getIntentForTool(string $name): array {
+        $metadata = $this->getToolMetadata( $name );
+        return array( 'intent' => $metadata['intent'], 'requires_confirmation' => $metadata['requires_confirmation'] );
+    }
+
+    public function getToolMetadata( string $name, array $definition = array() ): array {
+        if ( 0 === strpos( $name, 'ability_' ) || isset( $definition['_ability_name'] ) ) {
+            return $this->getAbilityToolMetadata( $name, $definition );
+        }
         // Escritura/mutación
         $WRITE = array(
             'wp_create_post','wp_update_post','wp_delete_post',
@@ -258,6 +267,9 @@ class StifliFlexMcpModel {
             'wp_rm_update_post_seo',
             // Yoast SEO write
             'yoast_set_meta',
+            'yoast_reindex',
+            // fetch accepts arbitrary HTTP methods, not just GET/HEAD.
+            'fetch',
             // SEO optimization write
             'wp_seo_apply_title_meta_safe',
             // ACF write
@@ -267,6 +279,7 @@ class StifliFlexMcpModel {
             // Removed for WordPress.org compliance: wp_create_user, wp_update_user, wp_delete_user
             'wp_upload_image_from_url',
             'wp_upload_image',
+            'wp_upload_media',
             'wp_generate_image',
             'wp_generate_video',
             // Removed: wp_activate_plugin, wp_deactivate_plugin, wp_install_plugin, wp_install_theme, wp_switch_theme (WordPress.org compliance)
@@ -290,6 +303,7 @@ class StifliFlexMcpModel {
             'wp_restore_post_revision',
             // WooCommerce write operations
             'wc_create_product','wc_update_product','wc_delete_product','wc_batch_update_products',
+            'wc_bulk_assign_product_categories','wc_bulk_delete_products',
             'wc_create_product_variation','wc_update_product_variation','wc_delete_product_variation','wc_batch_update_variations',
             'wc_create_product_attribute','wc_set_product_attributes',
             'wc_create_product_category','wc_update_product_category','wc_delete_product_category',
@@ -315,6 +329,7 @@ class StifliFlexMcpModel {
             'elementor_clone_page','elementor_replace_text','elementor_replace_image',
             'elementor_replace_link','elementor_import_template','elementor_apply_template_to_page',
             'elementor_repair_render','elementor_repair_render_bulk',
+            'elementor_update_widget','elementor_add_widget',
             // Divi write operations
             'divi_replace_text','divi_clone_page','divi_replace_image','divi_apply_library_template',
             // Changelog write operations
@@ -333,7 +348,6 @@ class StifliFlexMcpModel {
             // Yoast SEO reads
             'yoast_get_meta',
             'yoast_get_schema',
-            'yoast_reindex',
             // ACF reads
             'acf_get_field_groups',
             'acf_get_fields',
@@ -352,12 +366,11 @@ class StifliFlexMcpModel {
             'cf7_list_forms',
             'cf7_get_form',
             'flamingo_get_submissions',
-            'fetch',                // red externa: tratar como lectura sensible
             // WordPress - Additional sensitive reads
             'wp_get_user_meta',     // user privacy data
-            'wp_get_site_health',   // system information
             'wp_get_cron_schedule', // scheduled tasks visibility
             'wp_get_error_log_tail', // debug log inspection
+            'wp_get_site_health',   // diagnostic report, including external connectivity probes
             'wp_get_term_meta',     // may include private/encoded data
             // WooCommerce sensitive reads (wc_get_customers removed for WordPress.org compliance)
             'wc_get_orders',        // order data privacy
@@ -365,6 +378,8 @@ class StifliFlexMcpModel {
             'wc_get_order_notes',   // order notes may contain sensitive info
             'wc_get_system_status', // system information
             'wc_get_settings',      // WooCommerce settings
+            'wc_get_refunds','wc_get_sales_report','wc_get_top_sellers_report',
+            'wc_get_webhooks',
             // Snippet sensitive reads (code content)
             'snippet_list','snippet_get',
             // Changelog sensitive reads
@@ -375,13 +390,113 @@ class StifliFlexMcpModel {
             'wp_seo_get_post_context','wp_seo_suggest_title_meta_from_gsc'
         );
 
-        if (in_array($name, $WRITE, true)) {
-            return array('intent' => 'write', 'requires_confirmation' => true);
+        $READ = array(
+            'mcp_ping', 'search', 'wp_verify_rendered_page', 'wp_search_image',
+            'wp_get_posts', 'wp_get_post', 'wp_get_pages', 'wp_get_comments', 'wp_get_users',
+            'wp_get_media', 'wp_get_media_item', 'wp_list_plugins', 'wp_get_themes',
+            'wp_get_taxonomies', 'wp_get_terms', 'wp_get_categories', 'wp_get_tags',
+            'wp_get_nav_menus', 'wp_get_menus', 'wp_get_menu', 'wp_css_get_global',
+            'wp_get_post_revisions', 'wp_get_post_types',
+            'wp_tec_list_events', 'wp_tec_get_event', 'wp_tec_list_entities',
+            'elementor_get_page_outline', 'elementor_get_widget_settings',
+            'elementor_list_local_templates', 'elementor_export_template',
+            'divi_get_page_format', 'divi_get_page_outline', 'divi_validate_layout',
+            'divi_list_local_templates', 'divi_library_get',
+            'wc_get_products', 'wc_get_product_variations', 'wc_get_variation',
+            'wc_get_product_attributes', 'wc_get_attribute_terms', 'wc_get_product_categories',
+            'wc_get_product_tags', 'wc_get_product_reviews', 'wc_get_low_stock_products',
+            'wc_get_coupons', 'wc_get_coupon', 'wc_get_coupon_count',
+            'wc_get_tax_classes', 'wc_get_tax_rates', 'wc_get_shipping_zones',
+            'wc_get_shipping_zone_methods', 'wc_get_payment_gateways',
+        );
+
+        // These operations only add objects. Mixed create/update and replacement tools are excluded.
+        $ADDITIVE = array(
+            'wp_create_post', 'wp_create_page', 'wp_create_comment', 'wp_create_preview_link',
+            'wp_upload_image', 'wp_upload_image_from_url', 'wp_upload_media',
+            'wp_generate_image', 'wp_generate_video', 'wp_add_post_meta',
+            'wp_create_term', 'wp_create_category', 'wp_create_tag', 'wp_add_nav_menu_item',
+            'wc_create_product', 'wc_create_product_variation', 'wc_create_product_attribute',
+            'wc_create_product_category', 'wc_create_product_tag', 'wc_create_product_review',
+            'wc_create_coupon', 'wc_create_tax_rate', 'wc_create_shipping_zone',
+            'wc_create_order_note', 'elementor_clone_page', 'elementor_import_template', 'divi_clone_page',
+        );
+        $OPEN_WORLD = array(
+            'fetch', 'mcp_ping', 'wp_verify_rendered_page', 'wp_get_site_health', 'wp_rm_get_head',
+            'wp_search_image', 'wp_upload_image', 'wp_upload_image_from_url', 'wp_upload_media',
+            'wp_generate_image', 'wp_generate_video', 'wp_create_comment', 'wp_update_comment',
+            // Publishing content can schedule pingbacks and update-service notifications.
+            'wp_create_post', 'wp_update_post', 'wp_publish_and_promote',
+            'wp_create_page', 'wp_update_page', 'wp_restore_post_revision',
+            'elementor_clone_page', 'divi_clone_page',
+            'wp_gsc_list_sites', 'wp_gsc_query_performance', 'wp_gsc_inspect_url',
+            'wp_gsc_list_sitemaps', 'wp_seo_find_gsc_opportunities',
+            'wp_seo_get_post_context', 'wp_seo_suggest_title_meta_from_gsc',
+            // Order transitions, customer notes and refunds can trigger customer notifications.
+            'wc_create_order', 'wc_update_order', 'wc_delete_order', 'wc_batch_update_orders',
+            'wc_create_order_note', 'wc_create_refund', 'wc_delete_refund',
+            'wc_create_webhook', 'wc_update_webhook', 'wc_delete_webhook',
+            // Stored code and arbitrary replayed operations can interact with external systems.
+            'snippet_create', 'snippet_update', 'snippet_delete', 'snippet_activate', 'snippet_deactivate',
+            'mcp_rollback_change', 'mcp_redo_change', 'mcp_rollback_session',
+        );
+
+        $read_only = in_array( $name, $READ, true ) || in_array( $name, $SENSITIVE_READ, true );
+        $known = $read_only || in_array( $name, $WRITE, true );
+        if ( ! $known ) {
+            stifli_flex_mcp_log( 'Unclassified tool uses conservative MCP annotations: ' . $name );
         }
-        if (in_array($name, $SENSITIVE_READ, true)) {
-            return array('intent' => 'sensitive_read', 'requires_confirmation' => true);
+        $intent = $read_only ? ( in_array( $name, $SENSITIVE_READ, true ) ? 'sensitive_read' : 'read' ) : 'write';
+        return array(
+            'intent' => $intent,
+            'requires_confirmation' => 'read' !== $intent,
+            'annotations' => array(
+                'readOnlyHint' => $read_only,
+                'destructiveHint' => ! $read_only && ! in_array( $name, $ADDITIVE, true ),
+                // Mutations can create revisions, append data or run hooks; do not promise safe retries.
+                'idempotentHint' => $read_only,
+                'openWorldHint' => ! $known || in_array( $name, $OPEN_WORLD, true ),
+            ),
+        );
+    }
+
+    private function getAbilityToolMetadata( string $name, array $definition ): array {
+        if ( ! array_key_exists( '_ability_name', $definition ) ) {
+            $tools = $this->getTools();
+            $definition = isset( $tools[$name] ) && is_array( $tools[$name] ) ? $tools[$name] : array();
         }
-        return array('intent' => 'read', 'requires_confirmation' => false);
+        $annotations = array(
+            'readOnlyHint' => false, 'destructiveHint' => true,
+            'idempotentHint' => false, 'openWorldHint' => true,
+        );
+        $ability_name = StifliFlexMcpUtils::getArrayValue( $definition, '_ability_name', '' );
+        $ability = is_string( $ability_name ) && '' !== $ability_name && function_exists( 'stifli_flex_mcp_get_ability_safe' )
+            ? stifli_flex_mcp_get_ability_safe( $ability_name ) : null;
+        if ( is_object( $ability ) && method_exists( $ability, 'get_meta' ) ) {
+            $meta = $ability->get_meta();
+            $declared = is_array( $meta ) ? StifliFlexMcpUtils::getArrayValue( $meta, 'annotations', array() ) : array();
+            if ( ! is_array( $declared ) ) {
+                stifli_flex_mcp_log( 'Invalid Ability annotations for ' . $ability_name . '; using conservative hints.' );
+                $declared = array();
+            }
+            foreach ( array( 'readonly' => 'readOnlyHint', 'destructive' => 'destructiveHint', 'idempotent' => 'idempotentHint', 'openWorldHint' => 'openWorldHint' ) as $source => $target ) {
+                $value = StifliFlexMcpUtils::getArrayValue( $declared, $source, null );
+                if ( is_bool( $value ) ) {
+                    $annotations[$target] = $value;
+                } elseif ( null !== $value ) {
+                    stifli_flex_mcp_log( 'Invalid boolean Ability annotation ' . $source . ' for ' . $ability_name . '; using conservative default.' );
+                }
+            }
+        }
+        if ( $annotations['readOnlyHint'] ) {
+            $annotations['destructiveHint'] = false;
+            $annotations['idempotentHint'] = true;
+        }
+        return array(
+            'intent' => $annotations['readOnlyHint'] ? 'sensitive_read' : 'write',
+            'requires_confirmation' => true,
+            'annotations' => $annotations,
+        );
     }
 
     /**
@@ -472,9 +587,13 @@ class StifliFlexMcpModel {
                     $tool['category'] = isset($tool['category']) ? $tool['category'] : 'Core';
                 }
                 // Intención y consentimiento
-                $meta = $this->getIntentForTool($name);
+                $meta = $this->getToolMetadata( $name, $tool );
                 $tool['intent'] = $meta['intent']; // read | sensitive_read | write
                 $tool['requires_confirmation'] = $meta['requires_confirmation']; // bool
+                $tool['annotations'] = array_merge(
+                    isset( $tool['annotations'] ) && is_array( $tool['annotations'] ) ? $tool['annotations'] : array(),
+                    $meta['annotations']
+                );
                 if ($table_exists && !$is_ability) {
                     $tool['tokenEstimate'] = isset($enabled_tools[$name]) ? (int) $enabled_tools[$name] : StifliFlexMcpUtils::estimateToolTokenUsage($tool);
                 } else {
@@ -836,17 +955,19 @@ class StifliFlexMcpModel {
                 ),
                 'wp_upload_image' => array(
                     'name' => 'wp_upload_image',
-                    'description' => 'Upload an image from base64 data and create a media attachment. Useful for AI-generated images. Accepts raw base64 or data URL (data:image/png;base64,...). Returns attachment ID and URL.',
+                    'description' => 'Upload an image attached to or generated in a ChatGPT conversation. Prefer file: ChatGPT supplies a temporary download URL, avoiding slow base64 transfer through the model. Supply exactly one of file or image_data. Legacy base64 uploads still require filename. Returns attachment ID and URL. For documents or image optimization use wp_upload_media.',
+                    '_meta' => array( 'openai/fileParams' => array( 'file' ) ),
                     'inputSchema' => array(
                         'type' => 'object',
                         'properties' => array(
-                            'image_data' => array('type' => 'string', 'description' => 'Base64 encoded image data. Accepts raw base64 string or data URL (e.g. data:image/png;base64,iVBOR...). Whitespace and newlines are stripped automatically.'),
-                            'filename' => array('type' => 'string', 'description' => 'Filename with extension (e.g., "image.png"). If extension is missing or wrong, it will be corrected based on the actual image format.'),
+                            'file' => StifliFlexMcp_Upload_Media::getFileSchema(),
+                            'image_data' => array('type' => 'string', 'description' => 'Legacy fallback for clients without file inputs. Prefer file for ChatGPT. Accepts raw base64 or an image data URL; whitespace and newlines are stripped.'),
+                            'filename' => array('type' => 'string', 'description' => 'Required for image_data; optional filename override for file. Image extensions are detected from the actual image format.'),
                             'alt_text' => array('type' => 'string', 'description' => 'Alt text for the image'),
                             'title' => array('type' => 'string', 'description' => 'Title for the image'),
                             'post_id' => array('type' => 'integer', 'description' => 'Optional post ID to attach the image to'),
                         ),
-                        'required' => array('image_data', 'filename'),
+                        'required' => array(),
                     ),
                 ),
 
@@ -2171,6 +2292,7 @@ class StifliFlexMcpModel {
                 }
             }
 
+            $tools = array_merge( $tools, StifliFlexMcp_Upload_Media::getTools() );
             $this->tools = $tools;
         }
         
@@ -2323,17 +2445,16 @@ class StifliFlexMcpModel {
             // Convert ability name to tool name: "allsi/search-image" -> "ability_allsi_search_image"
             $tool_name = 'ability_' . str_replace(array('/', '-'), '_', $row->ability_name);
             
-            $tools[] = array(
+            $definition = array(
                 'name' => $tool_name,
                 'description' => $row->ability_description ?: $row->ability_label,
                 'inputSchema' => $input_schema,
                 'category' => 'Abilities - ' . $row->ability_category,
-                'intent' => 'sensitive_read', // Abilities may have side effects
-                'requires_confirmation' => true,
                 // Store original ability name for execution
                 '_ability_name' => $row->ability_name,
                 '_is_ability' => true,
             );
+            $tools[] = array_merge( $definition, $this->getToolMetadata( $tool_name, $definition ) );
         }
         
         return $tools;
@@ -2496,6 +2617,7 @@ class StifliFlexMcpModel {
             'wp_delete_tag' => 'manage_categories',
             // media
             'wp_upload_image_from_url' => 'upload_files',
+            'wp_upload_media' => 'upload_files',
             'wp_upload_image' => 'upload_files',
             'wp_generate_image' => 'upload_files',
             'wp_generate_video' => 'upload_files',
@@ -2628,6 +2750,9 @@ class StifliFlexMcpModel {
 
     public function dispatchTool($tool, $args, $id = null) {
         $tool = is_string( $tool ) ? $tool : ( is_scalar( $tool ) ? (string) $tool : '' );
+        if ( in_array( $tool, array( 'wp_upload_media', 'wp_upload_image' ), true ) && is_array( $args ) ) {
+            $args = StifliFlexMcp_Upload_Media::normalizeArguments( $args );
+        }
         $r = array('jsonrpc' => '2.0', 'id' => $id);
         $utils = 'StifliFlexMcpUtils';
         $frame = class_exists('StifliFlexMcpFrame') ? StifliFlexMcpFrame::_() : null;
@@ -4736,6 +4861,25 @@ class StifliFlexMcpModel {
                 $out = array('ID' => $att->ID, 'post_title' => $att->post_title, 'mime_type' => get_post_mime_type($att), 'url' => wp_get_attachment_url($att->ID), 'meta' => $meta);
                 $addResultText($r, wp_json_encode($out, JSON_PRETTY_PRINT));
                 break;
+            case 'wp_upload_media':
+                if ( ! $this->isToolEnabledForRuntime( 'wp_upload_media' ) ) {
+                    $r['error'] = array( 'code' => -32603, 'message' => 'Enable wp_upload_media in Flex MCP > MCP Server > WordPress Tools before uploading files.' );
+                    break;
+                }
+                $uploaded = StifliFlexMcp_Upload_Media::upload( is_array( $args ) ? $args : array() );
+                if ( is_wp_error( $uploaded ) ) {
+                    $r['error'] = array(
+                        'code' => -32603,
+                        'message' => $uploaded->get_error_message(),
+                        'data' => array( 'reason' => $uploaded->get_error_code() ),
+                    );
+                } else {
+                    $r['result'] = array(
+                        'content' => array( array( 'type' => 'text', 'text' => wp_json_encode( $uploaded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ) ),
+                        'structuredContent' => $uploaded,
+                    );
+                }
+                break;
             case 'wp_upload_image_from_url':
                 $url = esc_url_raw($utils::getArrayValue($args, 'url'));
                 // Debug logging (remove for production or wrap in WP_DEBUG check)
@@ -4908,6 +5052,34 @@ class StifliFlexMcpModel {
                 $addResultText($r, 'Image uploaded successfully. Attachment ID: ' . $att_id . ', URL: ' . $att_url);
                 break;
             case 'wp_upload_image':
+                $has_file = array_key_exists( 'file', $args );
+                $has_image_data = array_key_exists( 'image_data', $args );
+                if ( $has_file === $has_image_data ) {
+                    $r['error'] = array( 'code' => -32602, 'message' => 'Supply exactly one of file or image_data. Prefer file for ChatGPT images.' );
+                    break;
+                }
+                if ( $has_file ) {
+                    if ( ! $this->isToolEnabledForRuntime( 'wp_upload_image' ) ) {
+                        $r['error'] = array( 'code' => -32603, 'message' => 'Enable wp_upload_image in Flex MCP > MCP Server > WordPress Tools before uploading images.' );
+                        break;
+                    }
+                    $uploaded = StifliFlexMcp_Upload_Media::upload( $args, true );
+                    if ( is_wp_error( $uploaded ) ) {
+                        $r['error'] = array(
+                            'code' => -32603,
+                            'message' => $uploaded->get_error_message(),
+                            'data' => array( 'reason' => $uploaded->get_error_code() ),
+                        );
+                    } else {
+                        $r['result']['structuredContent'] = $uploaded;
+                        $addResultText( $r, 'Image uploaded successfully. Attachment ID: ' . $uploaded['id'] . ', URL: ' . $uploaded['url'] );
+                    }
+                    break;
+                }
+                if ( ! array_key_exists( 'filename', $args ) ) {
+                    $r['error'] = array( 'code' => -42602, 'message' => 'filename is required for legacy image_data uploads.' );
+                    break;
+                }
                 $image_data = $utils::getArrayValue($args, 'image_data');
                 $filename = sanitize_file_name($utils::getArrayValue($args, 'filename', 'image.png'));
                 $post_id = intval($utils::getArrayValue($args, 'post_id', 0));

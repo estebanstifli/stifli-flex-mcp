@@ -9,28 +9,9 @@
 
 Flex MCP is a WordPress plugin that turns your site into a secure Model Context Protocol (MCP) server for ChatGPT, Claude Desktop, Gemini, and other MCP clients. It includes built-in Undo, OAuth 2.1 authentication, and 122+ tools for WordPress, WooCommerce, SEO, media, and automations.
 
-## Managing Many WordPress Sites?
+For multiple sites, [WP MCP Hub](https://andromedanova.com/wp-mcp-hub.html) provides a free, open-source local entry point with credentials stored under operating-system control.
 
-If you are an agency or manage many WordPress installations, use **WP MCP Hub** as one central point for managing them all.
-
-WP MCP Hub is **free and open source**: connect one local AI client entry to multiple WordPress MCP servers while keeping credentials under local operating-system control.
-
-- Product page: https://andromedanova.com/wp-mcp-hub.html
-- GitHub repo: https://github.com/estebanstifli/wp-mcp-hub
-
-## Why This MCP Server for WordPress
-
-- MCP server for WordPress with real tool execution over JSON-RPC 2.0 and SSE
-- OAuth 2.1 + PKCE authentication for external clients (no shared secrets)
-- Built-in rollback and redo for AI-driven changes
-- 122+ tools out of the box, and 200+ with supported integrations
-- Modular architecture: enable only the add-ons your site needs
-
-## Watch the 1-Minute Demo
-
-Claude to WordPress MCP Connector in 1 minute:
-
-[![Watch the video](https://img.youtube.com/vi/AcmvwRzoOSM/hqdefault.jpg)](https://youtu.be/AcmvwRzoOSM)
+[Watch the one-minute Claude connection demo](https://youtu.be/AcmvwRzoOSM).
 
 ## What You Can Enable
 
@@ -41,7 +22,7 @@ Claude to WordPress MCP Connector in 1 minute:
 
 Default install is lightweight: MCP Server only.
 
-## MCP 3.6.0 Compatibility and Controls
+## MCP 3.6.1 Compatibility and Controls
 
 - MCP `2026-07-28`: stateless POST requests to `/wp-json/stifli-flex-mcp/v1/messages`, `server/discover`, per-request capabilities, result discriminators and private cache hints. Send `MCP-Protocol-Version` and `Mcp-Method`; also send `Mcp-Name` for tool calls and resource reads. Include `io.modelcontextprotocol/protocolVersion` and an object-valued `io.modelcontextprotocol/clientCapabilities` in `params._meta`.
 - Server identity for `2025-11-25` and `2026-07-28` includes `websiteUrl`, a description and a display title containing the configured domain, port and site path. Server and tool names remain unchanged; older identity formats are preserved.
@@ -58,33 +39,73 @@ Default install is lightweight: MCP Server only.
 
 Plugin-setting reads preserve empty strings and `null` in sensitive fields, so clients can distinguish unconfigured values from `[REDACTED]` configured secrets. Nonempty secrets and sensitive containers remain hidden.
 
+### Standard MCP Tool Annotations
+
+Every tool returned by `tools/list` includes boolean `readOnlyHint`, `destructiveHint`, `idempotentHint` and `openWorldHint`, alongside the existing `intent` and `requires_confirmation` fields. Core tools and optional integrations use an explicit reviewed policy, not naming-prefix guesses.
+
+- Hints describe all supported modes: a tool accepting `dry_run` remains a write tool, `fetch` can mutate remote systems, and stock increments are not idempotent.
+- `destructiveHint: false` means read-only or purely additive, not merely "does not delete". Updates, replacements, refunds and mixed create/update tools are treated conservatively. Built-in writes do not promise safe automatic retries.
+- `openWorldHint` distinguishes local-data operations from external APIs, file downloads, notifications and other external interactions. A read-only hint does not imply public data or permission to execute.
+- Imported WordPress Abilities use their live `meta.annotations.readonly`, `destructive` and `idempotent` boolean declarations, resolved through the original Ability slug. Read-only Abilities retain confirmation. Missing, null or invalid declarations use conservative defaults; optional boolean `meta.annotations.openWorldHint` can describe external interaction, otherwise it defaults to `true`.
+- Unknown tools default to non-read-only, potentially destructive, non-idempotent and open-world, with confirmation required. Missing built-in classifications and invalid Ability hints are reported through the existing debug logger.
+
+Classification corrections include `fetch`, `yoast_reindex`, Elementor widget additions/updates and WooCommerce bulk category assignment/deletion. Refund queries, sales reports and webhook details are sensitive reads. Annotations are advisory: capability checks, Ability permission callbacks, enabled-tool filtering and authorization remain unchanged. Refresh the connector's catalog to see updated hints.
+
+### Conversation Files and Media Uploads
+
+For images attached to or generated in ChatGPT, prefer **`wp_upload_image` with `file`**. It advertises the same `openai/fileParams` contract and downloads the image directly, without transferring base64 through the model. `filename` is optional for this path; `alt_text`, `title` and `post_id` remain available. It rejects non-image files before insertion and uses the same download limits and safeguards as `wp_upload_media`. The tool must be enabled, but does not require enabling `wp_upload_media`.
+
+Existing clients can still call `wp_upload_image` with `image_data` and `filename`; this legacy base64 path and its response remain unchanged. Supply either `file` or `image_data`, never both. Refresh the connector's tool catalog to discover the new file input. Conversation-image uploads support Undo; restoring them afterwards requires a fresh upload because temporary file sources are not retained.
+
+`wp_upload_media` accepts exactly one source: `file` (a ChatGPT conversation attachment), `url` (public HTTPS), or `content_base64` (raw base64 or a data URL). Its descriptor declares `_meta["openai/fileParams"]: ["file"]` following the [OpenAI file-input contract](https://developers.openai.com/plugins/reference#define-file-inputs). The file object declares `download_url`, `file_id`, `mime_type` and `file_name`; only the first two are required. JSON-string file objects are normalized for legacy clients, but the advertised schema remains an object.
+
+```json
+{
+  "name": "wp_upload_media",
+  "arguments": {
+    "file": {
+      "download_url": "https://example.com/temporary-download",
+      "file_id": "file-example",
+      "file_name": "photo.jfif"
+    },
+    "convert_to": "jpeg",
+    "max_width": 1600,
+    "max_kb": 400,
+    "alt_text": "Product photograph"
+  }
+}
+```
+
+ChatGPT supplies the temporary file URL; users do not need to publish the attachment first. Other MCP clients can use `url` or `content_base64` with `filename`. File IDs are not download credentials and cannot be used alone.
+
+- Requires `upload_files`; setting `post_id` additionally requires permission to edit that post.
+- Supports WordPress-permitted documents, audio, video and raster images. Executable/active formats such as PHP, JavaScript, HTML, XML and SVG remain blocked, even if enabled by another plugin. Filename/MIME hints never grant permission to upload a type.
+- Downloads use safe WordPress HTTP, validate every redirect (maximum three), send no WordPress credentials, and stream into temporary files. The limit is 20 MiB or the lower WordPress upload limit. Images are limited to 40 megapixels.
+- Image-only options on `wp_upload_media`: `convert_to` (`jpeg`/`webp`), `max_width`, `max_height` (1–10000), `quality` (10–100, default 82), and `max_kb` (10–20480 KiB). Processing can flatten animated images and JPEG removes transparency. `wp_upload_image_from_url` is unchanged.
+- With `max_kb`, processing tries lower quality and then progressively smaller dimensions, down to 40% of the initial dimension bounds, with at most 28 encoding attempts. PNG keeps lossless encoding; JPEG/WebP usually reach smaller sizes. An impossible target returns an error, not a successful oversized upload.
+- Returns structured `id`, `url`, `filename`, `mime_type`, `size_bytes`, `optimized`, plus image `width`/`height`. New uploads are recorded for rollback; temporary URLs and base64 are omitted from MCP diagnostics and rollback arguments. Automatic redo is not available for this tool: upload again with a fresh URL or base64 after undoing. Expired URLs also require a new client-supplied URL.
+- On upgrades the new tool starts disabled. Enable it under **MCP Server > WordPress Tools**, or apply **WordPress Full Management** / **Complete Site**. Existing profiles and tool toggles are preserved. Refresh the client's tool discovery after enabling it.
+
 ### Development Checks
 
 The plugin remains pure PHP with no production build or Node dependencies. Isolated checks use WordPress doubles, not a running site:
 
 ```powershell
 php .dev/test-mcp-protocol.php
+php .dev/test-upload-media.php
 npm ci --prefix .dev/schema-check --ignore-scripts --no-audit --no-fund
 node .dev/test-mcp-schema.cjs
 ```
 
 The schema check downloads the versioned official MCP and Tasks schemas. Test a real WordPress installation, OAuth flow and target MCP clients before deployment; local contract tests do not establish live interoperability.
 
-## Supported MCP Clients and AI Platforms
+To additionally measure real image output, enable PHP GD, set `SFLMCP_TEST_WP_ROOT` to a local WordPress source directory, and run `php .dev/test-upload-media.php --real-images`. This uses WordPress's GD editor without loading that site's configuration or database. HTTP and Media Library persistence remain isolated doubles.
 
-### External MCP clients
+## Clients and Providers
 
-- ChatGPT Apps and Connectors
-- Claude Desktop Connectors
-- LibreChat
-- Cursor, Cline, Roo Code, Windsurf, Claude Code
+External MCP clients include ChatGPT, Claude Desktop, LibreChat, Cursor, Cline, Roo Code, Windsurf and Claude Code; connection support depends on the client's protocol version.
 
-### Built-in AI Chat Agent providers
-
-- OpenAI
-- Anthropic Claude
-- Google Gemini
-- OpenRouter and Mistral through WordPress AI Client connectors
+The built-in assistants support OpenAI, Anthropic Claude and Google Gemini, plus OpenRouter and Mistral through installed WordPress AI Client connectors. These features require provider credentials and may incur provider charges.
 
 ## Tool Coverage
 
@@ -103,33 +124,14 @@ The schema check downloads the versioned official MCP and Tasks schemas. Test a 
 - Tool profile restrictions (read-only, full management, safe mode, custom)
 - Confirmation modes in AI Chat Agent
 
-## Why Undo Matters
-
-Every AI mutation is tracked with before/after snapshots:
-
-- One-click rollback
-- Redo support
-- Session rollback
-- Full audit trail
-
-This applies to changes initiated from ChatGPT, Claude, built-in Chat Agent, Copilot, and automations.
-
 ## Quick Start
 
-1. Upload the stifli-flex-mcp plugin folder to wp-content/plugins, or install from WordPress.
+1. Upload the `stifli-flex-mcp` plugin folder to `wp-content/plugins`, or install from WordPress.
 2. Activate the plugin.
 3. Choose add-ons in first-activation setup.
 4. Go to Flex MCP > MCP Server.
-5. Copy the SSE URL.
-6. Paste it into ChatGPT or Claude Desktop and complete OAuth.
-
-## Common Use Cases
-
-- Manage WordPress content through natural language
-- Run WooCommerce catalog and order operations from MCP clients
-- Generate and insert AI images and videos
-- Build automations that call MCP tools on schedules or events
-- Revert AI mistakes safely with rollback/redo
+5. Copy the messages URL for MCP 2026-07-28 clients, or the SSE URL for legacy connectors.
+6. Add the URL to your MCP client and complete OAuth.
 
 ## Architecture at a Glance
 
@@ -143,7 +145,14 @@ This applies to changes initiated from ChatGPT, Claude, built-in Chat Agent, Cop
 
 - Documentation: https://andromedanova.com/stifli-flex-mcp.html
 - Repository: https://github.com/estebanstifli/stifli-flex-mcp
-- WordPress readme and full changelog: readme.txt
+- WordPress directory description, installation, FAQ and service disclosures: [readme.txt](readme.txt)
+- Full release history: [changelog.txt](changelog.txt)
+
+### Updating the WordPress.org Listing
+
+WordPress.org processes `readme.txt`, not this GitHub README. Keep its Description concise and include only the latest release under Changelog. Add each release to `changelog.txt` as well, keeping all previous entries.
+
+Publish both text files to SVN `trunk` and the release directory matching `Stable tag` (currently `tags/3.6.1`). The readme links to [the full changelog in SVN trunk](https://plugins.svn.wordpress.org/stifli-flex-mcp/trunk/changelog.txt), so the URL remains valid across releases. The new file must be added to SVN before that link becomes available.
 
 ## Notes
 

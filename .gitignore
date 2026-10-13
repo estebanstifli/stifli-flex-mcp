@@ -2,6 +2,8 @@
 /dev/
 /.dev/*
 !/.dev/test-mcp-protocol.php
+!/.dev/test-upload-media.php
+!/.dev/test-upload-media-real-images.php
 !/.dev/test-mcp-schema.cjs
 !/.dev/schema-check/
 /.dev/schema-check/*
